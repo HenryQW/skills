@@ -1028,6 +1028,7 @@ class Stage2LoopTests(unittest.TestCase):
 
             original_run_cycle = autopilot.run_cycle
             observed_statuses: list[str] = []
+            observed_initial_sleeps: list[int] = []
 
             def fake_run_cycle(
                 _client: Any,
@@ -1051,6 +1052,7 @@ class Stage2LoopTests(unittest.TestCase):
                 )
                 state = store.load()
                 observed_statuses.append(str(state["status"]))
+                observed_initial_sleeps.append(initial_sleep_seconds)
                 if len(observed_statuses) == 1:
                     state["status"] = autopilot.STATUS_TIMEOUT
                     store.save(state)
@@ -1081,6 +1083,7 @@ class Stage2LoopTests(unittest.TestCase):
                 observed_statuses,
                 [autopilot.STATUS_INITIALIZED, autopilot.STATUS_INITIALIZED],
             )
+            self.assertEqual(observed_initial_sleeps, [0, 300])
 
     def test_run_stage2_loop_stops_at_stage2_time_limit(self) -> None:
         with TemporaryDirectory() as tmp:

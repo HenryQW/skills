@@ -1817,6 +1817,9 @@ def run_stage2_loop(
             continue
 
         cycle_wait_seconds = min(max_wait_seconds, max(1, remaining_seconds))
+        cycle_initial_sleep_seconds = (
+            0 if run_attempts == 0 else initial_sleep_seconds
+        )
         run_attempts += 1
         exit_code = run_cycle(
             client,
@@ -1824,7 +1827,7 @@ def run_stage2_loop(
             pr=pr,
             output_dir=output_dir,
             monitor_file=monitor_file,
-            initial_sleep_seconds=initial_sleep_seconds,
+            initial_sleep_seconds=cycle_initial_sleep_seconds,
             poll_interval_seconds=poll_interval_seconds,
             max_wait_seconds=cycle_wait_seconds,
         )
