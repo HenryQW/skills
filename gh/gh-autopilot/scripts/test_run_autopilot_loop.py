@@ -1193,63 +1193,16 @@ class FinalizeCoverageTests(unittest.TestCase):
             self.assertFalse(history_path.exists())
 
             events = (output_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            parsed_events = [json.loads(line) for line in events]
             finalized = [
-                json.loads(line)
-                for line in events
-                if json.loads(line)["event_type"] == "cycle_finalized_without_rerequest"
+                event
+                for event in parsed_events
+                if event["event_type"] == "cycle_finalized_without_rerequest"
             ]
             self.assertEqual(len(finalized), 1)
             payload = finalized[0]["payload"]
             self.assertEqual(len(payload["comment_statuses"]), 1)
             self.assertEqual(payload["comment_statuses"][0]["comment_id"], "C1")
-
-    def test_write_comment_status_history_merges_and_sorts(self) -> None:
-        with TemporaryDirectory() as tmp:
-            output_dir = Path(tmp)
-            existing = {
-                "version": 1,
-                "updated_at": "2026-03-04T11:00:00Z",
-                "comments": [
-                    {
-                        "comment_id": "C2",
-                        "thread_id": "THREAD_1",
-                        "review_id": "REVIEW_OLD",
-                        "cycle": 5,
-                        "status": "action",
-                        "created_at": "2026-03-04T10:10:00Z",
-                        "updated_at": "2026-03-04T11:00:00Z",
-                    }
-                ],
-            }
-            self._write_json(output_dir / "comment-status-history.json", existing)
-
-            written = autopilot.write_comment_status_history(
-                output_dir,
-                review_id="REVIEW_NEW",
-                comment_statuses=[
-                    {
-                        "comment_id": "C1",
-                        "thread_id": "THREAD_1",
-                        "created_at": "2026-03-04T10:00:00Z",
-                        "cycle": 6,
-                        "status": "no_action",
-                    },
-                    {
-                        "comment_id": "C2",
-                        "thread_id": "THREAD_1",
-                        "created_at": "2026-03-04T10:10:00Z",
-                        "cycle": 6,
-                        "status": "action",
-                    },
-                ],
-            )
-
-            payload = json.loads(written.read_text(encoding="utf-8"))
-            ids = [item["comment_id"] for item in payload["comments"]]
-            self.assertEqual(ids, ["C1", "C2"])
-            c2 = next(item for item in payload["comments"] if item["comment_id"] == "C2")
-            self.assertEqual(c2["cycle"], 6)
-            self.assertEqual(c2["review_id"], "REVIEW_NEW")
 
 
 class Stage2LoopTests(unittest.TestCase):

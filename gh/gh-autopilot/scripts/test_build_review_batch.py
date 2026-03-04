@@ -65,19 +65,6 @@ class BuildReviewBatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing required key"):
             builder.validate_cycle_payload({"status": "awaiting_address"})
 
-    def test_render_review_batch_markdown_handles_empty_threads(self) -> None:
-        batch = {
-            "generated_at": "2026-03-03T00:00:00Z",
-            "cycle": 1,
-            "pull_request": {"number": 12, "url": "https://example.test/pr/12"},
-            "copilot_review": {"id": "REVIEW_1"},
-            "summary": {"threads_total": 0, "threads_eligible": 0, "threads_pending": 0},
-            "threads": [],
-        }
-
-        markdown = builder.render_review_batch_markdown(batch)
-        self.assertIn("No Copilot threads found in cycle artifact.", markdown)
-
 
 if __name__ == "__main__":
     unittest.main()

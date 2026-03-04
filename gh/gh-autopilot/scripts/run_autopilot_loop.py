@@ -80,7 +80,6 @@ STATE_TRANSITIONS: dict[tuple[str, str], str] = {
 DEFAULT_OUTPUT_DIR = ".context/gh-autopilot"
 DEFAULT_CONTEXT_FILENAME = "context.md"
 DEFAULT_CYCLE_FILENAME = "cycle.json"
-DEFAULT_COMMENT_STATUS_HISTORY_FILENAME = "comment-status-history.json"
 DEFAULT_STAGE2_MAX_WAIT_SECONDS = 43200
 EVENT_SCHEMA_VERSION = 1
 PHASE_FINALIZED = "finalized"
@@ -700,10 +699,6 @@ def default_context_file(output_dir: Path) -> Path:
 
 def default_cycle_file(output_dir: Path) -> Path:
     return output_dir / DEFAULT_CYCLE_FILENAME
-
-
-def default_comment_status_history_file(output_dir: Path) -> Path:
-    return output_dir / DEFAULT_COMMENT_STATUS_HISTORY_FILENAME
 
 
 def shell_join(parts: list[str]) -> str:
@@ -1420,71 +1415,6 @@ def write_context_markdown(
     lines.extend(f"- `{command}`" for command in next_commands)
     lines.append("")
     context_file.write_text("\n".join(lines), encoding="utf-8")
-
-
-def write_comment_status_history(
-    output_dir: Path,
-    *,
-    review_id: str,
-    comment_statuses: list[dict[str, Any]],
-) -> Path:
-    history_file = default_comment_status_history_file(output_dir)
-    existing_comments: list[dict[str, Any]] = []
-
-    if history_file.exists():
-        payload = load_required_json(history_file, label="comment-status-history")
-        raw_existing = payload.get("comments")
-        if raw_existing is None:
-            raw_existing = []
-        if not isinstance(raw_existing, list):
-            raise ValueError(
-                "comment-status-history.json must have list field `comments`"
-            )
-        for idx, item in enumerate(raw_existing, start=1):
-            if not isinstance(item, dict):
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] must be an object"
-                )
-            comment_id = item.get("comment_id")
-            created_at = item.get("created_at")
-            if not isinstance(comment_id, str) or not comment_id:
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] missing valid `comment_id`"
-                )
-            if not isinstance(created_at, str) or parse_iso(created_at) is None:
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] has invalid `created_at`"
-                )
-            existing_comments.append(item)
-
-    by_comment_id: dict[str, dict[str, Any]] = {
-        item["comment_id"]: item for item in existing_comments
-    }
-    updated_at = now_iso()
-    for item in comment_statuses:
-        by_comment_id[item["comment_id"]] = {
-            "comment_id": item["comment_id"],
-            "thread_id": item["thread_id"],
-            "review_id": review_id,
-            "cycle": item["cycle"],
-            "status": item["status"],
-            "created_at": item["created_at"],
-            "updated_at": updated_at,
-        }
-
-    merged = sorted(
-        by_comment_id.values(),
-        key=lambda entry: (entry["created_at"], entry["comment_id"]),
-    )
-
-    payload = {
-        "version": 1,
-        "updated_at": updated_at,
-        "comments": merged,
-    }
-    history_file.parent.mkdir(parents=True, exist_ok=True)
-    history_file.write_text(render_json(payload) + "\n", encoding="utf-8")
-    return history_file
 
 
 def update_context_documents(

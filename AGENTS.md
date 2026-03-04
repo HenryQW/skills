@@ -36,11 +36,13 @@ Description of the folder's theme and purpose.
 ## Change Policy (Mandatory)
 
 Whenever a skill is added, removed, renamed, or modified, update the folder `README.md` in the same change.
-When updating skills in this repository, never preserve backward compatibility with legacy function interfaces. Specifically, do not preserve compatibility with:
+When updating skills in this repository, do not preserve backward compatibility for legacy internal function interfaces in skill code. Specifically, do not preserve compatibility with:
 
 - Previous function names.
 - Previous variable names.
 - Previous function signatures.
+
+This rule applies to internal implementation APIs, not user-facing CLI or operational interfaces. CLI compatibility may be retained when required for safe rollout or existing workflows.
 
 At minimum, update:
 
