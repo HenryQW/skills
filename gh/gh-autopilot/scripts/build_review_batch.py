@@ -6,7 +6,6 @@ Input:
   - .context/gh-autopilot/cycle.json
 Output:
   - .context/gh-autopilot/review-batch.json
-  - .context/gh-autopilot/review-batch.md
 """
 
 from __future__ import annotations
@@ -32,13 +31,6 @@ def _require(payload: dict[str, Any], key: str) -> Any:
     if key not in payload:
         raise ValueError(f"cycle payload is missing required key: {key}")
     return payload[key]
-
-
-def _first_line(text: str, *, default: str = "(empty)") -> str:
-    stripped = (text or "").strip()
-    if not stripped:
-        return default
-    return stripped.splitlines()[0]
 
 
 def validate_cycle_payload(cycle_payload: dict[str, Any]) -> None:
@@ -108,47 +100,6 @@ def build_review_batch(cycle_payload: dict[str, Any], *, cycle_path: Path) -> di
     }
 
 
-def render_review_batch_markdown(batch: dict[str, Any]) -> str:
-    lines: list[str] = []
-    pr = batch["pull_request"]
-    review = batch["copilot_review"]
-    summary = batch["summary"]
-
-    lines.append("# GH Autopilot Review Batch")
-    lines.append("")
-    lines.append(f"- Generated: {batch['generated_at']}")
-    lines.append(f"- Cycle: {batch['cycle']}")
-    lines.append(f"- PR: #{pr.get('number')} ({pr.get('url')})")
-    lines.append(f"- Review id: {review.get('id')}")
-    lines.append(
-        f"- Threads: total={summary['threads_total']} eligible={summary['threads_eligible']} pending={summary['threads_pending']}"
-    )
-    lines.append("")
-    lines.append("## Thread Queue")
-    lines.append("")
-
-    threads = batch.get("threads") or []
-    if not threads:
-        lines.append("- No Copilot threads found in cycle artifact.")
-        lines.append("")
-        return "\n".join(lines)
-
-    for thread in threads:
-        latest = thread.get("latest_comment") or {}
-        comment_body = _first_line(latest.get("body", ""))
-        lines.append(
-            f"- [{thread['index']}] id={thread.get('thread_id')} "
-            f"path={thread.get('path')} line={thread.get('line')} "
-            f"eligible={thread.get('eligible_for_addressing')} "
-            f"classification={thread.get('classification')}"
-        )
-        lines.append(f"  latest: {comment_body}")
-    lines.append("")
-    lines.append("Valid classifications: actionable | non-actionable | needs-clarification")
-    lines.append("")
-    return "\n".join(lines)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build normalized review-batch artifacts from gh-autopilot cycle data."
@@ -168,11 +119,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override review-batch.json output path.",
     )
-    parser.add_argument(
-        "--batch-md",
-        default=None,
-        help="Override review-batch.md output path.",
-    )
     return parser.parse_args()
 
 
@@ -181,7 +127,6 @@ def main() -> int:
     cycle_path = Path(args.cycle).resolve()
     output_dir = Path(args.output_dir).resolve()
     batch_json = Path(args.batch_json).resolve() if args.batch_json else output_dir / "review-batch.json"
-    batch_md = Path(args.batch_md).resolve() if args.batch_md else output_dir / "review-batch.md"
 
     if not cycle_path.exists():
         raise FileNotFoundError(f"cycle file not found: {cycle_path}")
@@ -190,16 +135,13 @@ def main() -> int:
     batch = build_review_batch(payload, cycle_path=cycle_path)
 
     batch_json.parent.mkdir(parents=True, exist_ok=True)
-    batch_md.parent.mkdir(parents=True, exist_ok=True)
     batch_json.write_text(render_json(batch) + "\n", encoding="utf-8")
-    batch_md.write_text(render_review_batch_markdown(batch), encoding="utf-8")
 
     print(
         render_json(
             {
                 "status": "ok",
                 "review_batch_json": str(batch_json),
-                "review_batch_md": str(batch_md),
                 "threads_total": batch["summary"]["threads_total"],
                 "threads_eligible": batch["summary"]["threads_eligible"],
             }

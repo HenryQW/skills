@@ -90,6 +90,161 @@ class CycleStatusTests(unittest.TestCase):
         self.assertEqual(status, autopilot.STATUS_COMPLETED_NO_COMMENTS)
 
 
+class StateTransitionTests(unittest.TestCase):
+    def test_transition_status_paths(self) -> None:
+        self.assertEqual(
+            autopilot.transition_status(
+                autopilot.STATUS_INITIALIZED, autopilot.EVENT_BEGIN_CYCLE_WAIT
+            ),
+            autopilot.STATUS_WAITING,
+        )
+        self.assertEqual(
+            autopilot.transition_status(
+                autopilot.STATUS_WAITING, autopilot.EVENT_CYCLE_NEEDS_ADDRESS
+            ),
+            autopilot.STATUS_AWAITING_ADDRESS,
+        )
+        self.assertEqual(
+            autopilot.transition_status(
+                autopilot.STATUS_AWAITING_ADDRESS,
+                autopilot.EVENT_FINALIZE_WITH_REVIEWER_REQUEST,
+            ),
+            autopilot.STATUS_REREQUESTED,
+        )
+
+    def test_transition_status_rejects_invalid_transition(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid state transition"):
+            autopilot.transition_status(
+                autopilot.STATUS_COMPLETED_NO_COMMENTS,
+                autopilot.EVENT_BEGIN_CYCLE_WAIT,
+            )
+
+
+class EventLogSchemaTests(unittest.TestCase):
+    def test_append_event_uses_normalized_schema(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = autopilot.AutopilotStateStore(
+                state_file=output_dir / "state.json",
+                events_file=output_dir / "events.jsonl",
+            )
+            store.append_event("Stage2 Loop Started", {"cycle": 1})
+
+            payload = json.loads((output_dir / "events.jsonl").read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema_version"], autopilot.EVENT_SCHEMA_VERSION)
+            self.assertEqual(payload["event_type"], "stage2_loop_started")
+            self.assertIn("timestamp", payload)
+            self.assertEqual(payload["payload"]["cycle"], 1)
+            self.assertEqual(
+                set(payload.keys()),
+                {"schema_version", "timestamp", "event_type", "payload"},
+            )
+
+
+class SimulationTests(unittest.TestCase):
+    def test_simulate_fsm_transitions(self) -> None:
+        simulated = autopilot.simulate_fsm_transitions(
+            autopilot.STATUS_INITIALIZED,
+            [
+                autopilot.EVENT_BEGIN_CYCLE_WAIT,
+                autopilot.EVENT_CYCLE_NEEDS_ADDRESS,
+                autopilot.EVENT_FINALIZE_WITH_REVIEWER_REQUEST,
+                autopilot.EVENT_BEGIN_CYCLE_WAIT,
+                autopilot.EVENT_CYCLE_NO_COMMENTS,
+            ],
+        )
+        self.assertEqual(simulated["status"], "simulated")
+        self.assertEqual(simulated["start_status"], autopilot.STATUS_INITIALIZED)
+        self.assertEqual(simulated["final_status"], autopilot.STATUS_COMPLETED_NO_COMMENTS)
+        self.assertTrue(simulated["is_terminal"])
+        self.assertEqual(len(simulated["transitions"]), 5)
+
+    def test_simulate_fsm_rejects_invalid_transition_step(self) -> None:
+        with self.assertRaisesRegex(ValueError, "step 1"):
+            autopilot.simulate_fsm_transitions(
+                autopilot.STATUS_INITIALIZED,
+                [autopilot.EVENT_CYCLE_TIMEOUT],
+            )
+
+
+class ResumeCommandTests(unittest.TestCase):
+    def test_build_resume_command_returns_finalize_for_pending_address(self) -> None:
+        state = {
+            "status": autopilot.STATUS_AWAITING_ADDRESS,
+            "cycle": 3,
+            "timing": {
+                "initial_sleep_seconds": 300,
+                "poll_interval_seconds": 45,
+                "max_wait_seconds": 2400,
+            },
+            "last_timeout_reason": None,
+        }
+        resume = autopilot.build_resume_command(
+            state=state,
+            output_dir=Path(".context/gh-autopilot"),
+            pr_number=77,
+        )
+        self.assertIn("finalize-cycle", resume)
+
+    def test_build_resume_command_returns_assert_drained_for_no_comments(self) -> None:
+        state = {
+            "status": autopilot.STATUS_COMPLETED_NO_COMMENTS,
+            "cycle": 4,
+            "timing": {
+                "initial_sleep_seconds": 300,
+                "poll_interval_seconds": 45,
+                "max_wait_seconds": 2400,
+            },
+            "last_timeout_reason": None,
+        }
+        resume = autopilot.build_resume_command(
+            state=state,
+            output_dir=Path(".context/gh-autopilot"),
+            pr_number=77,
+        )
+        self.assertIn("assert-drained", resume)
+
+    def test_command_init_prints_resume_command(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = autopilot.AutopilotStateStore(
+                state_file=output_dir / "state.json",
+                events_file=output_dir / "events.jsonl",
+            )
+
+            class FakeClient:
+                def ensure_auth(self) -> None:
+                    return None
+
+                def resolve_pr(self, pr_ref: str | None) -> autopilot.GhPrRef:
+                    _ = pr_ref
+                    return autopilot.GhPrRef(
+                        number=77,
+                        url="https://example.test/pr/77",
+                        owner="octo",
+                        repo="demo",
+                        title="PR 77",
+                    )
+
+            captured = io.StringIO()
+            with redirect_stdout(captured):
+                exit_code = autopilot.command_init(
+                    FakeClient(),
+                    store,
+                    output_dir=output_dir,
+                    pr_ref=None,
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    force=False,
+                )
+
+            payload = json.loads(captured.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertIn("resume_command", payload)
+            self.assertIn("run-stage2-loop", payload["resume_command"])
+
+
 class NormalizeThreadsTests(unittest.TestCase):
     def test_normalize_threads_selects_only_matching_review_comments(self) -> None:
         threads = [
@@ -274,6 +429,10 @@ class ContextDocsTests(unittest.TestCase):
             self.assertIn("## Context Contract", context_text)
             self.assertIn("Format version: 1", context_text)
             self.assertIn("## Next Actions", context_text)
+            self.assertIn(
+                "Status Header: phase=awaiting_address | cycle=2 | status=awaiting_address | timeout_reason=none",
+                context_text,
+            )
             self.assertIn("[x] New Copilot review captured for this cycle.", context_text)
             self.assertIn("Reply on Copilot thread", context_text)
             self.assertIn("finalize-cycle", context_text)
@@ -367,6 +526,40 @@ class ContextDocsTests(unittest.TestCase):
             context_text = Path(docs["context"]).read_text(encoding="utf-8")
             self.assertIn("[x] Loop initialized and context seeded.", context_text)
             self.assertIn("[ ] Start Stage 2 monitor loop", context_text)
+
+    def test_timeout_context_header_includes_timeout_reason(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            pr = autopilot.GhPrRef(
+                number=9,
+                url="https://example.test/pr/9",
+                owner="octo",
+                repo="demo",
+                title="PR 9",
+            )
+            timeout_state = {
+                "status": autopilot.STATUS_TIMEOUT,
+                "cycle": 5,
+                "timing": {
+                    "initial_sleep_seconds": 300,
+                    "poll_interval_seconds": 45,
+                    "max_wait_seconds": 2400,
+                },
+                "pending_review_id": None,
+                "last_processed_review_id": "REVIEW_4",
+                "last_timeout_reason": autopilot.TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED,
+            }
+            docs = autopilot.update_context_documents(
+                output_dir,
+                state=timeout_state,
+                pr=pr,
+                phase=autopilot.STATUS_TIMEOUT,
+            )
+            context_text = Path(docs["context"]).read_text(encoding="utf-8")
+            self.assertIn(
+                "Status Header: phase=timeout | cycle=5 | status=timeout | timeout_reason=stage2_max_wait_reached",
+                context_text,
+            )
 
 
 class FinalizeCoverageTests(unittest.TestCase):
@@ -909,7 +1102,7 @@ class FinalizeCoverageTests(unittest.TestCase):
                     state={"cycle": 12, "pending_review_id": "REVIEW_12"},
                 )
 
-    def test_finalize_cycle_writes_comment_status_history(self) -> None:
+    def test_finalize_cycle_records_comment_statuses_without_history_artifact(self) -> None:
         with TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
             pr = autopilot.GhPrRef(
@@ -997,60 +1190,19 @@ class FinalizeCoverageTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
             history_path = output_dir / "comment-status-history.json"
-            self.assertTrue(history_path.exists())
-            payload = json.loads(history_path.read_text(encoding="utf-8"))
-            self.assertEqual(len(payload["comments"]), 1)
-            self.assertEqual(payload["comments"][0]["comment_id"], "C1")
-            self.assertEqual(payload["comments"][0]["cycle"], 12)
-            self.assertEqual(payload["comments"][0]["status"], "action")
+            self.assertFalse(history_path.exists())
 
-    def test_write_comment_status_history_merges_and_sorts(self) -> None:
-        with TemporaryDirectory() as tmp:
-            output_dir = Path(tmp)
-            existing = {
-                "version": 1,
-                "updated_at": "2026-03-04T11:00:00Z",
-                "comments": [
-                    {
-                        "comment_id": "C2",
-                        "thread_id": "THREAD_1",
-                        "review_id": "REVIEW_OLD",
-                        "cycle": 5,
-                        "status": "action",
-                        "created_at": "2026-03-04T10:10:00Z",
-                        "updated_at": "2026-03-04T11:00:00Z",
-                    }
-                ],
-            }
-            self._write_json(output_dir / "comment-status-history.json", existing)
-
-            written = autopilot.write_comment_status_history(
-                output_dir,
-                review_id="REVIEW_NEW",
-                comment_statuses=[
-                    {
-                        "comment_id": "C1",
-                        "thread_id": "THREAD_1",
-                        "created_at": "2026-03-04T10:00:00Z",
-                        "cycle": 6,
-                        "status": "no_action",
-                    },
-                    {
-                        "comment_id": "C2",
-                        "thread_id": "THREAD_1",
-                        "created_at": "2026-03-04T10:10:00Z",
-                        "cycle": 6,
-                        "status": "action",
-                    },
-                ],
-            )
-
-            payload = json.loads(written.read_text(encoding="utf-8"))
-            ids = [item["comment_id"] for item in payload["comments"]]
-            self.assertEqual(ids, ["C1", "C2"])
-            c2 = next(item for item in payload["comments"] if item["comment_id"] == "C2")
-            self.assertEqual(c2["cycle"], 6)
-            self.assertEqual(c2["review_id"], "REVIEW_NEW")
+            events = (output_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            parsed_events = [json.loads(line) for line in events]
+            finalized = [
+                event
+                for event in parsed_events
+                if event["event_type"] == "cycle_finalized_without_rerequest"
+            ]
+            self.assertEqual(len(finalized), 1)
+            payload = finalized[0]["payload"]
+            self.assertEqual(len(payload["comment_statuses"]), 1)
+            self.assertEqual(payload["comment_statuses"][0]["comment_id"], "C1")
 
 
 class Stage2LoopTests(unittest.TestCase):
@@ -1094,6 +1246,50 @@ class Stage2LoopTests(unittest.TestCase):
                 },
             }
         )
+
+    def test_run_stage2_loop_prints_resume_command_for_addressing_required(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            store.save(
+                {
+                    "version": autopilot.STATE_VERSION,
+                    "status": autopilot.STATUS_AWAITING_ADDRESS,
+                    "cycle": 3,
+                    "pr": pr.as_dict(),
+                    "last_processed_review_id": "REVIEW_2",
+                    "last_processed_review_submitted_at": "2026-03-04T10:00:00Z",
+                    "pending_review_id": "REVIEW_3",
+                    "pending_review_submitted_at": "2026-03-04T10:30:00Z",
+                    "last_timeout_reason": None,
+                    "timing": {
+                        "initial_sleep_seconds": 300,
+                        "poll_interval_seconds": 45,
+                        "max_wait_seconds": 2400,
+                    },
+                }
+            )
+
+            captured = io.StringIO()
+            with redirect_stdout(captured):
+                exit_code = autopilot.run_stage2_loop(
+                    client,
+                    store,
+                    pr=pr,
+                    output_dir=output_dir,
+                    monitor_file=output_dir / "monitor.json",
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    stage2_max_wait_seconds=600,
+                )
+
+            payload = json.loads(captured.getvalue())
+            self.assertEqual(exit_code, 10)
+            self.assertIn("resume_command", payload)
+            self.assertIn("finalize-cycle", payload["resume_command"])
 
     def test_run_stage2_loop_retries_after_per_cycle_timeout(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1348,6 +1544,103 @@ class Stage2LoopTests(unittest.TestCase):
                 cycle_payload["copilot_threads"][0]["comments"][0]["id"], "COMMENT_1"
             )
 
+    def test_stage2_loop_prioritizes_pending_address_over_deadline(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            store.save(
+                {
+                    "version": autopilot.STATE_VERSION,
+                    "status": autopilot.STATUS_AWAITING_ADDRESS,
+                    "cycle": 3,
+                    "pr": pr.as_dict(),
+                    "last_processed_review_id": "REVIEW_2",
+                    "last_processed_review_submitted_at": "2026-03-04T10:00:00Z",
+                    "pending_review_id": "REVIEW_3",
+                    "pending_review_submitted_at": "2026-03-04T10:30:00Z",
+                    "last_timeout_reason": None,
+                    "timing": {
+                        "initial_sleep_seconds": 300,
+                        "poll_interval_seconds": 45,
+                        "max_wait_seconds": 2400,
+                    },
+                }
+            )
+            monitor_file = output_dir / "monitor.json"
+
+            original_monotonic = autopilot.time.monotonic
+            monotonic_values = iter([100.0, 102.0])
+
+            def fake_monotonic() -> float:
+                return next(monotonic_values)
+
+            autopilot.time.monotonic = fake_monotonic
+            try:
+                exit_code = autopilot.run_stage2_loop(
+                    client,
+                    store,
+                    pr=pr,
+                    output_dir=output_dir,
+                    monitor_file=monitor_file,
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    stage2_max_wait_seconds=1,
+                )
+            finally:
+                autopilot.time.monotonic = original_monotonic
+
+            self.assertEqual(exit_code, 10)
+            self.assertEqual(store.load()["status"], autopilot.STATUS_AWAITING_ADDRESS)
+
+    def test_stage2_loop_preserves_terminal_stage2_timeout(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            store.save(
+                {
+                    "version": autopilot.STATE_VERSION,
+                    "status": autopilot.STATUS_TIMEOUT,
+                    "cycle": 4,
+                    "pr": pr.as_dict(),
+                    "last_processed_review_id": "REVIEW_3",
+                    "last_processed_review_submitted_at": "2026-03-04T11:00:00Z",
+                    "pending_review_id": None,
+                    "pending_review_submitted_at": None,
+                    "last_timeout_reason": autopilot.TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED,
+                    "timing": {
+                        "initial_sleep_seconds": 300,
+                        "poll_interval_seconds": 45,
+                        "max_wait_seconds": 2400,
+                    },
+                }
+            )
+            monitor_file = output_dir / "monitor.json"
+
+            exit_code = autopilot.run_stage2_loop(
+                client,
+                store,
+                pr=pr,
+                output_dir=output_dir,
+                monitor_file=monitor_file,
+                initial_sleep_seconds=300,
+                poll_interval_seconds=45,
+                max_wait_seconds=2400,
+                stage2_max_wait_seconds=7200,
+            )
+
+            self.assertEqual(exit_code, autopilot.EXIT_STAGE2_MAX_WAIT_REACHED)
+            state = store.load()
+            self.assertEqual(state["status"], autopilot.STATUS_TIMEOUT)
+            self.assertEqual(
+                state["last_timeout_reason"],
+                autopilot.TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED,
+            )
+
 
 class AssertDrainedTests(unittest.TestCase):
     def _store(self, output_dir: Path) -> autopilot.AutopilotStateStore:
@@ -1421,6 +1714,8 @@ class AssertDrainedTests(unittest.TestCase):
             self.assertEqual(payload["cycle_artifact"]["total_comments"], 1)
             self.assertEqual(payload["cycle_artifact"]["eligible_threads"], 1)
             self.assertEqual(payload["cycle_artifact"]["eligible_comments"], 1)
+            self.assertIn("resume_command", payload)
+            self.assertIn("finalize-cycle", payload["resume_command"])
 
     def test_assert_drained_passes_when_not_awaiting(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1437,6 +1732,8 @@ class AssertDrainedTests(unittest.TestCase):
             payload = json.loads(captured.getvalue())
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["status"], "drained")
+            self.assertIn("resume_command", payload)
+            self.assertIn("assert-drained", payload["resume_command"])
 
 
 if __name__ == "__main__":

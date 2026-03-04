@@ -45,14 +45,51 @@ STATUS_COMPLETED_NO_COMMENTS = "completed_no_comments"
 STATUS_BLOCKED_UNADDRESSED = "blocked_unaddressed_comments"
 TERMINAL_STATUSES = {STATUS_TIMEOUT, STATUS_COMPLETED_NO_COMMENTS}
 
+TIMEOUT_REASON_CYCLE_MAX_WAIT_REACHED = "cycle_max_wait_reached"
+TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED = "stage2_max_wait_reached"
+
+EVENT_BEGIN_CYCLE_WAIT = "begin_cycle_wait"
+EVENT_CYCLE_TIMEOUT = "cycle_timeout"
+EVENT_CYCLE_NO_COMMENTS = "cycle_no_comments"
+EVENT_CYCLE_NEEDS_ADDRESS = "cycle_needs_address"
+EVENT_CYCLE_NEEDS_TRIAGE = "cycle_needs_triage"
+EVENT_STAGE2_RETRY_AFTER_CYCLE_TIMEOUT = "stage2_retry_after_cycle_timeout"
+EVENT_STAGE2_MAX_WAIT_REACHED = "stage2_max_wait_reached"
+EVENT_FINALIZE_WITH_REVIEWER_REQUEST = "finalize_with_reviewer_request"
+EVENT_FINALIZE_WITHOUT_REVIEWER_REQUEST = "finalize_without_reviewer_request"
+
+STATE_TRANSITIONS: dict[tuple[str, str], str] = {
+    (STATUS_INITIALIZED, EVENT_BEGIN_CYCLE_WAIT): STATUS_WAITING,
+    (STATUS_REREQUESTED, EVENT_BEGIN_CYCLE_WAIT): STATUS_WAITING,
+    (STATUS_WAITING, EVENT_BEGIN_CYCLE_WAIT): STATUS_WAITING,
+    (STATUS_WAITING, EVENT_CYCLE_TIMEOUT): STATUS_TIMEOUT,
+    (STATUS_WAITING, EVENT_CYCLE_NO_COMMENTS): STATUS_COMPLETED_NO_COMMENTS,
+    (STATUS_WAITING, EVENT_CYCLE_NEEDS_ADDRESS): STATUS_AWAITING_ADDRESS,
+    (STATUS_WAITING, EVENT_CYCLE_NEEDS_TRIAGE): STATUS_AWAITING_TRIAGE,
+    (STATUS_TIMEOUT, EVENT_STAGE2_RETRY_AFTER_CYCLE_TIMEOUT): STATUS_INITIALIZED,
+    (STATUS_INITIALIZED, EVENT_STAGE2_MAX_WAIT_REACHED): STATUS_TIMEOUT,
+    (STATUS_WAITING, EVENT_STAGE2_MAX_WAIT_REACHED): STATUS_TIMEOUT,
+    (STATUS_REREQUESTED, EVENT_STAGE2_MAX_WAIT_REACHED): STATUS_TIMEOUT,
+    (STATUS_TIMEOUT, EVENT_STAGE2_MAX_WAIT_REACHED): STATUS_TIMEOUT,
+    (STATUS_AWAITING_ADDRESS, EVENT_FINALIZE_WITH_REVIEWER_REQUEST): STATUS_REREQUESTED,
+    (STATUS_AWAITING_ADDRESS, EVENT_FINALIZE_WITHOUT_REVIEWER_REQUEST): STATUS_INITIALIZED,
+    (STATUS_AWAITING_TRIAGE, EVENT_FINALIZE_WITH_REVIEWER_REQUEST): STATUS_REREQUESTED,
+    (STATUS_AWAITING_TRIAGE, EVENT_FINALIZE_WITHOUT_REVIEWER_REQUEST): STATUS_INITIALIZED,
+}
+
 DEFAULT_OUTPUT_DIR = ".context/gh-autopilot"
 DEFAULT_CONTEXT_FILENAME = "context.md"
 DEFAULT_CYCLE_FILENAME = "cycle.json"
-DEFAULT_COMMENT_STATUS_HISTORY_FILENAME = "comment-status-history.json"
 DEFAULT_STAGE2_MAX_WAIT_SECONDS = 43200
+EVENT_SCHEMA_VERSION = 1
 PHASE_FINALIZED = "finalized"
 EXIT_BLOCKED_UNADDRESSED = 11
 EXIT_STAGE2_MAX_WAIT_REACHED = 12
+
+SIMULATION_START_STATUSES = sorted(
+    {status for status, _ in STATE_TRANSITIONS.keys()} | set(STATE_TRANSITIONS.values())
+)
+SIMULATION_EVENTS = sorted({event for _, event in STATE_TRANSITIONS.keys()})
 
 REVIEWS_QUERY = """\
 query(
@@ -127,6 +164,24 @@ query(
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def transition_status(current_status: str, event: str) -> str:
+    next_status = STATE_TRANSITIONS.get((current_status, event))
+    if next_status is None:
+        raise ValueError(
+            f"invalid state transition: status={current_status}, event={event}"
+        )
+    return next_status
+
+
+def normalize_event_type(event_type: str) -> str:
+    if not isinstance(event_type, str):
+        raise ValueError("event_type must be a string")
+    normalized = re.sub(r"[^a-z0-9]+", "_", event_type.strip().lower()).strip("_")
+    if not normalized:
+        raise ValueError("event_type must contain at least one alphanumeric character")
+    return normalized
 
 
 def parse_iso(value: str | None) -> datetime | None:
@@ -298,6 +353,8 @@ class AutopilotStateStore:
             raise ValueError(
                 f"unsupported state version: {state.get('version')} (expected {STATE_VERSION})"
             )
+        state.setdefault("last_timeout_reason", None)
+        state.setdefault("last_wait", None)
         return state
 
     def save(self, state: dict[str, Any]) -> None:
@@ -306,10 +363,13 @@ class AutopilotStateStore:
         self.state_file.write_text(render_json(state) + "\n", encoding="utf-8")
 
     def append_event(self, event_type: str, data: dict[str, Any]) -> None:
+        if not isinstance(data, dict):
+            raise ValueError("event payload must be a JSON object")
         event = {
-            "at": now_iso(),
-            "event": event_type,
-            "data": data,
+            "schema_version": EVENT_SCHEMA_VERSION,
+            "timestamp": now_iso(),
+            "event_type": normalize_event_type(event_type),
+            "payload": data,
         }
         self.events_file.parent.mkdir(parents=True, exist_ok=True)
         with self.events_file.open("a", encoding="utf-8") as handle:
@@ -641,10 +701,6 @@ def default_cycle_file(output_dir: Path) -> Path:
     return output_dir / DEFAULT_CYCLE_FILENAME
 
 
-def default_comment_status_history_file(output_dir: Path) -> Path:
-    return output_dir / DEFAULT_COMMENT_STATUS_HISTORY_FILENAME
-
-
 def shell_join(parts: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in parts)
 
@@ -749,6 +805,81 @@ def build_assert_drained_command(output_dir: Path, pr_number: int) -> str:
             "assert-drained",
         ]
     )
+
+
+def normalize_timing_payload(raw_timing: Any) -> dict[str, int]:
+    defaults = {
+        "initial_sleep_seconds": 300,
+        "poll_interval_seconds": 45,
+        "max_wait_seconds": 2400,
+    }
+    if not isinstance(raw_timing, dict):
+        return defaults.copy()
+
+    normalized = defaults.copy()
+    for key, fallback in defaults.items():
+        value = raw_timing.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            normalized[key] = fallback
+            continue
+        normalized[key] = value
+    return normalized
+
+
+def extract_pr_number(state: dict[str, Any]) -> int | None:
+    pr_payload = state.get("pr")
+    if not isinstance(pr_payload, dict):
+        return None
+    raw_number = pr_payload.get("number")
+    if isinstance(raw_number, bool):
+        return None
+    if isinstance(raw_number, int):
+        return raw_number
+    if isinstance(raw_number, str) and raw_number.isdigit():
+        return int(raw_number)
+    return None
+
+
+def build_resume_command(
+    *,
+    state: dict[str, Any],
+    output_dir: Path,
+    pr_number: int,
+    stage2_max_wait_seconds: int = DEFAULT_STAGE2_MAX_WAIT_SECONDS,
+) -> str:
+    status = str(state.get("status") or "")
+    if status in {STATUS_AWAITING_ADDRESS, STATUS_AWAITING_TRIAGE}:
+        return build_finalize_cycle_command(output_dir, pr_number)
+    if status == STATUS_COMPLETED_NO_COMMENTS:
+        return build_assert_drained_command(output_dir, pr_number)
+    if (
+        status == STATUS_TIMEOUT
+        and state.get("last_timeout_reason") == TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED
+    ):
+        return build_status_command(output_dir, pr_number)
+    return build_run_stage2_loop_command(
+        output_dir,
+        pr_number,
+        normalize_timing_payload(state.get("timing")),
+        stage2_max_wait_seconds=stage2_max_wait_seconds,
+    )
+
+
+def attach_resume_command(
+    result: dict[str, Any],
+    *,
+    state: dict[str, Any],
+    output_dir: Path,
+    pr_number: int,
+    stage2_max_wait_seconds: int = DEFAULT_STAGE2_MAX_WAIT_SECONDS,
+) -> dict[str, Any]:
+    result["resume_command"] = build_resume_command(
+        state=state,
+        output_dir=output_dir,
+        pr_number=pr_number,
+        stage2_max_wait_seconds=stage2_max_wait_seconds,
+    )
+    return result
 
 
 def context_doc_paths(output_dir: Path) -> dict[str, Path]:
@@ -1209,13 +1340,17 @@ def write_context_markdown(
     next_commands: list[str],
 ) -> None:
     context_file.parent.mkdir(parents=True, exist_ok=True)
+    timeout_reason = state.get("last_timeout_reason") or "none"
+    status_header = (
+        f"phase={phase} | cycle={state['cycle']} | status={state['status']} "
+        f"| timeout_reason={timeout_reason}"
+    )
     lines = [
         "# GH Autopilot Context",
         "",
         f"- Updated: {now_iso()}",
         f"- PR: #{pr.number} ({pr.url})",
-        f"- Status: {state['status']} (phase: {phase})",
-        f"- Cycle: {state['cycle']}",
+        f"- Status Header: {status_header}",
         f"- Summary: {title}",
         "",
         "## Context Contract",
@@ -1280,71 +1415,6 @@ def write_context_markdown(
     lines.extend(f"- `{command}`" for command in next_commands)
     lines.append("")
     context_file.write_text("\n".join(lines), encoding="utf-8")
-
-
-def write_comment_status_history(
-    output_dir: Path,
-    *,
-    review_id: str,
-    comment_statuses: list[dict[str, Any]],
-) -> Path:
-    history_file = default_comment_status_history_file(output_dir)
-    existing_comments: list[dict[str, Any]] = []
-
-    if history_file.exists():
-        payload = load_required_json(history_file, label="comment-status-history")
-        raw_existing = payload.get("comments")
-        if raw_existing is None:
-            raw_existing = []
-        if not isinstance(raw_existing, list):
-            raise ValueError(
-                "comment-status-history.json must have list field `comments`"
-            )
-        for idx, item in enumerate(raw_existing, start=1):
-            if not isinstance(item, dict):
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] must be an object"
-                )
-            comment_id = item.get("comment_id")
-            created_at = item.get("created_at")
-            if not isinstance(comment_id, str) or not comment_id:
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] missing valid `comment_id`"
-                )
-            if not isinstance(created_at, str) or parse_iso(created_at) is None:
-                raise ValueError(
-                    f"comment-status-history.json comments[{idx}] has invalid `created_at`"
-                )
-            existing_comments.append(item)
-
-    by_comment_id: dict[str, dict[str, Any]] = {
-        item["comment_id"]: item for item in existing_comments
-    }
-    updated_at = now_iso()
-    for item in comment_statuses:
-        by_comment_id[item["comment_id"]] = {
-            "comment_id": item["comment_id"],
-            "thread_id": item["thread_id"],
-            "review_id": review_id,
-            "cycle": item["cycle"],
-            "status": item["status"],
-            "created_at": item["created_at"],
-            "updated_at": updated_at,
-        }
-
-    merged = sorted(
-        by_comment_id.values(),
-        key=lambda entry: (entry["created_at"], entry["comment_id"]),
-    )
-
-    payload = {
-        "version": 1,
-        "updated_at": updated_at,
-        "comments": merged,
-    }
-    history_file.parent.mkdir(parents=True, exist_ok=True)
-    history_file.write_text(render_json(payload) + "\n", encoding="utf-8")
-    return history_file
 
 
 def update_context_documents(
@@ -1445,7 +1515,7 @@ def update_context_documents(
                 "Cycle wait window elapsed without a new Copilot review.", done=True
             ),
             ChecklistTask(
-                "Inspect `monitor.json` and PR review state to confirm Copilot is stuck."
+                "Inspect `state.last_wait` and the latest timeout event to confirm Copilot is stuck."
             ),
             ChecklistTask(
                 "Continue Stage 2 waiting unless the configured Stage 2 max-wait budget has been reached."
@@ -1515,6 +1585,9 @@ def update_context_documents(
         f"pending_review_id={state.get('pending_review_id')}",
         f"last_processed_review_id={state.get('last_processed_review_id')}",
     ]
+    timeout_reason = state.get("last_timeout_reason")
+    if timeout_reason:
+        memory_bullets.append(f"last_timeout_reason={timeout_reason}")
     if artifact_map:
         memory_bullets.append(
             "artifacts="
@@ -1568,6 +1641,8 @@ def init_state(
         "last_processed_review_submitted_at": None,
         "pending_review_id": None,
         "pending_review_submitted_at": None,
+        "last_timeout_reason": None,
+        "last_wait": None,
         "timing": {
             "initial_sleep_seconds": initial_sleep_seconds,
             "poll_interval_seconds": poll_interval_seconds,
@@ -1599,6 +1674,7 @@ def run_cycle(
     poll_interval_seconds: int,
     max_wait_seconds: int,
 ) -> int:
+    _ = monitor_file  # monitor snapshots are now kept in state.last_wait/event payloads.
     state = store.load()
     ensure_state_pr_matches(state, pr)
     if state["status"] == STATUS_AWAITING_ADDRESS:
@@ -1616,19 +1692,24 @@ def run_cycle(
             pr=pr,
             phase=state["status"],
         )
+        result = attach_resume_command(
+            {
+                "status": state["status"],
+                "message": "state is already terminal; re-init to start over",
+                "state_file": str(store.state_file),
+                "context_docs": context_docs,
+            },
+            state=state,
+            output_dir=output_dir,
+            pr_number=pr.number,
+        )
         print(
-            render_json(
-                {
-                    "status": state["status"],
-                    "message": "state is already terminal; re-init to start over",
-                    "state_file": str(store.state_file),
-                    "context_docs": context_docs,
-                }
-            )
+            render_json(result)
         )
         return 0
 
-    state["status"] = STATUS_WAITING
+    state["status"] = transition_status(state["status"], EVENT_BEGIN_CYCLE_WAIT)
+    state["last_timeout_reason"] = None
     store.save(state)
     store.append_event("cycle_waiting", {"cycle": state["cycle"]})
 
@@ -1640,36 +1721,39 @@ def run_cycle(
         poll_interval_seconds=poll_interval_seconds,
         max_wait_seconds=max_wait_seconds,
     )
-    monitor_file.parent.mkdir(parents=True, exist_ok=True)
-    monitor_file.write_text(render_json(wait_payload) + "\n", encoding="utf-8")
 
     if wait_status == "timeout":
-        state["status"] = STATUS_TIMEOUT
+        state["status"] = transition_status(state["status"], EVENT_CYCLE_TIMEOUT)
+        state["last_timeout_reason"] = TIMEOUT_REASON_CYCLE_MAX_WAIT_REACHED
+        state["last_wait"] = wait_payload
         store.save(state)
         context_docs = update_context_documents(
             output_dir,
             state=state,
             pr=pr,
             phase=STATUS_TIMEOUT,
-            artifacts={"monitor_json": str(monitor_file)},
         )
         store.append_event(
             "cycle_timeout",
             {
                 "cycle": state["cycle"],
-                "timing": wait_payload["timing"],
-                "monitor_file": str(monitor_file),
+                "wait": wait_payload,
             },
         )
+        result = attach_resume_command(
+            {
+                "status": STATUS_TIMEOUT,
+                "reason": "no_new_copilot_review_before_deadline",
+                "timeout_reason": state["last_timeout_reason"],
+                "wait": wait_payload,
+                "context_docs": context_docs,
+            },
+            state=state,
+            output_dir=output_dir,
+            pr_number=pr.number,
+        )
         print(
-            render_json(
-                {
-                    "status": STATUS_TIMEOUT,
-                    "reason": "no_new_copilot_review_before_deadline",
-                    "monitor_file": str(monitor_file),
-                    "context_docs": context_docs,
-                }
-            )
+            render_json(result)
         )
         return 3
 
@@ -1689,16 +1773,18 @@ def run_cycle(
     )
 
     if next_status == STATUS_COMPLETED_NO_COMMENTS:
-        state["status"] = STATUS_COMPLETED_NO_COMMENTS
+        state["status"] = transition_status(state["status"], EVENT_CYCLE_NO_COMMENTS)
         state["pending_review_id"] = None
         state["pending_review_submitted_at"] = None
+        state["last_timeout_reason"] = None
+        state["last_wait"] = wait_payload
         store.save(state)
         context_docs = update_context_documents(
             output_dir,
             state=state,
             pr=pr,
             phase=STATUS_COMPLETED_NO_COMMENTS,
-            artifacts={"monitor_json": str(monitor_file), **artifacts},
+            artifacts=artifacts,
         )
         store.append_event(
             "cycle_completed_no_comments",
@@ -1708,30 +1794,41 @@ def run_cycle(
                 "artifacts": artifacts,
             },
         )
+        result = attach_resume_command(
+            {
+                "status": STATUS_COMPLETED_NO_COMMENTS,
+                "cycle": state["cycle"],
+                "review_id": review["id"],
+                "artifacts": artifacts,
+                "wait": wait_payload,
+                "context_docs": context_docs,
+            },
+            state=state,
+            output_dir=output_dir,
+            pr_number=pr.number,
+        )
         print(
-            render_json(
-                {
-                    "status": STATUS_COMPLETED_NO_COMMENTS,
-                    "cycle": state["cycle"],
-                    "review_id": review["id"],
-                    "artifacts": artifacts,
-                    "monitor_file": str(monitor_file),
-                    "context_docs": context_docs,
-                }
-            )
+            render_json(result)
         )
         return 0
 
-    state["status"] = next_status
+    event = (
+        EVENT_CYCLE_NEEDS_ADDRESS
+        if next_status == STATUS_AWAITING_ADDRESS
+        else EVENT_CYCLE_NEEDS_TRIAGE
+    )
+    state["status"] = transition_status(state["status"], event)
     state["pending_review_id"] = review["id"]
     state["pending_review_submitted_at"] = review["submitted_at"]
+    state["last_timeout_reason"] = None
+    state["last_wait"] = wait_payload
     store.save(state)
     context_docs = update_context_documents(
         output_dir,
         state=state,
         pr=pr,
         phase=next_status,
-        artifacts={"monitor_json": str(monitor_file), **artifacts},
+        artifacts=artifacts,
     )
     store.append_event(
         "cycle_action_required",
@@ -1742,17 +1839,21 @@ def run_cycle(
             "artifacts": artifacts,
         },
     )
+    result = attach_resume_command(
+        {
+            "status": next_status,
+            "cycle": state["cycle"],
+            "review_id": review["id"],
+            "artifacts": artifacts,
+            "wait": wait_payload,
+            "context_docs": context_docs,
+        },
+        state=state,
+        output_dir=output_dir,
+        pr_number=pr.number,
+    )
     print(
-        render_json(
-            {
-                "status": next_status,
-                "cycle": state["cycle"],
-                "review_id": review["id"],
-                "artifacts": artifacts,
-                "monitor_file": str(monitor_file),
-                "context_docs": context_docs,
-            }
-        )
+        render_json(result)
     )
     return 10
 
@@ -1826,40 +1927,12 @@ def run_stage2_loop(
     run_attempts = 0
 
     while True:
-        now = time.monotonic()
-        remaining_seconds = int(deadline - now)
-        if remaining_seconds <= 0:
-            state = store.load()
-            ensure_state_pr_matches(state, pr)
-            state["status"] = STATUS_TIMEOUT
-            store.save(state)
-            context_docs = update_context_documents(
-                output_dir,
-                state=state,
-                pr=pr,
-                phase=STATUS_TIMEOUT,
-                artifacts={"monitor_json": str(monitor_file)},
-            )
-            result = {
-                "status": STATUS_TIMEOUT,
-                "reason": "stage2_max_wait_reached",
-                "cycle": state.get("cycle"),
-                "timing": {
-                    "stage2_max_wait_seconds": stage2_max_wait_seconds,
-                    "elapsed_seconds": int(now - start),
-                    "run_attempts": run_attempts,
-                    "timeout_retries": timeout_retries,
-                },
-                "monitor_file": str(monitor_file),
-                "context_docs": context_docs,
-            }
-            store.append_event("stage2_loop_timeout", result)
-            print(render_json(result))
-            return EXIT_STAGE2_MAX_WAIT_REACHED
-
         state = store.load()
         ensure_state_pr_matches(state, pr)
         status = state.get("status")
+
+        now = time.monotonic()
+        remaining_seconds = int(deadline - now)
 
         if status in {STATUS_AWAITING_ADDRESS, STATUS_AWAITING_TRIAGE}:
             result = {
@@ -1874,6 +1947,13 @@ def run_stage2_loop(
                     "timeout_retries": timeout_retries,
                 },
             }
+            attach_resume_command(
+                result,
+                state=state,
+                output_dir=output_dir,
+                pr_number=pr.number,
+                stage2_max_wait_seconds=stage2_max_wait_seconds,
+            )
             store.append_event("stage2_loop_action_required", result)
             print(render_json(result))
             return 10
@@ -1901,11 +1981,46 @@ def run_stage2_loop(
                 store.append_event("stage2_loop_blocked_unaddressed", result)
             else:
                 store.append_event("stage2_loop_completed_no_comments", result)
+            attach_resume_command(
+                result,
+                state=state,
+                output_dir=output_dir,
+                pr_number=pr.number,
+                stage2_max_wait_seconds=stage2_max_wait_seconds,
+            )
             print(render_json(result))
             return drained_exit
 
         if status == STATUS_TIMEOUT:
-            state["status"] = STATUS_INITIALIZED
+            timeout_reason = state.get("last_timeout_reason")
+            if timeout_reason == TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED:
+                result = {
+                    "status": STATUS_TIMEOUT,
+                    "reason": TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED,
+                    "message": "state is already terminal due to Stage 2 max-wait timeout",
+                    "cycle": state.get("cycle"),
+                    "timing": {
+                        "stage2_max_wait_seconds": stage2_max_wait_seconds,
+                        "elapsed_seconds": int(now - start),
+                        "run_attempts": run_attempts,
+                        "timeout_retries": timeout_retries,
+                    },
+                }
+                attach_resume_command(
+                    result,
+                    state=state,
+                    output_dir=output_dir,
+                    pr_number=pr.number,
+                    stage2_max_wait_seconds=stage2_max_wait_seconds,
+                )
+                store.append_event("stage2_loop_already_terminal_timeout", result)
+                print(render_json(result))
+                return EXIT_STAGE2_MAX_WAIT_REACHED
+
+            state["status"] = transition_status(
+                status, EVENT_STAGE2_RETRY_AFTER_CYCLE_TIMEOUT
+            )
+            state["last_timeout_reason"] = None
             store.save(state)
             timeout_retries += 1
             store.append_event(
@@ -1914,13 +2029,58 @@ def run_stage2_loop(
                     "cycle": state["cycle"],
                     "timeout_retries": timeout_retries,
                     "remaining_seconds": remaining_seconds,
+                    "timeout_reason": timeout_reason,
                 },
             )
             continue
 
+        if remaining_seconds <= 0:
+            state["status"] = transition_status(status, EVENT_STAGE2_MAX_WAIT_REACHED)
+            state["last_timeout_reason"] = TIMEOUT_REASON_STAGE2_MAX_WAIT_REACHED
+            store.save(state)
+            context_docs = update_context_documents(
+                output_dir,
+                state=state,
+                pr=pr,
+                phase=STATUS_TIMEOUT,
+            )
+            result = {
+                "status": STATUS_TIMEOUT,
+                "reason": "stage2_max_wait_reached",
+                "timeout_reason": state["last_timeout_reason"],
+                "cycle": state.get("cycle"),
+                "timing": {
+                    "stage2_max_wait_seconds": stage2_max_wait_seconds,
+                    "elapsed_seconds": int(now - start),
+                    "run_attempts": run_attempts,
+                    "timeout_retries": timeout_retries,
+                },
+                "context_docs": context_docs,
+            }
+            attach_resume_command(
+                result,
+                state=state,
+                output_dir=output_dir,
+                pr_number=pr.number,
+                stage2_max_wait_seconds=stage2_max_wait_seconds,
+            )
+            store.append_event("stage2_loop_timeout", result)
+            print(render_json(result))
+            return EXIT_STAGE2_MAX_WAIT_REACHED
+
         cycle_wait_seconds = min(max_wait_seconds, max(1, remaining_seconds))
         cycle_initial_sleep_seconds = (
             0 if run_attempts == 0 else initial_sleep_seconds
+        )
+        store.append_event(
+            "stage2_loop_poll_cycle_started",
+            {
+                "cycle": state["cycle"],
+                "run_attempt": run_attempts + 1,
+                "cycle_wait_seconds": cycle_wait_seconds,
+                "cycle_initial_sleep_seconds": cycle_initial_sleep_seconds,
+                "remaining_seconds": remaining_seconds,
+            },
         )
         run_attempts += 1
         exit_code = run_cycle(
@@ -1956,19 +2116,14 @@ def finalize_cycle(
     if not pending_review_id:
         raise ValueError("state is missing pending_review_id")
     finalize_artifacts = validate_finalize_artifacts(output_dir, state=state)
-    comment_status_history = write_comment_status_history(
-        output_dir,
-        review_id=pending_review_id,
-        comment_statuses=finalize_artifacts["comment_statuses"],
-    )
 
     if request_reviewer:
         client.re_request_copilot(pr.number)
         event_name = "cycle_finalized_and_rerequested"
-        new_status = STATUS_REREQUESTED
+        transition_event = EVENT_FINALIZE_WITH_REVIEWER_REQUEST
     else:
         event_name = "cycle_finalized_without_rerequest"
-        new_status = STATUS_INITIALIZED
+        transition_event = EVENT_FINALIZE_WITHOUT_REVIEWER_REQUEST
 
     state["last_processed_review_id"] = pending_review_id
     state["last_processed_review_submitted_at"] = state.get(
@@ -1977,7 +2132,8 @@ def finalize_cycle(
     state["pending_review_id"] = None
     state["pending_review_submitted_at"] = None
     state["cycle"] = int(state["cycle"]) + 1
-    state["status"] = new_status
+    state["status"] = transition_status(state["status"], transition_event)
+    state["last_timeout_reason"] = None
     store.save(state)
     context_docs = update_context_documents(
         output_dir,
@@ -1986,7 +2142,6 @@ def finalize_cycle(
         phase=PHASE_FINALIZED,
         artifacts={
             "cycle_json": finalize_artifacts["cycle_json"],
-            "comment_status_history_json": str(comment_status_history),
         },
     )
     store.append_event(
@@ -2003,20 +2158,24 @@ def finalize_cycle(
             "non_actionable_threads": finalize_artifacts["non_actionable_threads"],
             "action_comments": finalize_artifacts["action_comments"],
             "no_action_comments": finalize_artifacts["no_action_comments"],
-            "comment_status_history_json": str(comment_status_history),
+            "comment_statuses": finalize_artifacts["comment_statuses"],
         },
     )
+    result = attach_resume_command(
+        {
+            "status": state["status"],
+            "cycle": state["cycle"],
+            "last_processed_review_id": state["last_processed_review_id"],
+            "requested_reviewer": request_reviewer,
+            "comment_statuses_recorded": len(finalize_artifacts["comment_statuses"]),
+            "context_docs": context_docs,
+        },
+        state=state,
+        output_dir=output_dir,
+        pr_number=pr.number,
+    )
     print(
-        render_json(
-            {
-                "status": state["status"],
-                "cycle": state["cycle"],
-                "last_processed_review_id": state["last_processed_review_id"],
-                "requested_reviewer": request_reviewer,
-                "comment_status_history_json": str(comment_status_history),
-                "context_docs": context_docs,
-            }
-        )
+        render_json(result)
     )
     return 0
 
@@ -2031,6 +2190,14 @@ def print_status(store: AutopilotStateStore, *, output_dir: Path) -> int:
         },
         "state": state,
     }
+    pr_number = extract_pr_number(state)
+    if pr_number is not None:
+        attach_resume_command(
+            result,
+            state=state,
+            output_dir=output_dir,
+            pr_number=pr_number,
+        )
     print(render_json(result))
     return 0
 
@@ -2073,6 +2240,14 @@ def evaluate_drained_state(
     }
     if pr_ref:
         result["requested_pr"] = pr_ref
+    pr_number = extract_pr_number(state)
+    if pr_number is not None:
+        attach_resume_command(
+            result,
+            state=state,
+            output_dir=output_dir,
+            pr_number=pr_number,
+        )
 
     if pending_cycle:
         result["status"] = STATUS_BLOCKED_UNADDRESSED
@@ -2093,6 +2268,56 @@ def command_assert_drained(
     )
     print(render_json(result))
     return exit_code
+
+
+def simulate_fsm_transitions(start_status: str, events: list[str]) -> dict[str, Any]:
+    if start_status not in SIMULATION_START_STATUSES:
+        raise ValueError(
+            f"unsupported start status `{start_status}`; expected one of: "
+            + ", ".join(SIMULATION_START_STATUSES)
+        )
+    if not events:
+        raise ValueError("simulate-fsm requires at least one --event")
+
+    current_status = start_status
+    transitions: list[dict[str, Any]] = []
+    for step, event in enumerate(events, start=1):
+        if event not in SIMULATION_EVENTS:
+            raise ValueError(
+                f"unsupported event `{event}` at step {step}; expected one of: "
+                + ", ".join(SIMULATION_EVENTS)
+            )
+        try:
+            next_status = transition_status(current_status, event)
+        except ValueError as exc:
+            raise ValueError(
+                f"simulate-fsm step {step} failed: status={current_status}, event={event}"
+            ) from exc
+
+        transitions.append(
+            {
+                "step": step,
+                "from_status": current_status,
+                "event": event,
+                "to_status": next_status,
+            }
+        )
+        current_status = next_status
+
+    return {
+        "status": "simulated",
+        "start_status": start_status,
+        "events": events,
+        "transitions": transitions,
+        "final_status": current_status,
+        "is_terminal": current_status in TERMINAL_STATUSES,
+    }
+
+
+def command_simulate_fsm(*, start_status: str, events: list[str]) -> int:
+    result = simulate_fsm_transitions(start_status, events)
+    print(render_json(result))
+    return 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -2173,7 +2398,10 @@ def parse_args() -> argparse.Namespace:
     cycle_parser.add_argument(
         "--monitor-file",
         default=None,
-        help="Override monitor output file (default: <output-dir>/monitor.json).",
+        help=(
+            "Legacy option retained for compatibility; monitor snapshots are recorded in "
+            "state.last_wait and event payloads."
+        ),
     )
 
     stage2_parser = subparsers.add_parser(
@@ -2214,7 +2442,10 @@ def parse_args() -> argparse.Namespace:
     stage2_parser.add_argument(
         "--monitor-file",
         default=None,
-        help="Override monitor output file (default: <output-dir>/monitor.json).",
+        help=(
+            "Legacy option retained for compatibility; monitor snapshots are recorded in "
+            "state.last_wait and event payloads."
+        ),
     )
 
     finalize_parser = subparsers.add_parser(
@@ -2234,6 +2465,25 @@ def parse_args() -> argparse.Namespace:
             "Fail when an address-required cycle is pending; "
             "use before declaring loop completion."
         ),
+    )
+
+    simulate_parser = subparsers.add_parser(
+        "simulate-fsm",
+        help="Deterministically simulate FSM status transitions with explicit events.",
+    )
+    simulate_parser.add_argument(
+        "--start-status",
+        default=STATUS_INITIALIZED,
+        choices=SIMULATION_START_STATUSES,
+        help="Initial status before applying transitions.",
+    )
+    simulate_parser.add_argument(
+        "--event",
+        dest="events",
+        action="append",
+        required=True,
+        choices=SIMULATION_EVENTS,
+        help="Transition event to apply; repeat for each step.",
     )
     return parser.parse_args()
 
@@ -2268,16 +2518,20 @@ def command_init(
         pr=pr,
         phase=STATUS_INITIALIZED,
     )
+    result = attach_resume_command(
+        {
+            "status": "initialized",
+            "state_file": str(store.state_file),
+            "events_file": str(store.events_file),
+            "context_docs": context_docs,
+            "state": state,
+        },
+        state=state,
+        output_dir=output_dir,
+        pr_number=pr.number,
+    )
     print(
-        render_json(
-            {
-                "status": "initialized",
-                "state_file": str(store.state_file),
-                "events_file": str(store.events_file),
-                "context_docs": context_docs,
-                "state": state,
-            }
-        )
+        render_json(result)
     )
     return 0
 
@@ -2443,6 +2697,11 @@ def main() -> int:
                 store,
                 output_dir=output_dir,
                 pr_ref=args.pr,
+            )
+        if args.command == "simulate-fsm":
+            return command_simulate_fsm(
+                start_status=args.start_status,
+                events=args.events,
             )
 
         raise ValueError(f"unsupported command: {args.command}")
