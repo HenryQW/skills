@@ -36,6 +36,24 @@ Terminal end conditions for the loop:
 - On cycle timeout, immediately retry Stage 2 wait. Do not stop manually while still inside the Stage 2 max-wait budget.
 - Stop entire loop when Copilot summary says `generated no comments`.
 
+## Autopilot Persistence Contract
+
+Autopilot is a persistent control loop. Once started, it must keep operating with timed polling and deterministic transitions until one of the following happens:
+
+- terminal success: `completed_no_comments` and drain guard passes
+- terminal timeout: `timeout` with reason `stage2_max_wait_reached`
+- explicit blocker: auth failure, state corruption, or PR mismatch that cannot be auto-recovered
+
+Idle waiting is not a stop condition. A single cycle timeout is not a stop condition.
+
+## GH Command Reference Contract
+
+When this skill uses `gh` commands, treat `gh-cli` as the command source of truth for command shape and flags.
+
+- Validate auth flows with `gh-cli` guidance (`gh auth status`, `gh auth login`).
+- Validate PR resolution/edit patterns with `gh-cli` guidance (`gh pr view`, `gh pr edit --add-reviewer/--remove-reviewer`, `--json`, `--jq`).
+- Validate GraphQL/API invocation patterns with `gh-cli` guidance (`gh api graphql`).
+
 ## Primary Engine
 
 Use `scripts/run_autopilot_loop.py` as the control-plane entrypoint.
@@ -48,6 +66,10 @@ Use `scripts/run_autopilot_loop.py` as the control-plane entrypoint.
 - `finalize-cycle`: mark current cycle addressed and re-request Copilot.
 - `status`: print current state.
 - `assert-drained`: fail if any address-required cycle is still pending.
+- `simulate-fsm`: deterministic dry-run of event-driven status transitions.
+
+The engine is event-driven: state transitions are applied from explicit events (for example `cycle_timeout`, `cycle_needs_address`, `finalize_with_reviewer_request`) instead of ad-hoc status rewrites.
+Every JSON command result includes exactly one canonical `resume_command` to continue from the current state.
 
 ### State File
 
@@ -65,13 +87,19 @@ Important fields:
 
 Default: `.context/gh-autopilot/events.jsonl`
 
-Each line is a JSON event with timestamp and payload.
+Each line is a normalized JSON event:
+
+- `schema_version`: event schema version.
+- `timestamp`: event time in UTC ISO8601.
+- `event_type`: normalized snake_case event name.
+- `payload`: event payload object.
 
 ### Context Workspace Files
 
 Use `.context/gh-autopilot/` as the durable workspace for autonomy and recovery.
 
 - `context.md`: single source of truth for next actions, status snapshot, artifacts, and suggested commands.
+  Includes a compact status header: `phase=<...> | cycle=<...> | status=<...> | timeout_reason=<...>`.
 
 Keep this intentionally simple: one context file, not multiple overlapping notes.
 
@@ -82,10 +110,30 @@ Start from the user-selected stage: `create_pr`, `monitor_review`, or `address_c
 Routing rules:
 
 1. Stage 1 (`create_pr`) always transitions to Stage 2.
-2. Stage 2 (`monitor_review`) runs `run-stage2-loop`.
-3. If Stage 2 returns a terminal outcome (`completed_no_comments` or Stage 2 max wait timeout), stop.
+2. Stage 2 (`monitor_review`) runs the persistent supervisor path (`run-stage2-loop`).
+3. Stage 2 guard order is strict:
+   - check pending address/triage first
+   - check terminal no-comments + drain guard
+   - check per-cycle-timeout retry state
+   - check Stage 2 max-wait timeout
+   - otherwise run another poll cycle
 4. If Stage 2 returns `awaiting_address` or `awaiting_triage`, transition to Stage 3.
 5. Stage 3 (`address_comments`) finalizes the full batch with `finalize-cycle`, then transitions back to Stage 2.
+
+Event-driven state transitions:
+
+```text
+initialized|rerequested --begin_cycle_wait--> waiting_for_review
+waiting_for_review --cycle_timeout--> timeout (cycle_max_wait_reached)
+timeout (cycle_max_wait_reached) --stage2_retry_after_cycle_timeout--> initialized
+waiting_for_review --cycle_no_comments--> completed_no_comments
+waiting_for_review --cycle_needs_address--> awaiting_address
+waiting_for_review --cycle_needs_triage--> awaiting_triage
+awaiting_address --finalize_with_reviewer_request--> rerequested
+awaiting_triage --finalize_with_reviewer_request--> rerequested
+awaiting_address|awaiting_triage --finalize_without_reviewer_request--> initialized
+initialized|waiting_for_review|rerequested --stage2_max_wait_reached--> timeout
+```
 
 ## Stage Details
 
@@ -95,12 +143,13 @@ User intent: PR has not been created yet.
 
 Actions:
 
-1. Run `gh auth status`.
-2. Resolve current-branch PR with `gh pr view` (omit `--pr`).
-3. If an open PR already exists for the branch, skip PR creation and move to Stage 2.
-4. If no PR exists, run `gh-pr-creation` to open one.
-5. Initialize state with `init` (avoid `--force` unless state is intentionally reset).
-6. Move to Stage 2.
+1. Use `gh-cli` as reference for all `gh` command usage in this stage.
+2. Run `gh auth status`.
+3. Resolve current-branch PR with `gh pr view` (omit `--pr`).
+4. If an open PR already exists for the branch, skip PR creation and move to Stage 2.
+5. If no PR exists, run `gh-pr-creation` to open one.
+6. Initialize state with `init` (avoid `--force` unless state is intentionally reset).
+7. Move to Stage 2.
 
 ### Stage 2 (`monitor_review`)
 
@@ -108,21 +157,22 @@ User intent: PR exists and we are waiting for Copilot output.
 
 Actions:
 
-1. Run `gh auth status`.
-2. Resolve PR (current branch or explicit `--pr`).
-3. Ensure state exists for the PR:
+1. Use `gh-cli` as reference for all `gh` command usage in this stage.
+2. Run `gh auth status`.
+3. Resolve PR (current branch or explicit `--pr`).
+4. Ensure state exists for the PR:
    - If missing: run `init`.
    - If state already `awaiting_address` or `awaiting_triage`: move directly to Stage 3.
-4. Run `run-stage2-loop` with normal timing (`300/45/2400`) plus Stage 2 max wait (`43200` by default).
+5. Run `run-stage2-loop` with normal timing (`300/45/2400`) plus Stage 2 max wait (`43200` by default).
    - On Stage 2 entry, `run-stage2-loop` performs an immediate fetch pass (`initial_sleep=0`) to capture already-finished Copilot reviews/comments.
    - `run-stage2-loop` retries `run-cycle` automatically after each cycle timeout.
    - `run-cycle` exports comments by matching each thread comment to the active Copilot `review_id` (not by timestamp cutoff).
-5. Interpret result:
+6. Interpret result:
    - `completed_no_comments` -> terminal success; stop loop.
      - includes cycles where no Copilot thread comments were captured for that review round
    - `timeout` with reason `stage2_max_wait_reached` -> terminal timeout; stop loop.
    - `awaiting_address` or `awaiting_triage` -> move to Stage 3.
-6. Before any terminal stop/report in Stage 2, run `assert-drained`.
+7. Before any terminal stop/report in Stage 2, run `assert-drained`.
    - If it exits non-zero, do not stop; continue to Stage 3.
 
 If Copilot is already reviewing when Stage 2 starts, do not re-request reviewer;
@@ -142,8 +192,9 @@ Actions:
    - Otherwise run `run-cycle` with `--initial-sleep-seconds 0` to capture existing comments immediately.
    - If `parsed_summary.generated_comments > 0` but `counts.copilot_comments_total == 0`, artifacts are inconsistent: re-run immediate `run-cycle` and do not finalize until comments are captured.
 2. Build normalized worker artifacts in shared context:
-   - run `build_review_batch.py` to create `review-batch.json` and `review-batch.md`
-3. Run Stage 3 worker actions inside this skill:
+   - run `build_review_batch.py` to create `review-batch.json`
+3. Use `gh-cli` as reference for any `gh` commands used to resolve/reply on PR threads.
+4. Run Stage 3 worker actions inside this skill:
    - process all threads from `review-batch.json`
    - account for every Copilot comment in those threads
    - resolve each actionable thread in GitHub
@@ -151,8 +202,8 @@ Actions:
    - do not leave any thread/comment unreviewed or unaddressed
    - push exactly once for the batch
    - do not request Copilot review while processing individual threads
-   - update `cycle.json.addressing` and write `address-summary.md`
-4. Validate `cycle.json.addressing` before finalizing:
+   - update `cycle.json.addressing` with complete per-thread and per-comment coverage
+5. Validate `cycle.json.addressing` before finalizing:
    - `status=ready_for_finalize`
    - `pushed_once=true`
    - `review_id` and `cycle` match active state
@@ -168,11 +219,11 @@ Actions:
      - `status` in `{action, no_action}`
      - `cycle` equal to the active cycle
      - chronological sort by `created_at`
-5. Run `finalize-cycle` only when validation passes (re-requests Copilot unless explicitly skipped for recovery).
+6. Run `finalize-cycle` only when validation passes (re-requests Copilot unless explicitly skipped for recovery).
    - run this once per cycle, after the full thread batch is complete
    - never run it immediately after addressing a single thread
    - never call reviewer add/remove directly during Stage 3; `finalize-cycle` is the only allowed reviewer request path
-6. Return to Stage 2.
+7. Return to Stage 2.
 
 ## Command Templates
 
@@ -254,7 +305,7 @@ This command validates `cycle.json.addressing` coverage first, then:
 1. Moves `pending_review_id` into `last_processed_review_id`.
 2. Increments `cycle`.
 3. Re-requests Copilot via remove/add reviewer sequence.
-4. Writes/updates `comment-status-history.json` with per-comment status (`action`/`no_action`) and cycle.
+4. Records per-comment status (`action`/`no_action`) in finalize event payloads.
 
 Use `--skip-reviewer-request` only for manual recovery paths.
 
@@ -280,16 +331,23 @@ Use this as the final gate before reporting completion/timeout handling results.
 If state is `awaiting_address` or `awaiting_triage`, this command fails and
 the loop must continue through Stage 3.
 
+### Simulate FSM Transitions (deterministic)
+
+```bash
+python "<path-to-skill>/scripts/run_autopilot_loop.py" \
+  simulate-fsm \
+  --start-status initialized \
+  --event begin_cycle_wait \
+  --event cycle_needs_address \
+  --event finalize_with_reviewer_request
+```
+
 ### Artifacts and Exit Codes
 
 Outputs (default `.context/gh-autopilot/`):
 
-- `monitor.json`
 - `cycle.json`
 - `review-batch.json` (generated by Stage 3 worker setup)
-- `review-batch.md` (generated by Stage 3 worker setup)
-- `address-summary.md` (generated by Stage 3 worker)
-- `comment-status-history.json` (updated on successful finalize)
 - `context.md` (updated)
 
 Status meanings:
@@ -323,7 +381,10 @@ while true:
     continue
 
   if current_stage == 2:
-    run Stage 2
+    run persistent Stage 2 supervisor
+    if status in {awaiting_address, awaiting_triage}:
+      current_stage = 3
+      continue
     if status == completed_no_comments:
       if assert-drained != 0:
         current_stage = 3
@@ -334,7 +395,7 @@ while true:
         current_stage = 3
         continue
       stop
-    current_stage = 3
+    # cycle timeout is internal retry; never stop here
     continue
 
   if current_stage == 3:
@@ -385,10 +446,12 @@ Handle common failure modes explicitly:
 - Never finalize a cycle if any review thread lacks a resolve/rationale response.
 - Never finalize when `parsed_summary.generated_comments > 0` but captured comment count is `0`.
 - Never manually stop Stage 2 idle waiting before `run-stage2-loop` exits by configured limits or terminal status.
+- Never treat a single cycle timeout as terminal; it is always a retry path while Stage 2 max-wait budget remains.
 - Never claim terminal completion unless `assert-drained` exits `0`.
 - Keep one push per cycle.
 - Do not delete `.context/gh-autopilot/` artifacts mid-loop.
 - Keep `context.md` in sync by using engine commands (`init`, `run-cycle`, `finalize-cycle`) rather than manual edits.
+- Use `gh-cli` skill as the source of truth whenever selecting or changing `gh` commands in this skill.
 
 ## Optional Utility Scripts
 

@@ -6,7 +6,6 @@ Input:
   - .context/gh-autopilot/cycle.json
 Output:
   - .context/gh-autopilot/review-batch.json
-  - .context/gh-autopilot/review-batch.md
 """
 
 from __future__ import annotations
@@ -168,11 +167,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override review-batch.json output path.",
     )
-    parser.add_argument(
-        "--batch-md",
-        default=None,
-        help="Override review-batch.md output path.",
-    )
     return parser.parse_args()
 
 
@@ -181,7 +175,6 @@ def main() -> int:
     cycle_path = Path(args.cycle).resolve()
     output_dir = Path(args.output_dir).resolve()
     batch_json = Path(args.batch_json).resolve() if args.batch_json else output_dir / "review-batch.json"
-    batch_md = Path(args.batch_md).resolve() if args.batch_md else output_dir / "review-batch.md"
 
     if not cycle_path.exists():
         raise FileNotFoundError(f"cycle file not found: {cycle_path}")
@@ -190,16 +183,13 @@ def main() -> int:
     batch = build_review_batch(payload, cycle_path=cycle_path)
 
     batch_json.parent.mkdir(parents=True, exist_ok=True)
-    batch_md.parent.mkdir(parents=True, exist_ok=True)
     batch_json.write_text(render_json(batch) + "\n", encoding="utf-8")
-    batch_md.write_text(render_review_batch_markdown(batch), encoding="utf-8")
 
     print(
         render_json(
             {
                 "status": "ok",
                 "review_batch_json": str(batch_json),
-                "review_batch_md": str(batch_md),
                 "threads_total": batch["summary"]["threads_total"],
                 "threads_eligible": batch["summary"]["threads_eligible"],
             }
