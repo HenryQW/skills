@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 import run_autopilot_loop as autopilot
 
@@ -972,6 +973,176 @@ class FinalizeCoverageTests(unittest.TestCase):
             c2 = next(item for item in payload["comments"] if item["comment_id"] == "C2")
             self.assertEqual(c2["cycle"], 6)
             self.assertEqual(c2["review_id"], "REVIEW_NEW")
+
+
+class Stage2LoopTests(unittest.TestCase):
+    class _FakeClient:
+        def ensure_auth(self) -> None:
+            return None
+
+        def resolve_pr(self, pr_ref: str | None) -> autopilot.GhPrRef:
+            _ = pr_ref
+            return autopilot.GhPrRef(
+                number=200,
+                url="https://example.test/pr/200",
+                owner="octo",
+                repo="demo",
+                title="PR 200",
+            )
+
+    def _store(self, output_dir: Path) -> autopilot.AutopilotStateStore:
+        return autopilot.AutopilotStateStore(
+            state_file=output_dir / "state.json",
+            events_file=output_dir / "events.jsonl",
+        )
+
+    def _write_initialized_state(
+        self, store: autopilot.AutopilotStateStore, pr: autopilot.GhPrRef
+    ) -> None:
+        store.save(
+            {
+                "version": autopilot.STATE_VERSION,
+                "status": autopilot.STATUS_INITIALIZED,
+                "cycle": 0,
+                "pr": pr.as_dict(),
+                "last_processed_review_id": None,
+                "last_processed_review_submitted_at": None,
+                "pending_review_id": None,
+                "pending_review_submitted_at": None,
+                "timing": {
+                    "initial_sleep_seconds": 300,
+                    "poll_interval_seconds": 45,
+                    "max_wait_seconds": 2400,
+                },
+            }
+        )
+
+    def test_run_stage2_loop_retries_after_per_cycle_timeout(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            self._write_initialized_state(store, pr)
+            monitor_file = output_dir / "monitor.json"
+
+            original_run_cycle = autopilot.run_cycle
+            observed_statuses: list[str] = []
+
+            def fake_run_cycle(
+                _client: Any,
+                _store: Any,
+                *,
+                pr: autopilot.GhPrRef,
+                output_dir: Path,
+                monitor_file: Path,
+                initial_sleep_seconds: int,
+                poll_interval_seconds: int,
+                max_wait_seconds: int,
+            ) -> int:
+                _ = (
+                    _client,
+                    pr,
+                    output_dir,
+                    monitor_file,
+                    initial_sleep_seconds,
+                    poll_interval_seconds,
+                    max_wait_seconds,
+                )
+                state = store.load()
+                observed_statuses.append(str(state["status"]))
+                if len(observed_statuses) == 1:
+                    state["status"] = autopilot.STATUS_TIMEOUT
+                    store.save(state)
+                    return 3
+                state["status"] = autopilot.STATUS_AWAITING_ADDRESS
+                state["pending_review_id"] = "REVIEW_PENDING"
+                store.save(state)
+                return 10
+
+            autopilot.run_cycle = fake_run_cycle
+            try:
+                exit_code = autopilot.run_stage2_loop(
+                    client,
+                    store,
+                    pr=pr,
+                    output_dir=output_dir,
+                    monitor_file=monitor_file,
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    stage2_max_wait_seconds=7200,
+                )
+            finally:
+                autopilot.run_cycle = original_run_cycle
+
+            self.assertEqual(exit_code, 10)
+            self.assertEqual(
+                observed_statuses,
+                [autopilot.STATUS_INITIALIZED, autopilot.STATUS_INITIALIZED],
+            )
+
+    def test_run_stage2_loop_stops_at_stage2_time_limit(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            self._write_initialized_state(store, pr)
+            monitor_file = output_dir / "monitor.json"
+
+            original_run_cycle = autopilot.run_cycle
+            original_monotonic = autopilot.time.monotonic
+            monotonic_values = iter([100.0, 100.0, 100.2, 101.1, 101.3, 101.6])
+
+            def fake_monotonic() -> float:
+                return next(monotonic_values)
+
+            def fake_run_cycle(
+                _client: Any,
+                _store: Any,
+                *,
+                pr: autopilot.GhPrRef,
+                output_dir: Path,
+                monitor_file: Path,
+                initial_sleep_seconds: int,
+                poll_interval_seconds: int,
+                max_wait_seconds: int,
+            ) -> int:
+                _ = (
+                    _client,
+                    pr,
+                    output_dir,
+                    monitor_file,
+                    initial_sleep_seconds,
+                    poll_interval_seconds,
+                    max_wait_seconds,
+                )
+                state = store.load()
+                state["status"] = autopilot.STATUS_TIMEOUT
+                store.save(state)
+                return 3
+
+            autopilot.run_cycle = fake_run_cycle
+            autopilot.time.monotonic = fake_monotonic
+            try:
+                exit_code = autopilot.run_stage2_loop(
+                    client,
+                    store,
+                    pr=pr,
+                    output_dir=output_dir,
+                    monitor_file=monitor_file,
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    stage2_max_wait_seconds=1,
+                )
+            finally:
+                autopilot.run_cycle = original_run_cycle
+                autopilot.time.monotonic = original_monotonic
+
+            self.assertEqual(exit_code, autopilot.EXIT_STAGE2_MAX_WAIT_REACHED)
+            self.assertEqual(store.load()["status"], autopilot.STATUS_TIMEOUT)
 
 
 class AssertDrainedTests(unittest.TestCase):

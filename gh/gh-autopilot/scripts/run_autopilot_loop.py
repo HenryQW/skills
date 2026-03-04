@@ -48,8 +48,10 @@ DEFAULT_OUTPUT_DIR = ".context/gh-autopilot"
 DEFAULT_CONTEXT_FILENAME = "context.md"
 DEFAULT_CYCLE_FILENAME = "cycle.json"
 DEFAULT_COMMENT_STATUS_HISTORY_FILENAME = "comment-status-history.json"
+DEFAULT_STAGE2_MAX_WAIT_SECONDS = 43200
 PHASE_FINALIZED = "finalized"
 EXIT_BLOCKED_UNADDRESSED = 11
+EXIT_STAGE2_MAX_WAIT_REACHED = 12
 
 REVIEWS_QUERY = """\
 query(
@@ -639,6 +641,36 @@ def build_run_cycle_command(
             str(timing["poll_interval_seconds"]),
             "--cycle-max-wait-seconds",
             str(timing["max_wait_seconds"]),
+        ]
+    )
+
+
+def build_run_stage2_loop_command(
+    output_dir: Path,
+    pr_number: int,
+    timing: dict[str, Any],
+    *,
+    stage2_max_wait_seconds: int = DEFAULT_STAGE2_MAX_WAIT_SECONDS,
+) -> str:
+    return shell_join(
+        [
+            "python",
+            "skills/gh-autopilot/scripts/run_autopilot_loop.py",
+            "--repo",
+            ".",
+            "--output-dir",
+            str(output_dir),
+            "--pr",
+            str(pr_number),
+            "run-stage2-loop",
+            "--initial-sleep-seconds",
+            str(timing["initial_sleep_seconds"]),
+            "--poll-interval-seconds",
+            str(timing["poll_interval_seconds"]),
+            "--cycle-max-wait-seconds",
+            str(timing["max_wait_seconds"]),
+            "--stage2-max-wait-seconds",
+            str(stage2_max_wait_seconds),
         ]
     )
 
@@ -1277,6 +1309,9 @@ def update_context_documents(
     status_cmd = build_status_command(output_dir, pr.number)
     assert_drained_cmd = build_assert_drained_command(output_dir, pr.number)
     run_cycle_cmd = build_run_cycle_command(output_dir, pr.number, timing)
+    run_stage2_loop_cmd = build_run_stage2_loop_command(
+        output_dir, pr.number, timing
+    )
     finalize_cmd = build_finalize_cycle_command(output_dir, pr.number)
     cycle = state["cycle"]
     artifact_map = artifacts or {}
@@ -1284,7 +1319,7 @@ def update_context_documents(
     if phase == STATUS_INITIALIZED:
         title = "Initialization Complete"
         tasks = [
-            f"[ ] Start waiting for review: `{run_cycle_cmd}`",
+            f"[ ] Start Stage 2 monitor loop: `{run_stage2_loop_cmd}`",
             "[ ] Review `cycle.json` when a cycle returns `awaiting_address`.",
             "[ ] Reply on Copilot thread for non-actionable comments with technical rationale.",
             f"[ ] Finalize addressed batch and re-request Copilot: `{finalize_cmd}`",
@@ -1332,12 +1367,13 @@ def update_context_documents(
         title = f"Cycle {cycle} Timed Out"
         tasks = [
             "[ ] Inspect `monitor.json` and PR review state to confirm Copilot is stuck.",
-            "[ ] Decide whether to retry this cycle or pause for manual investigation.",
-            f"[ ] Retry waiting loop when ready: `{run_cycle_cmd}`",
+            "[ ] Continue Stage 2 waiting unless the configured Stage 2 max-wait budget has been reached.",
+            f"[ ] Resume long-wait Stage 2 loop: `{run_stage2_loop_cmd}`",
+            f"[ ] For one-off diagnostics only, single-cycle wait remains available: `{run_cycle_cmd}`",
         ]
         notes = [
-            "No new Copilot review arrived within the per-cycle wait window.",
-            "Timeout applies to this cycle only, not the entire loop lifetime.",
+            "No new Copilot review arrived in this cycle wait window.",
+            "Use run-stage2-loop to keep retrying until the Stage 2 max-wait budget is exhausted.",
         ]
         memory_title = f"Cycle {cycle} timed out waiting for review"
     elif phase == STATUS_COMPLETED_NO_COMMENTS:
@@ -1354,8 +1390,8 @@ def update_context_documents(
     elif phase == PHASE_FINALIZED:
         title = f"Cycle {cycle} Finalized"
         tasks = [
-            "[ ] Start next cycle wait for new Copilot response.",
-            f"[ ] Run next cycle: `{run_cycle_cmd}`",
+            "[ ] Start next Stage 2 monitor loop for new Copilot response.",
+            f"[ ] Run Stage 2 loop: `{run_stage2_loop_cmd}`",
             f"[ ] Confirm drain guard status before reporting completion: `{assert_drained_cmd}`",
         ]
         notes = [
@@ -1386,6 +1422,7 @@ def update_context_documents(
 
     next_commands = [status_cmd, assert_drained_cmd]
     if phase in {STATUS_INITIALIZED, PHASE_FINALIZED, STATUS_TIMEOUT}:
+        next_commands.append(run_stage2_loop_cmd)
         next_commands.append(run_cycle_cmd)
     if phase in {STATUS_AWAITING_ADDRESS, STATUS_AWAITING_TRIAGE}:
         next_commands.append(finalize_cmd)
@@ -1618,6 +1655,184 @@ def run_cycle(
     return 10
 
 
+def run_stage2_loop(
+    client: GhClient,
+    store: AutopilotStateStore,
+    *,
+    pr: GhPrRef,
+    output_dir: Path,
+    monitor_file: Path,
+    initial_sleep_seconds: int,
+    poll_interval_seconds: int,
+    max_wait_seconds: int,
+    stage2_max_wait_seconds: int,
+) -> int:
+    if stage2_max_wait_seconds <= 0:
+        raise ValueError("--stage2-max-wait-seconds must be > 0")
+
+    try:
+        state = store.load()
+        ensure_state_pr_matches(state, pr)
+    except FileNotFoundError:
+        state = init_state(
+            store,
+            pr=pr,
+            initial_sleep_seconds=initial_sleep_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            max_wait_seconds=max_wait_seconds,
+            force=False,
+        )
+        update_context_documents(
+            output_dir,
+            state=state,
+            pr=pr,
+            phase=STATUS_INITIALIZED,
+        )
+
+    timing_payload = {
+        "initial_sleep_seconds": initial_sleep_seconds,
+        "poll_interval_seconds": poll_interval_seconds,
+        "max_wait_seconds": max_wait_seconds,
+    }
+    if state.get("timing") != timing_payload:
+        state["timing"] = timing_payload
+        store.save(state)
+        store.append_event(
+            "stage2_loop_timing_updated",
+            {
+                "cycle": state["cycle"],
+                "timing": timing_payload,
+            },
+        )
+
+    start = time.monotonic()
+    deadline = start + stage2_max_wait_seconds
+    store.append_event(
+        "stage2_loop_started",
+        {
+            "cycle": state["cycle"],
+            "stage2_max_wait_seconds": stage2_max_wait_seconds,
+            "timing": {
+                "initial_sleep_seconds": initial_sleep_seconds,
+                "poll_interval_seconds": poll_interval_seconds,
+                "max_wait_seconds": max_wait_seconds,
+            },
+        },
+    )
+
+    timeout_retries = 0
+    run_attempts = 0
+
+    while True:
+        now = time.monotonic()
+        remaining_seconds = int(deadline - now)
+        if remaining_seconds <= 0:
+            state = store.load()
+            ensure_state_pr_matches(state, pr)
+            state["status"] = STATUS_TIMEOUT
+            store.save(state)
+            context_docs = update_context_documents(
+                output_dir,
+                state=state,
+                pr=pr,
+                phase=STATUS_TIMEOUT,
+                artifacts={"monitor_json": str(monitor_file)},
+            )
+            result = {
+                "status": STATUS_TIMEOUT,
+                "reason": "stage2_max_wait_reached",
+                "cycle": state.get("cycle"),
+                "timing": {
+                    "stage2_max_wait_seconds": stage2_max_wait_seconds,
+                    "elapsed_seconds": int(now - start),
+                    "run_attempts": run_attempts,
+                    "timeout_retries": timeout_retries,
+                },
+                "monitor_file": str(monitor_file),
+                "context_docs": context_docs,
+            }
+            store.append_event("stage2_loop_timeout", result)
+            print(render_json(result))
+            return EXIT_STAGE2_MAX_WAIT_REACHED
+
+        state = store.load()
+        ensure_state_pr_matches(state, pr)
+        status = state.get("status")
+
+        if status in {STATUS_AWAITING_ADDRESS, STATUS_AWAITING_TRIAGE}:
+            result = {
+                "status": status,
+                "reason": "addressing_required",
+                "cycle": state.get("cycle"),
+                "pending_review_id": state.get("pending_review_id"),
+                "timing": {
+                    "stage2_max_wait_seconds": stage2_max_wait_seconds,
+                    "elapsed_seconds": int(now - start),
+                    "run_attempts": run_attempts,
+                    "timeout_retries": timeout_retries,
+                },
+            }
+            store.append_event("stage2_loop_action_required", result)
+            print(render_json(result))
+            return 10
+
+        if status == STATUS_COMPLETED_NO_COMMENTS:
+            drained_exit, drained_result = evaluate_drained_state(
+                store, output_dir=output_dir, pr_ref=str(pr.number)
+            )
+            result = {
+                "status": STATUS_COMPLETED_NO_COMMENTS,
+                "reason": "copilot_generated_no_comments",
+                "cycle": state.get("cycle"),
+                "pending_review_id": state.get("pending_review_id"),
+                "timing": {
+                    "stage2_max_wait_seconds": stage2_max_wait_seconds,
+                    "elapsed_seconds": int(now - start),
+                    "run_attempts": run_attempts,
+                    "timeout_retries": timeout_retries,
+                },
+                "drain_guard": drained_result,
+            }
+            if drained_exit != 0:
+                result["status"] = STATUS_BLOCKED_UNADDRESSED
+                result["reason"] = "drain_guard_failed_after_terminal_review"
+                store.append_event("stage2_loop_blocked_unaddressed", result)
+            else:
+                store.append_event("stage2_loop_completed_no_comments", result)
+            print(render_json(result))
+            return drained_exit
+
+        if status == STATUS_TIMEOUT:
+            state["status"] = STATUS_INITIALIZED
+            store.save(state)
+            timeout_retries += 1
+            store.append_event(
+                "stage2_loop_retry_after_cycle_timeout",
+                {
+                    "cycle": state["cycle"],
+                    "timeout_retries": timeout_retries,
+                    "remaining_seconds": remaining_seconds,
+                },
+            )
+            continue
+
+        cycle_wait_seconds = min(max_wait_seconds, max(1, remaining_seconds))
+        run_attempts += 1
+        exit_code = run_cycle(
+            client,
+            store,
+            pr=pr,
+            output_dir=output_dir,
+            monitor_file=monitor_file,
+            initial_sleep_seconds=initial_sleep_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            max_wait_seconds=cycle_wait_seconds,
+        )
+        if exit_code in {0, 3, 10}:
+            continue
+        return exit_code
+
+
 def finalize_cycle(
     client: GhClient,
     store: AutopilotStateStore,
@@ -1715,9 +1930,9 @@ def print_status(store: AutopilotStateStore, *, output_dir: Path) -> int:
     return 0
 
 
-def command_assert_drained(
+def evaluate_drained_state(
     store: AutopilotStateStore, *, output_dir: Path, pr_ref: str | None
-) -> int:
+) -> tuple[int, dict[str, Any]]:
     state = store.load()
     state_status = state.get("status")
     pending_cycle = state_status in {STATUS_AWAITING_ADDRESS, STATUS_AWAITING_TRIAGE}
@@ -1759,12 +1974,20 @@ def command_assert_drained(
         result["reason"] = (
             "state is awaiting_address/awaiting_triage; Stage 3 must complete before stop"
         )
-        print(render_json(result))
-        return EXIT_BLOCKED_UNADDRESSED
+        return EXIT_BLOCKED_UNADDRESSED, result
 
     result["reason"] = "no address-required cycle is currently pending"
+    return 0, result
+
+
+def command_assert_drained(
+    store: AutopilotStateStore, *, output_dir: Path, pr_ref: str | None
+) -> int:
+    exit_code, result = evaluate_drained_state(
+        store, output_dir=output_dir, pr_ref=pr_ref
+    )
     print(render_json(result))
-    return 0
+    return exit_code
 
 
 def parse_args() -> argparse.Namespace:
@@ -1843,6 +2066,47 @@ def parse_args() -> argparse.Namespace:
         help="Maximum per-cycle wait before timeout.",
     )
     cycle_parser.add_argument(
+        "--monitor-file",
+        default=None,
+        help="Override monitor output file (default: <output-dir>/monitor.json).",
+    )
+
+    stage2_parser = subparsers.add_parser(
+        "run-stage2-loop",
+        help=(
+            "Run Stage 2 monitor loop with automatic retries after per-cycle timeout "
+            "until action is required, no-comments terminal, or Stage 2 max wait is reached."
+        ),
+    )
+    stage2_parser.add_argument(
+        "--initial-sleep-seconds",
+        type=int,
+        default=300,
+        help="Initial sleep before first review poll.",
+    )
+    stage2_parser.add_argument(
+        "--poll-interval-seconds",
+        type=int,
+        default=45,
+        help="Polling interval after initial sleep.",
+    )
+    stage2_parser.add_argument(
+        "--cycle-max-wait-seconds",
+        dest="max_wait_seconds",
+        type=int,
+        default=2400,
+        help="Maximum per-cycle wait before timeout.",
+    )
+    stage2_parser.add_argument(
+        "--stage2-max-wait-seconds",
+        type=int,
+        default=DEFAULT_STAGE2_MAX_WAIT_SECONDS,
+        help=(
+            "Maximum total Stage 2 wall-clock wait across repeated cycle retries "
+            "before stopping."
+        ),
+    )
+    stage2_parser.add_argument(
         "--monitor-file",
         default=None,
         help="Override monitor output file (default: <output-dir>/monitor.json).",
@@ -1941,6 +2205,38 @@ def command_run_cycle(
     )
 
 
+def command_run_stage2_loop(
+    client: GhClient,
+    store: AutopilotStateStore,
+    *,
+    output_dir: Path,
+    pr_ref: str | None,
+    monitor_file: Path,
+    initial_sleep_seconds: int,
+    poll_interval_seconds: int,
+    max_wait_seconds: int,
+    stage2_max_wait_seconds: int,
+) -> int:
+    validate_monitor_args(
+        initial_sleep_seconds, poll_interval_seconds, max_wait_seconds
+    )
+    if stage2_max_wait_seconds <= 0:
+        raise ValueError("--stage2-max-wait-seconds must be > 0")
+    client.ensure_auth()
+    pr = client.resolve_pr(pr_ref)
+    return run_stage2_loop(
+        client,
+        store,
+        pr=pr,
+        output_dir=output_dir,
+        monitor_file=monitor_file,
+        initial_sleep_seconds=initial_sleep_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        max_wait_seconds=max_wait_seconds,
+        stage2_max_wait_seconds=stage2_max_wait_seconds,
+    )
+
+
 def command_finalize_cycle(
     client: GhClient,
     store: AutopilotStateStore,
@@ -2009,6 +2305,23 @@ def main() -> int:
                 initial_sleep_seconds=args.initial_sleep_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
                 max_wait_seconds=args.max_wait_seconds,
+            )
+        if args.command == "run-stage2-loop":
+            monitor_file = (
+                Path(args.monitor_file).resolve()
+                if args.monitor_file
+                else default_monitor_file(output_dir)
+            )
+            return command_run_stage2_loop(
+                client,
+                store,
+                output_dir=output_dir,
+                pr_ref=args.pr,
+                monitor_file=monitor_file,
+                initial_sleep_seconds=args.initial_sleep_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+                max_wait_seconds=args.max_wait_seconds,
+                stage2_max_wait_seconds=args.stage2_max_wait_seconds,
             )
         if args.command == "finalize-cycle":
             return command_finalize_cycle(
