@@ -9,7 +9,6 @@ import io
 import json
 import unittest
 from contextlib import redirect_stdout
-from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -92,8 +91,7 @@ class CycleStatusTests(unittest.TestCase):
 
 
 class NormalizeThreadsTests(unittest.TestCase):
-    def test_normalize_threads_respects_cutoff(self) -> None:
-        cutoff = datetime(2026, 3, 3, 0, 0, tzinfo=UTC)
+    def test_normalize_threads_selects_only_matching_review_comments(self) -> None:
         threads = [
             {
                 "id": "THREAD_OLD",
@@ -115,6 +113,7 @@ class NormalizeThreadsTests(unittest.TestCase):
                             "updatedAt": "2026-03-02T23:59:00Z",
                             "url": "https://example.test/old",
                             "author": {"login": "copilot-pull-request-reviewer"},
+                            "pullRequestReview": {"id": "REVIEW_OLD"},
                         }
                     ]
                 },
@@ -139,15 +138,17 @@ class NormalizeThreadsTests(unittest.TestCase):
                             "updatedAt": "2026-03-03T00:01:00Z",
                             "url": "https://example.test/new",
                             "author": {"login": "copilot-pull-request-reviewer"},
+                            "pullRequestReview": {"id": "REVIEW_TARGET"},
                         }
                     ]
                 },
             },
         ]
 
-        normalized = autopilot.normalize_threads(threads, cycle_cutoff=cutoff)
+        normalized = autopilot.normalize_threads(threads, review_id="REVIEW_TARGET")
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0]["thread_id"], "THREAD_NEW")
+        self.assertEqual(normalized[0]["comments"][0]["review_id"], "REVIEW_TARGET")
 
 
 class CycleArtifactTests(unittest.TestCase):
@@ -381,6 +382,7 @@ class FinalizeCoverageTests(unittest.TestCase):
         copilot_threads: list[dict],
         addressing: dict | None,
         status: str = "awaiting_address",
+        parsed_summary: dict | None = None,
     ) -> None:
         self._write_json(
             output_dir / "cycle.json",
@@ -396,7 +398,11 @@ class FinalizeCoverageTests(unittest.TestCase):
                     "author": "copilot-pull-request-reviewer",
                     "body": "test body",
                 },
-                "parsed_summary": {"generated_comments": None, "signals_no_comments": False},
+                "parsed_summary": (
+                    parsed_summary
+                    if parsed_summary is not None
+                    else {"generated_comments": None, "signals_no_comments": False}
+                ),
                 "counts": {},
                 "copilot_threads": copilot_threads,
                 "addressing": addressing,
@@ -620,6 +626,40 @@ class FinalizeCoverageTests(unittest.TestCase):
                     request_reviewer=True,
                 )
             self.assertFalse(client.requested)
+
+    def test_validate_finalize_artifacts_rejects_summary_comment_mismatch(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            addressing = {
+                "status": "ready_for_finalize",
+                "cycle": 5,
+                "review_id": "REVIEW_5",
+                "threads": {
+                    "addressed": 0,
+                    "rejected_with_rationale": 0,
+                    "needs_clarification": 0,
+                },
+                "thread_responses": [],
+                "comment_statuses": [],
+                "comments": {
+                    "addressed_or_rationalized": 0,
+                    "needs_clarification": 0,
+                },
+                "pushed_once": True,
+            }
+            self._write_cycle(
+                output_dir,
+                cycle=5,
+                review_id="REVIEW_5",
+                copilot_threads=[],
+                addressing=addressing,
+                parsed_summary={"generated_comments": 1, "signals_no_comments": False},
+            )
+            with self.assertRaisesRegex(ValueError, "summary indicates generated comments"):
+                autopilot.validate_finalize_artifacts(
+                    output_dir,
+                    state={"cycle": 5, "pending_review_id": "REVIEW_5"},
+                )
 
     def test_validate_finalize_artifacts_rejects_unresolved_actionable_thread(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1184,6 +1224,129 @@ class Stage2LoopTests(unittest.TestCase):
 
             self.assertEqual(exit_code, autopilot.EXIT_STAGE2_MAX_WAIT_REACHED)
             self.assertEqual(store.load()["status"], autopilot.STATUS_TIMEOUT)
+
+    def test_run_stage2_loop_captures_comments_linked_to_active_review(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            store = self._store(output_dir)
+            client = self._FakeClient()
+            pr = client.resolve_pr(None)
+            self._write_initialized_state(store, pr)
+            monitor_file = output_dir / "monitor.json"
+
+            original_wait_for_new_review = autopilot.wait_for_new_review
+            original_fetch_all_threads = autopilot.fetch_all_threads
+
+            def fake_wait_for_new_review(
+                _client: Any,
+                *,
+                pr: autopilot.GhPrRef,
+                exclude_review_id: str | None,
+                initial_sleep_seconds: int,
+                poll_interval_seconds: int,
+                max_wait_seconds: int,
+            ) -> tuple[str, dict[str, Any]]:
+                _ = (
+                    _client,
+                    pr,
+                    exclude_review_id,
+                    initial_sleep_seconds,
+                    poll_interval_seconds,
+                    max_wait_seconds,
+                )
+                return (
+                    "review_found",
+                    {
+                        "status": "review_found",
+                        "timing": {
+                            "initial_sleep_seconds": 0,
+                            "poll_interval_seconds": 45,
+                            "max_wait_seconds": 2400,
+                            "elapsed_seconds": 0,
+                            "poll_count": 1,
+                            "exceeded_ten_minutes": False,
+                        },
+                        "copilot_review": {
+                            "id": "REVIEW_STAGE2",
+                            "state": "COMMENTED",
+                            "submitted_at": "2026-03-04T17:39:36Z",
+                            "author": "copilot-pull-request-reviewer",
+                            "body": (
+                                "Copilot reviewed 1 out of 1 changed files in this pull "
+                                "request and generated 1 comment."
+                            ),
+                        },
+                    },
+                )
+
+            def fake_fetch_all_threads(
+                _client: Any, pr: autopilot.GhPrRef
+            ) -> list[dict[str, Any]]:
+                _ = (_client, pr)
+                return [
+                    {
+                        "id": "THREAD_1",
+                        "isResolved": False,
+                        "isOutdated": False,
+                        "path": "service.py",
+                        "line": 10,
+                        "startLine": None,
+                        "originalLine": 10,
+                        "originalStartLine": None,
+                        "diffSide": "RIGHT",
+                        "startDiffSide": None,
+                        "comments": {
+                            "nodes": [
+                                {
+                                    "id": "COMMENT_1",
+                                    "body": "Please simplify this branch.",
+                                    "createdAt": "2026-03-04T17:39:35Z",
+                                    "updatedAt": "2026-03-04T17:39:35Z",
+                                    "url": "https://example.test/comment/1",
+                                    "author": {
+                                        "login": "copilot-pull-request-reviewer"
+                                    },
+                                    "pullRequestReview": {
+                                        "id": "REVIEW_STAGE2",
+                                        "submittedAt": "2026-03-04T17:39:36Z",
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ]
+
+            autopilot.wait_for_new_review = fake_wait_for_new_review
+            autopilot.fetch_all_threads = fake_fetch_all_threads
+            try:
+                exit_code = autopilot.run_stage2_loop(
+                    client,
+                    store,
+                    pr=pr,
+                    output_dir=output_dir,
+                    monitor_file=monitor_file,
+                    initial_sleep_seconds=300,
+                    poll_interval_seconds=45,
+                    max_wait_seconds=2400,
+                    stage2_max_wait_seconds=600,
+                )
+            finally:
+                autopilot.wait_for_new_review = original_wait_for_new_review
+                autopilot.fetch_all_threads = original_fetch_all_threads
+
+            self.assertEqual(exit_code, 10)
+            state = store.load()
+            self.assertEqual(state["status"], autopilot.STATUS_AWAITING_ADDRESS)
+            self.assertEqual(state["pending_review_id"], "REVIEW_STAGE2")
+
+            cycle_payload = json.loads((output_dir / "cycle.json").read_text(encoding="utf-8"))
+            self.assertEqual(cycle_payload["status"], autopilot.STATUS_AWAITING_ADDRESS)
+            self.assertEqual(cycle_payload["counts"]["copilot_threads_total"], 1)
+            self.assertEqual(cycle_payload["counts"]["copilot_comments_total"], 1)
+            self.assertEqual(cycle_payload["copilot_threads"][0]["thread_id"], "THREAD_1")
+            self.assertEqual(
+                cycle_payload["copilot_threads"][0]["comments"][0]["id"], "COMMENT_1"
+            )
 
 
 class AssertDrainedTests(unittest.TestCase):

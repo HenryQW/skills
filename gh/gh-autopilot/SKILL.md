@@ -116,7 +116,7 @@ Actions:
 4. Run `run-stage2-loop` with normal timing (`300/45/2400`) plus Stage 2 max wait (`43200` by default).
    - On Stage 2 entry, `run-stage2-loop` performs an immediate fetch pass (`initial_sleep=0`) to capture already-finished Copilot reviews/comments.
    - `run-stage2-loop` retries `run-cycle` automatically after each cycle timeout.
-   - `run-cycle` still exports all Copilot comments for the active review cycle into `cycle.json`.
+   - `run-cycle` exports comments by matching each thread comment to the active Copilot `review_id` (not by timestamp cutoff).
 5. Interpret result:
    - `completed_no_comments` -> terminal success; stop loop.
      - includes cycles where no Copilot thread comments were captured for that review round
@@ -140,6 +140,7 @@ Actions:
 1. Ensure fresh cycle artifacts are available:
    - If state is already `awaiting_address` or `awaiting_triage`, use existing `cycle.json`.
    - Otherwise run `run-cycle` with `--initial-sleep-seconds 0` to capture existing comments immediately.
+   - If `parsed_summary.generated_comments > 0` but `counts.copilot_comments_total == 0`, artifacts are inconsistent: re-run immediate `run-cycle` and do not finalize until comments are captured.
 2. Build normalized worker artifacts in shared context:
    - run `build_review_batch.py` to create `review-batch.json` and `review-batch.md`
 3. Run Stage 3 worker actions inside this skill:
@@ -382,6 +383,7 @@ Handle common failure modes explicitly:
 - Never process a cycle while state is already `awaiting_address`.
 - Never finalize a cycle without confirming comments were fully addressed.
 - Never finalize a cycle if any review thread lacks a resolve/rationale response.
+- Never finalize when `parsed_summary.generated_comments > 0` but captured comment count is `0`.
 - Never manually stop Stage 2 idle waiting before `run-stage2-loop` exits by configured limits or terminal status.
 - Never claim terminal completion unless `assert-drained` exits `0`.
 - Keep one push per cycle.

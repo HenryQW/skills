@@ -111,6 +111,10 @@ query(
               updatedAt
               url
               author { login }
+              pullRequestReview {
+                id
+                submittedAt
+              }
             }
           }
         }
@@ -383,7 +387,7 @@ def fetch_all_threads(client: GhClient, pr: GhPrRef) -> list[dict[str, Any]]:
 def normalize_threads(
     threads: list[dict[str, Any]],
     *,
-    cycle_cutoff: datetime | None,
+    review_id: str | None,
 ) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     thread_number = 0
@@ -398,8 +402,13 @@ def normalize_threads(
             author = (comment.get("author") or {}).get("login")
             if not is_copilot_login(author):
                 continue
-            created_at = parse_iso(comment.get("createdAt"))
-            if cycle_cutoff and created_at and created_at < cycle_cutoff:
+            comment_review = comment.get("pullRequestReview")
+            comment_review_id: str | None = None
+            if isinstance(comment_review, dict):
+                raw_review_id = comment_review.get("id")
+                if isinstance(raw_review_id, str) and raw_review_id:
+                    comment_review_id = raw_review_id
+            if review_id and comment_review_id != review_id:
                 continue
             copilot_comments.append(comment)
 
@@ -417,6 +426,11 @@ def normalize_threads(
                     "created_at": comment.get("createdAt"),
                     "updated_at": comment.get("updatedAt"),
                     "url": comment.get("url"),
+                    "review_id": (
+                        (comment.get("pullRequestReview") or {}).get("id")
+                        if isinstance(comment.get("pullRequestReview"), dict)
+                        else None
+                    ),
                 }
             )
 
@@ -795,6 +809,22 @@ def summarize_feedback_coverage(feedback_payload: dict[str, Any]) -> dict[str, i
     }
 
 
+def validate_summary_comment_consistency(
+    cycle_payload: dict[str, Any], *, coverage: dict[str, int]
+) -> None:
+    parsed_summary = cycle_payload.get("parsed_summary")
+    if not isinstance(parsed_summary, dict):
+        return
+    generated_comments = parsed_summary.get("generated_comments")
+    if not isinstance(generated_comments, int):
+        return
+    if generated_comments > 0 and coverage["total_comments"] == 0:
+        raise ValueError(
+            "cycle.json summary indicates generated comments but no review comments were captured; "
+            "refresh cycle artifacts before finalize-cycle"
+        )
+
+
 def collect_all_thread_ids(feedback_payload: dict[str, Any]) -> set[str]:
     copilot_threads = feedback_payload.get("copilot_threads")
     if not isinstance(copilot_threads, list):
@@ -1077,6 +1107,7 @@ def validate_finalize_artifacts(
         raise ValueError("cycle.json addressing.cycle does not match current state cycle")
 
     coverage = summarize_feedback_coverage(cycle_payload)
+    validate_summary_comment_consistency(cycle_payload, coverage=coverage)
     all_thread_ids = collect_all_thread_ids(cycle_payload)
     feedback_comments = collect_feedback_comments(cycle_payload)
     thread_response_summary = validate_thread_response_coverage(
@@ -1643,9 +1674,8 @@ def run_cycle(
         return 3
 
     review = wait_payload["copilot_review"]
-    review_submitted_at = parse_iso(review.get("submitted_at"))
     threads = fetch_all_threads(client, pr)
-    normalized_threads = normalize_threads(threads, cycle_cutoff=review_submitted_at)
+    normalized_threads = normalize_threads(threads, review_id=review.get("id"))
     next_status, summary = detect_cycle_status(review, normalized_threads)
 
     artifacts = write_cycle_artifact(
