@@ -1,6 +1,7 @@
 # Repository Maintenance Instructions
 
 This repository stores skills used to automate development workflows.
+These skills are meant for AI agents to execute, not for human readers. Keep instructions agent-facing, explicit, and operational rather than human-facing narrative documentation or diagrams.
 
 ## Organization
 
@@ -35,6 +36,11 @@ Description of the folder's theme and purpose.
 ## Change Policy (Mandatory)
 
 Whenever a skill is added, removed, renamed, or modified, update the folder `README.md` in the same change.
+When updating skills in this repository, never preserve backward compatibility with legacy function interfaces. Specifically, do not preserve compatibility with:
+
+- Previous function names.
+- Previous variable names.
+- Previous function signatures.
 
 At minimum, update:
 
