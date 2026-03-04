@@ -116,6 +116,7 @@ Actions:
    - If missing: run `init`.
    - If state already `awaiting_address` or `awaiting_triage`: move directly to Stage 3.
 4. Run `run-stage2-loop` with normal timing (`300/45/2400`) plus Stage 2 max wait (`43200` by default).
+   - On Stage 2 entry, `run-stage2-loop` performs an immediate fetch pass (`initial_sleep=0`) to capture already-finished Copilot reviews/comments.
    - `run-stage2-loop` retries `run-cycle` automatically after each cycle timeout.
    - `run-cycle` still exports all Copilot comments for the active review cycle into `cycle.json`.
 5. Interpret result:
@@ -206,7 +207,7 @@ python "<path-to-skill>/scripts/run_autopilot_loop.py" \
 ```
 
 Use this command for normal Stage 2 operation.
-It automatically retries cycle waits when a cycle-level timeout occurs.
+It performs an immediate bootstrap fetch first, then automatically retries cycle waits when a cycle-level timeout occurs.
 
 ### Monitor One Cycle (diagnostic/manual)
 
