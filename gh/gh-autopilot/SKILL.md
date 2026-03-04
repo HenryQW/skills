@@ -77,17 +77,15 @@ Keep this intentionally simple: one context file, not multiple overlapping notes
 
 ## Stage Router
 
-```text
-Start Stage (user-selected)
-   |
-   +-- Stage 1: create_pr ----------+
-   |                                |
-   +-- Stage 2: monitor_review -----+--> run-stage2-loop --> [terminal?] --> stop
-   |                                |                     |
-   +-- Stage 3: address_comments ---+                     +--> action required -> Stage 3
-                                                             |
-                                                             +--> finalize-cycle -> Stage 2
-```
+Start from the user-selected stage: `create_pr`, `monitor_review`, or `address_comments`.
+
+Routing rules:
+
+1. Stage 1 (`create_pr`) always transitions to Stage 2.
+2. Stage 2 (`monitor_review`) runs `run-stage2-loop`.
+3. If Stage 2 returns a terminal outcome (`completed_no_comments` or Stage 2 max wait timeout), stop.
+4. If Stage 2 returns `awaiting_address` or `awaiting_triage`, transition to Stage 3.
+5. Stage 3 (`address_comments`) finalizes the full batch with `finalize-cycle`, then transitions back to Stage 2.
 
 ## Stage Details
 

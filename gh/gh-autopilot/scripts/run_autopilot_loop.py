@@ -33,6 +33,7 @@ FILES_RE = re.compile(
 )
 
 STATE_VERSION = 2
+CONTEXT_FORMAT_VERSION = 1
 
 STATUS_INITIALIZED = "initialized"
 STATUS_WAITING = "waiting_for_review"
@@ -179,6 +180,19 @@ class GhPrRef:
             "repo": self.repo,
             "title": self.title,
         }
+
+
+@dataclass(frozen=True)
+class ChecklistTask:
+    label: str
+    done: bool = False
+    command: str | None = None
+
+    def render(self) -> str:
+        checkbox = "[x]" if self.done else "[ ]"
+        if self.command:
+            return f"{checkbox} {self.label}: `{self.command}`"
+        return f"{checkbox} {self.label}"
 
 
 class GhClient:
@@ -1158,7 +1172,7 @@ def write_context_markdown(
     pr: GhPrRef,
     phase: str,
     notes: list[str],
-    tasks: list[str],
+    tasks: list[ChecklistTask],
     memory_bullets: list[str],
     artifacts: dict[str, str],
     next_commands: list[str],
@@ -1173,10 +1187,16 @@ def write_context_markdown(
         f"- Cycle: {state['cycle']}",
         f"- Summary: {title}",
         "",
+        "## Context Contract",
+        "",
+        f"- Format version: {CONTEXT_FORMAT_VERSION}",
+        "- Checklist semantics: `[x]` means completed for the current phase, `[ ]` means pending.",
+        "- Section order is fixed for session-to-session stability.",
+        "",
         "## Next Actions",
         "",
     ]
-    lines.extend(f"- {task}" for task in tasks)
+    lines.extend(f"- {task.render()}" for task in tasks)
     lines.extend(
         [
             "",
@@ -1215,7 +1235,7 @@ def write_context_markdown(
         ]
     )
     if artifacts:
-        for name, path in artifacts.items():
+        for name, path in sorted(artifacts.items()):
             lines.append(f"- {name}: `{path}`")
     else:
         lines.append("- None")
@@ -1319,11 +1339,19 @@ def update_context_documents(
     if phase == STATUS_INITIALIZED:
         title = "Initialization Complete"
         tasks = [
-            f"[ ] Start Stage 2 monitor loop: `{run_stage2_loop_cmd}`",
-            "[ ] Review `cycle.json` when a cycle returns `awaiting_address`.",
-            "[ ] Reply on Copilot thread for non-actionable comments with technical rationale.",
-            f"[ ] Finalize addressed batch and re-request Copilot: `{finalize_cmd}`",
-            f"[ ] Before declaring loop complete, confirm drain guard passes: `{assert_drained_cmd}`",
+            ChecklistTask("Loop initialized and context seeded.", done=True),
+            ChecklistTask("Start Stage 2 monitor loop", command=run_stage2_loop_cmd),
+            ChecklistTask("Review `cycle.json` when a cycle returns `awaiting_address`."),
+            ChecklistTask(
+                "Reply on Copilot thread for non-actionable comments with technical rationale."
+            ),
+            ChecklistTask(
+                "Finalize addressed batch and re-request Copilot", command=finalize_cmd
+            ),
+            ChecklistTask(
+                "Before declaring loop complete, confirm drain guard passes",
+                command=assert_drained_cmd,
+            ),
         ]
         notes = [
             "Loop initialized and ready for first review polling cycle.",
@@ -1333,15 +1361,27 @@ def update_context_documents(
     elif phase == STATUS_AWAITING_ADDRESS:
         title = f"Cycle {cycle} Requires Addressing"
         tasks = [
-            "[ ] Read `cycle.json`.",
-            "[ ] Classify each thread as actionable/non-actionable/needs-clarification.",
-            "[ ] Apply fixes for actionable threads and run validation.",
-            "[ ] Reply on Copilot thread for non-actionable comments with rationale.",
-            "[ ] Confirm all Copilot review comments are addressed or rejected-with-rationale.",
-            "[ ] Do not finalize or re-request reviewer per thread; finish the full batch first.",
-            "[ ] Push one batch for this cycle.",
-            f"[ ] Finalize cycle: `{finalize_cmd}`",
-            f"[ ] Confirm no pending address-required state remains: `{assert_drained_cmd}`",
+            ChecklistTask("New Copilot review captured for this cycle.", done=True),
+            ChecklistTask("Read `cycle.json`."),
+            ChecklistTask(
+                "Classify each thread as actionable/non-actionable/needs-clarification."
+            ),
+            ChecklistTask("Apply fixes for actionable threads and run validation."),
+            ChecklistTask(
+                "Reply on Copilot thread for non-actionable comments with rationale."
+            ),
+            ChecklistTask(
+                "Confirm all Copilot review comments are addressed or rejected-with-rationale."
+            ),
+            ChecklistTask(
+                "Do not finalize or re-request reviewer per thread; finish the full batch first."
+            ),
+            ChecklistTask("Push one batch for this cycle."),
+            ChecklistTask("Finalize cycle", command=finalize_cmd),
+            ChecklistTask(
+                "Confirm no pending address-required state remains",
+                command=assert_drained_cmd,
+            ),
         ]
         notes = [
             "Copilot returned comments requiring updates before next review round.",
@@ -1351,12 +1391,16 @@ def update_context_documents(
     elif phase == STATUS_AWAITING_TRIAGE:
         title = f"Cycle {cycle} Needs Triage"
         tasks = [
-            "[ ] Read `cycle.json`.",
-            "[ ] Determine whether comments are actionable or non-actionable.",
-            "[ ] Ask clarification if thread intent is unclear.",
-            "[ ] After triage and updates, push once and finalize cycle.",
-            f"[ ] Finalize cycle: `{finalize_cmd}`",
-            f"[ ] Confirm no pending address-required state remains: `{assert_drained_cmd}`",
+            ChecklistTask("New Copilot review captured and triage is required.", done=True),
+            ChecklistTask("Read `cycle.json`."),
+            ChecklistTask("Determine whether comments are actionable or non-actionable."),
+            ChecklistTask("Ask clarification if thread intent is unclear."),
+            ChecklistTask("After triage and updates, push once and finalize cycle."),
+            ChecklistTask("Finalize cycle", command=finalize_cmd),
+            ChecklistTask(
+                "Confirm no pending address-required state remains",
+                command=assert_drained_cmd,
+            ),
         ]
         notes = [
             "Copilot review arrived without clear comment signal; manual triage is required.",
@@ -1366,10 +1410,22 @@ def update_context_documents(
     elif phase == STATUS_TIMEOUT:
         title = f"Cycle {cycle} Timed Out"
         tasks = [
-            "[ ] Inspect `monitor.json` and PR review state to confirm Copilot is stuck.",
-            "[ ] Continue Stage 2 waiting unless the configured Stage 2 max-wait budget has been reached.",
-            f"[ ] Resume long-wait Stage 2 loop: `{run_stage2_loop_cmd}`",
-            f"[ ] For one-off diagnostics only, single-cycle wait remains available: `{run_cycle_cmd}`",
+            ChecklistTask(
+                "Cycle wait window elapsed without a new Copilot review.", done=True
+            ),
+            ChecklistTask(
+                "Inspect `monitor.json` and PR review state to confirm Copilot is stuck."
+            ),
+            ChecklistTask(
+                "Continue Stage 2 waiting unless the configured Stage 2 max-wait budget has been reached."
+            ),
+            ChecklistTask(
+                "Resume long-wait Stage 2 loop", command=run_stage2_loop_cmd
+            ),
+            ChecklistTask(
+                "For one-off diagnostics only, single-cycle wait remains available",
+                command=run_cycle_cmd,
+            ),
         ]
         notes = [
             "No new Copilot review arrived in this cycle wait window.",
@@ -1379,9 +1435,13 @@ def update_context_documents(
     elif phase == STATUS_COMPLETED_NO_COMMENTS:
         title = f"Cycle {cycle} Completed: No Comments"
         tasks = [
-            "[x] Copilot reported no comments for this PR.",
-            f"[ ] Confirm loop is drained before stop: `{assert_drained_cmd}`",
-            "[ ] Stop loop or archive context artifacts if no further iteration is needed.",
+            ChecklistTask("Copilot reported no comments for this PR.", done=True),
+            ChecklistTask(
+                "Confirm loop is drained before stop", command=assert_drained_cmd
+            ),
+            ChecklistTask(
+                "Stop loop or archive context artifacts if no further iteration is needed."
+            ),
         ]
         notes = [
             "Terminal success condition reached: Copilot generated no comments.",
@@ -1389,10 +1449,19 @@ def update_context_documents(
         memory_title = f"Cycle {cycle} completed with no comments"
     elif phase == PHASE_FINALIZED:
         title = f"Cycle {cycle} Finalized"
+        reviewer_done = state.get("status") == STATUS_REREQUESTED
         tasks = [
-            "[ ] Start next Stage 2 monitor loop for new Copilot response.",
-            f"[ ] Run Stage 2 loop: `{run_stage2_loop_cmd}`",
-            f"[ ] Confirm drain guard status before reporting completion: `{assert_drained_cmd}`",
+            ChecklistTask("Finalize-cycle completed for the prior batch.", done=True),
+            ChecklistTask(
+                "Copilot reviewer re-request completed.",
+                done=reviewer_done,
+            ),
+            ChecklistTask("Start next Stage 2 monitor loop for new Copilot response."),
+            ChecklistTask("Run Stage 2 loop", command=run_stage2_loop_cmd),
+            ChecklistTask(
+                "Confirm drain guard status before reporting completion",
+                command=assert_drained_cmd,
+            ),
         ]
         notes = [
             "Prior cycle was finalized and reviewer re-request (if enabled) has completed.",
@@ -1401,9 +1470,10 @@ def update_context_documents(
     else:
         title = f"Cycle {cycle} Status Update"
         tasks = [
-            f"[ ] Check state: `{status_cmd}`",
-            f"[ ] Check drain guard: `{assert_drained_cmd}`",
-            f"[ ] Continue loop: `{run_cycle_cmd}`",
+            ChecklistTask(f"Status transitioned to `{phase}`.", done=True),
+            ChecklistTask("Check state", command=status_cmd),
+            ChecklistTask("Check drain guard", command=assert_drained_cmd),
+            ChecklistTask("Continue loop", command=run_cycle_cmd),
         ]
         notes = [f"Status transitioned to `{phase}`."]
         memory_title = f"Status update for cycle {cycle}"
@@ -1417,7 +1487,9 @@ def update_context_documents(
     if artifact_map:
         memory_bullets.append(
             "artifacts="
-            + ", ".join(f"{key}:{value}" for key, value in artifact_map.items())
+            + ", ".join(
+                f"{key}:{value}" for key, value in sorted(artifact_map.items())
+            )
         )
 
     next_commands = [status_cmd, assert_drained_cmd]

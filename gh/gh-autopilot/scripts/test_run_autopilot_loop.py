@@ -270,7 +270,10 @@ class ContextDocsTests(unittest.TestCase):
             self.assertTrue(Path(docs["context"]).exists())
 
             context_text = Path(docs["context"]).read_text(encoding="utf-8")
+            self.assertIn("## Context Contract", context_text)
+            self.assertIn("Format version: 1", context_text)
             self.assertIn("## Next Actions", context_text)
+            self.assertIn("[x] New Copilot review captured for this cycle.", context_text)
             self.assertIn("Reply on Copilot thread", context_text)
             self.assertIn("finalize-cycle", context_text)
             self.assertIn("## Artifacts", context_text)
@@ -328,6 +331,41 @@ class ContextDocsTests(unittest.TestCase):
             context_text = Path(docs_final["context"]).read_text(encoding="utf-8")
             self.assertIn("Finalized cycle 1", context_text)
             self.assertIn("## Next Actions", context_text)
+            self.assertIn("[x] Finalize-cycle completed for the prior batch.", context_text)
+            self.assertIn("[x] Copilot reviewer re-request completed.", context_text)
+
+    def test_initialized_context_marks_initialization_milestone_done(self) -> None:
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            pr = autopilot.GhPrRef(
+                number=8,
+                url="https://example.test/pr/8",
+                owner="octo",
+                repo="demo",
+                title="PR 8",
+            )
+            init_state = {
+                "status": autopilot.STATUS_INITIALIZED,
+                "cycle": 0,
+                "timing": {
+                    "initial_sleep_seconds": 300,
+                    "poll_interval_seconds": 45,
+                    "max_wait_seconds": 2400,
+                },
+                "pending_review_id": None,
+                "last_processed_review_id": None,
+            }
+
+            docs = autopilot.update_context_documents(
+                output_dir,
+                state=init_state,
+                pr=pr,
+                phase=autopilot.STATUS_INITIALIZED,
+            )
+
+            context_text = Path(docs["context"]).read_text(encoding="utf-8")
+            self.assertIn("[x] Loop initialized and context seeded.", context_text)
+            self.assertIn("[ ] Start Stage 2 monitor loop", context_text)
 
 
 class FinalizeCoverageTests(unittest.TestCase):
