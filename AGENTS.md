@@ -25,10 +25,11 @@ Each folder that contains skills must have a `README.md`, with the following str
 Description of the folder's theme and purpose.
 
 ## Skills
-1. first skill name, a short, plain-language description for the first skill. Last updated: <YYYY-MM-DD HH:MM in UTC>.
-2. second skill name, a short, plain-language description for the second skill. Last updated: <YYYY-MM-DD HH:MM in UTC>.
-...
-n. nth skill name, a short, plain-language description for the nth skill. Last updated: <YYYY-MM-DD HH:MM in UTC>.
+| Name | Description | Last updated (UTC) |
+|---|---|---|
+| `first-skill-name` | A short, plain-language description for the first skill. | YYYY-MM-DD HH:MM |
+| `second-skill-name` | A short, plain-language description for the second skill. | YYYY-MM-DD HH:MM |
+| `nth-skill-name` | A short, plain-language description for the nth skill. | YYYY-MM-DD HH:MM |
 ```
 
 ## Change Policy (Mandatory)
@@ -39,7 +40,7 @@ At minimum, update:
 
 - The root `README.md` folder list when folder-level contents change.
 - The root `README.md` subfolder description text to exactly match each subfolder README description.
-- The skill list.
+- The `## Skills` table rows.
 - Any changed description(s).
 - The `Last updated` timestamp in UTC.
 
