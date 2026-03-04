@@ -1,4 +1,4 @@
 interface:
   display_name: "GH Autopilot"
   short_description: "Run stateful Copilot review loops"
-  default_prompt: "Require the user to choose a start stage (1=create PR, 2=monitor review, 3=address existing comments), run the loop from that stage, and execute Stage 3 comment-addressing directly in this skill using shared `.context/gh-autopilot/` artifacts. Address the full batch first, push once, and request Copilot review only once via finalize-cycle as the last step."
+  default_prompt: "Require the user to choose a start stage (1=create PR, 2=monitor review, 3=address existing comments), run the loop from that stage, and execute Stage 3 comment-addressing directly in this skill using shared `.context/gh-autopilot/` artifacts. For Stage 2, use run-stage2-loop and never stop manually while idle; only stop when the command reaches configured limits or a terminal status. Address the full batch first, push once, and request Copilot review only once via finalize-cycle as the last step."

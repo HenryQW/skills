@@ -1,6 +1,6 @@
 ---
 name: gh-autopilot
-description: Run a standalone autonomous GitHub Copilot pull request review loop with explicit stage entry and event logs. Use when Codex should start from a user-selected stage (create PR, monitor review, or address existing comments), execute deterministic cycle transitions, and continue looping until Copilot reports no comments or the cycle times out.
+description: Run a standalone autonomous GitHub Copilot pull request review loop with explicit stage entry and event logs. Use when Codex should start from a user-selected stage (create PR, monitor review, or address existing comments), execute deterministic cycle transitions, and continue looping until Copilot reports no comments or the configured Stage 2 max-wait limit is reached.
 ---
 
 # GH Autopilot
@@ -24,14 +24,16 @@ If start stage is missing, ask once and wait. Do not guess.
 Terminal end conditions for the loop:
 
 - `completed_no_comments` (success)
-- `timeout` (Copilot did not return in the per-cycle wait window)
+- `timeout` with reason `stage2_max_wait_reached` (Stage 2 overall wait budget exhausted)
 
 ## Timing Contract
 
 - Initial wait: 300 seconds.
 - Poll interval after initial wait: 45 seconds.
 - Keep polling after 10 minutes.
-- Stop each cycle wait at 40 minutes (2400 seconds) and mark timeout.
+- Stop each cycle wait at 40 minutes (2400 seconds) and mark cycle timeout.
+- Stage 2 overall max wait defaults to 12 hours (`43200` seconds) unless overridden.
+- On cycle timeout, immediately retry Stage 2 wait. Do not stop manually while still inside the Stage 2 max-wait budget.
 - Stop entire loop when Copilot summary says `generated no comments`.
 
 ## Primary Engine
@@ -42,6 +44,7 @@ Use `scripts/run_autopilot_loop.py` as the control-plane entrypoint.
 
 - `init`: initialize state for one PR.
 - `run-cycle`: wait for new Copilot review and export cycle artifacts.
+- `run-stage2-loop`: run Stage 2 with automatic cycle-timeout retries until action/terminal/Stage 2 max-wait limit.
 - `finalize-cycle`: mark current cycle addressed and re-request Copilot.
 - `status`: print current state.
 - `assert-drained`: fail if any address-required cycle is still pending.
@@ -79,7 +82,7 @@ Start Stage (user-selected)
    |
    +-- Stage 1: create_pr ----------+
    |                                |
-   +-- Stage 2: monitor_review -----+--> run-cycle --> [terminal?] --> stop
+   +-- Stage 2: monitor_review -----+--> run-stage2-loop --> [terminal?] --> stop
    |                                |                     |
    +-- Stage 3: address_comments ---+                     +--> action required -> Stage 3
                                                              |
@@ -112,18 +115,22 @@ Actions:
 3. Ensure state exists for the PR:
    - If missing: run `init`.
    - If state already `awaiting_address` or `awaiting_triage`: move directly to Stage 3.
-4. Run `run-cycle` with normal timing (`300/45/2400`).
-   - `run-cycle` must export all Copilot comments for the active review cycle into `cycle.json`.
+4. Run `run-stage2-loop` with normal timing (`300/45/2400`) plus Stage 2 max wait (`43200` by default).
+   - `run-stage2-loop` retries `run-cycle` automatically after each cycle timeout.
+   - `run-cycle` still exports all Copilot comments for the active review cycle into `cycle.json`.
 5. Interpret result:
    - `completed_no_comments` -> terminal success; stop loop.
      - includes cycles where no Copilot thread comments were captured for that review round
-   - `timeout` -> terminal timeout; stop loop.
+   - `timeout` with reason `stage2_max_wait_reached` -> terminal timeout; stop loop.
    - `awaiting_address` or `awaiting_triage` -> move to Stage 3.
 6. Before any terminal stop/report in Stage 2, run `assert-drained`.
    - If it exits non-zero, do not stop; continue to Stage 3.
 
 If Copilot is already reviewing when Stage 2 starts, do not re-request reviewer;
-continue waiting with `run-cycle`.
+continue waiting with `run-stage2-loop`.
+
+Never stop Stage 2 manually while the command is still within the configured
+Stage 2 max-wait limit.
 
 ### Stage 3 (`address_comments`)
 
@@ -185,7 +192,23 @@ Use `--force` with `init` only when intentionally resetting prior state.
 If reusing an existing PR branch, do not run `--force` unless the current
 state is stale or corrupted.
 
-### Monitor One Cycle (normal wait)
+### Monitor Stage 2 Loop (recommended)
+
+```bash
+python "<path-to-skill>/scripts/run_autopilot_loop.py" \
+  --repo "." \
+  --pr "<PR_NUMBER_OR_URL>" \
+  run-stage2-loop \
+  --initial-sleep-seconds 300 \
+  --poll-interval-seconds 45 \
+  --cycle-max-wait-seconds 2400 \
+  --stage2-max-wait-seconds 43200
+```
+
+Use this command for normal Stage 2 operation.
+It automatically retries cycle waits when a cycle-level timeout occurs.
+
+### Monitor One Cycle (diagnostic/manual)
 
 ```bash
 python "<path-to-skill>/scripts/run_autopilot_loop.py" \
@@ -257,7 +280,7 @@ Use this as the final gate before reporting completion/timeout handling results.
 If state is `awaiting_address` or `awaiting_triage`, this command fails and
 the loop must continue through Stage 3.
 
-### Artifacts and Exit Codes from `run-cycle`
+### Artifacts and Exit Codes
 
 Outputs (default `.context/gh-autopilot/`):
 
@@ -272,16 +295,19 @@ Outputs (default `.context/gh-autopilot/`):
 Status meanings:
 
 - `completed_no_comments`: terminal success
-- `timeout`: terminal timeout for current run
+- `timeout`: timeout status
+  - from `run-cycle`: timeout for that single cycle wait
+  - from `run-stage2-loop`: Stage 2 overall timeout (`reason=stage2_max_wait_reached`)
 - `awaiting_address`: actionable Copilot comments captured
 - `awaiting_triage`: review exists but needs manual interpretation
 
 Exit codes:
 
 - `0`: terminal success or already-terminal state
-- `3`: timeout
+- `3`: `run-cycle` timeout
 - `10`: comments/triage action required
 - `11`: `assert-drained` detected unaddressed pending cycle
+- `12`: `run-stage2-loop` exhausted Stage 2 max-wait budget
 
 ## Loop Contract
 
@@ -298,7 +324,12 @@ while true:
 
   if current_stage == 2:
     run Stage 2
-    if status in {completed_no_comments, timeout}:
+    if status == completed_no_comments:
+      if assert-drained != 0:
+        current_stage = 3
+        continue
+      stop
+    if status == timeout and reason == stage2_max_wait_reached:
       if assert-drained != 0:
         current_stage = 3
         continue
@@ -335,7 +366,7 @@ Handle common failure modes explicitly:
    - Initialize directly against that PR.
 5. Copilot already reviewing when loop starts (Stage 2):
    - Skip re-request.
-   - Run `run-cycle` and allow the per-cycle wait window to finish.
+   - Run `run-stage2-loop` and allow repeated cycle wait windows to continue.
    - Continue normal addressing flow when cycle comments arrive.
 6. Copilot comments already present when loop starts (Stage 3):
    - Run immediate capture (`--initial-sleep-seconds 0`) only if cycle artifacts are missing/stale.
@@ -352,6 +383,7 @@ Handle common failure modes explicitly:
 - Never process a cycle while state is already `awaiting_address`.
 - Never finalize a cycle without confirming comments were fully addressed.
 - Never finalize a cycle if any review thread lacks a resolve/rationale response.
+- Never manually stop Stage 2 idle waiting before `run-stage2-loop` exits by configured limits or terminal status.
 - Never claim terminal completion unless `assert-drained` exits `0`.
 - Keep one push per cycle.
 - Do not delete `.context/gh-autopilot/` artifacts mid-loop.
