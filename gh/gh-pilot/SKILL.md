@@ -90,7 +90,7 @@ comments with a larger window before classifying it.
 #### B. Bootstrap decision
 
 - If Step H pushed code in the previous iteration, this takes priority: go to Step C regardless of other conditions.
-- Otherwise, if `unresolved_copilot_thread_ids` or `outdated_copilot_thread_ids` is not empty, skip reviewer request and process them.
+- Otherwise, if `unresolved_copilot_thread_ids` or `outdated_copilot_thread_ids` is not empty, go to Step F to process them (skip reviewer request).
   - Process `unresolved_copilot_thread_ids` first.
   - Then handle `outdated_copilot_thread_ids` (resolve with rationale if superseded, or treat as actionable if still relevant).
 - If there is no Copilot review yet, request Copilot review.
