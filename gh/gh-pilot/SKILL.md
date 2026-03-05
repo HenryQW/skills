@@ -26,17 +26,21 @@ Repeat this cycle. **Max 5 iterations** to avoid runaway loops.
 #### A. Fetch Copilot state first
 
 ```bash
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews
+gh api --paginate repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews
 ```
 
 Fetch review threads with resolution state (paginate if needed):
 
 ```bash
-gh api graphql \
-  -F owner="<OWNER>" \
-  -F repo="<REPO>" \
-  -F pr=<PR_NUMBER> \
-  -f query='
+THREADS_FILE="$(mktemp)"
+CURSOR=""
+while true; do
+  PAGE=$(gh api graphql \
+    -F owner="<OWNER>" \
+    -F repo="<REPO>" \
+    -F pr=<PR_NUMBER> \
+    ${CURSOR:+-F cursor="$CURSOR"} \
+    -f query='
 query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
@@ -53,7 +57,12 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
       }
     }
   }
-}'
+}')
+  echo "$PAGE" | jq -c '.data.repository.pullRequest.reviewThreads.nodes[]' >> "$THREADS_FILE"
+  HAS_NEXT=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS_NEXT" = "true" ] || break
+  CURSOR=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
 ```
 
 From these results, compute:
@@ -62,6 +71,9 @@ From these results, compute:
   - `copilot-pull-request-reviewer[bot]`
   - `copilot-pull-request-reviewer`
   - `Copilot`
+- `last_copilot_review_commit_sha` from that same latest Copilot review (`commit_id`)
+- `current_pr_head_sha` from:
+  - `gh pr view <PR_NUMBER> --json headRefOid -q .headRefOid`
 - `unresolved_copilot_thread_ids` from threads where:
   - `isResolved == false`
   - `isOutdated == false`
@@ -71,14 +83,21 @@ From these results, compute:
   - `isOutdated == true`
   - at least one comment author login is one of the Copilot logins above
 
+`comments(first: 10)` is intentional to keep payload size small.
+If Copilot participation is ambiguous for a thread, refetch that thread's
+comments with a larger window before classifying it.
+
 #### B. Bootstrap decision
 
 - If Step H pushed code in the previous iteration, this takes priority: go to Step C regardless of other conditions.
-- Otherwise, if `unresolved_copilot_thread_ids` is not empty, skip reviewer request and process them.
+- Otherwise, if `unresolved_copilot_thread_ids` or `outdated_copilot_thread_ids` is not empty, skip reviewer request and process them.
+  - Process `unresolved_copilot_thread_ids` first.
+  - Then handle `outdated_copilot_thread_ids` (resolve with rationale if superseded, or treat as actionable if still relevant).
 - If there is no Copilot review yet, request Copilot review.
 - Stop successfully only when:
   - `unresolved_copilot_thread_ids` is empty, and
-  - no new code was pushed since the latest Copilot review round.
+  - `outdated_copilot_thread_ids` is empty, and
+  - `current_pr_head_sha == last_copilot_review_commit_sha`.
 
 #### C. Request Copilot review only when B says none exist
 
@@ -103,9 +122,12 @@ Example:
 ```bash
 LAST_ID="<LAST_COPILOT_REVIEW_ID_OR_0>"
 for _ in {1..60}; do
-  NEW_ID=$(gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews \
-    --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]" or .user.login == "copilot-pull-request-reviewer" or .user.login == "Copilot")] | last | .id // 0')
-  if [ "$NEW_ID" != "0" ] && [ "$NEW_ID" != "$LAST_ID" ]; then
+  LAST_LINE=$(gh api --paginate repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews \
+    --jq '.[] | select(.user.login == "copilot-pull-request-reviewer[bot]" or .user.login == "copilot-pull-request-reviewer" or .user.login == "Copilot") | [.id, .commit_id] | @tsv' \
+    | tail -n 1)
+  NEW_ID=$(echo "$LAST_LINE" | cut -f1)
+  NEW_SHA=$(echo "$LAST_LINE" | cut -f2)
+  if [ -n "$NEW_ID" ] && [ "$NEW_ID" != "$LAST_ID" ]; then
     break
   fi
   sleep 30
@@ -113,7 +135,10 @@ done
 ```
 
 If no new Copilot review appears within 30 minutes, stop and report timeout.
-After new review appears, re-run Step A.
+After new review appears, re-run Step A to refresh:
+- `last_copilot_review_id`
+- `last_copilot_review_commit_sha`
+- `current_pr_head_sha`
 
 Do not re-request Copilot again while waiting in this step.
 
@@ -121,7 +146,10 @@ Do not re-request Copilot again while waiting in this step.
 
 Stop the loop if any condition is true:
 
-- Latest Copilot review round is complete and `unresolved_copilot_thread_ids` is empty.
+- Latest Copilot review round is complete and:
+  - `unresolved_copilot_thread_ids` is empty
+  - `outdated_copilot_thread_ids` is empty
+  - `current_pr_head_sha == last_copilot_review_commit_sha`
 - Max iterations reached (report remaining items).
 
 Never treat "resolved by the agent" alone as terminal after a push; require a
@@ -129,23 +157,31 @@ fresh Copilot review pass.
 
 #### F. Process each Copilot thread
 
-For each unresolved Copilot thread:
+For each Copilot thread:
 
-1. Read code context.
-2. Classify as `Actionable` or `Non-actionable`.
-3. If actionable, implement the fix and update tests/docs if needed.
-4. If non-actionable, prepare a short rationale reply.
+1. Process `unresolved_copilot_thread_ids` first, then `outdated_copilot_thread_ids`.
+2. Read code context.
+3. Classify as `Actionable` or `Non-actionable`.
+4. If actionable, implement the fix and update tests/docs if needed.
+5. If non-actionable, prepare a short rationale reply.
+6. For outdated threads, explicitly decide and record:
+  - `superseded` (reply with rationale and resolve), or
+  - `still relevant` (treat as actionable).
 
 #### G. Resolve and reply on threads
 
-Fetch unresolved threads (paginate if needed):
+Fetch unresolved threads (all pages):
 
 ```bash
-gh api graphql \
-  -F owner="<OWNER>" \
-  -F repo="<REPO>" \
-  -F pr=<PR_NUMBER> \
-  -f query='
+THREADS_FILE="$(mktemp)"
+CURSOR=""
+while true; do
+  PAGE=$(gh api graphql \
+    -F owner="<OWNER>" \
+    -F repo="<REPO>" \
+    -F pr=<PR_NUMBER> \
+    ${CURSOR:+-F cursor="$CURSOR"} \
+    -f query='
 query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
@@ -162,8 +198,17 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
       }
     }
   }
-}'
+}')
+  echo "$PAGE" | jq -c '.data.repository.pullRequest.reviewThreads.nodes[]' >> "$THREADS_FILE"
+  HAS_NEXT=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS_NEXT" = "true" ] || break
+  CURSOR=$(echo "$PAGE" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
 ```
+
+`comments(first: 10)` is intentional here as well.
+If you cannot find the needed Copilot comment `databaseId` for reply,
+refetch that specific thread with a larger comments window before replying.
 
 Resolve addressed threads:
 
