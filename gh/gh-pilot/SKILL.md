@@ -1,6 +1,6 @@
 ---
 name: gh-pilot
-description: Iteratively drive a PR through GitHub Copilot review using a simple loop. Check for existing Copilot feedback first, request review only when needed, then fix actionable comments, resolve or reply on threads, push once, and repeat until no unresolved Copilot comments remain.
+description: Iteratively drive a PR through GitHub Copilot review using a simple loop with direct `gh` commands and no helper scripts. Reuse existing Copilot feedback first, fetch unresolved thread state via GraphQL, request/re-request Copilot when needed, and require a fresh Copilot pass after pushed fixes.
 ---
 
 # GH Pilot
@@ -23,23 +23,56 @@ gh pr view --json number,headRefName -q '{number: .number, branch: .headRefName}
 
 Repeat this cycle. **Max 5 iterations** to avoid runaway loops.
 
-#### A. Fetch Copilot results first
+#### A. Fetch Copilot state first
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/reviews
-gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments
+gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews
 ```
 
-Use only the latest review and comments from:
+Fetch review threads with resolution state (paginate if needed):
 
-- `copilot-pull-request-reviewer[bot]`
-- `copilot-pull-request-reviewer`
+```bash
+gh api graphql \
+  -F owner="<OWNER>" \
+  -F repo="<REPO>" \
+  -F pr=<PR_NUMBER> \
+  -f query='
+query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          comments(first: 10) {
+            nodes { id body author { login } createdAt }
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+From these results, compute:
+
+- `last_copilot_review_id` from the latest review by:
+  - `copilot-pull-request-reviewer[bot]`
+  - `copilot-pull-request-reviewer`
+  - `Copilot`
+- `unresolved_copilot_thread_ids` from threads where:
+  - `isResolved == false`
+  - at least one comment author login is one of the Copilot logins above
 
 #### B. Bootstrap decision
 
-- If there are unresolved Copilot comments, skip reviewer request and process them.
-- If there are no Copilot reviews and no Copilot comments, request Copilot review.
-- If Copilot already reported no unresolved comments, stop successfully.
+- If `unresolved_copilot_thread_ids` is not empty, skip reviewer request and process them.
+- If there is no Copilot review yet, request Copilot review.
+- If Step H pushed code in the previous iteration, request a fresh Copilot review.
+- Stop successfully only when:
+  - `unresolved_copilot_thread_ids` is empty, and
+  - no new code was pushed since the latest Copilot review round.
 
 #### C. Request Copilot review only when B says none exist
 
@@ -54,21 +87,39 @@ gh pr edit <PR_NUMBER> --remove-reviewer "copilot-pull-request-reviewer"
 gh pr edit <PR_NUMBER> --add-reviewer "copilot-pull-request-reviewer"
 ```
 
-#### D. Wait for checks and refresh Copilot results (only when C ran)
+#### D. Wait for a new Copilot review (only when C ran)
+
+Poll the reviews endpoint every 30 seconds until a **new** Copilot review appears
+(review id differs from `last_copilot_review_id` captured in Step A).
+
+Example:
 
 ```bash
-gh pr checks <PR_NUMBER> --watch
+LAST_ID="<LAST_COPILOT_REVIEW_ID_OR_0>"
+for _ in {1..60}; do
+  NEW_ID=$(gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews \
+    --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]" or .user.login == "copilot-pull-request-reviewer" or .user.login == "Copilot")] | last | .id // 0')
+  if [ "$NEW_ID" != "0" ] && [ "$NEW_ID" != "$LAST_ID" ]; then
+    break
+  fi
+  sleep 30
+done
 ```
 
-If checks are still pending after watch exits, poll every 30 seconds until terminal states, then re-run Step A.
+If no new Copilot review appears within 30 minutes, stop and report timeout.
+After new review appears, re-run Step A.
+
+Do not re-request Copilot again while waiting in this step.
 
 #### E. Check exit conditions
 
 Stop the loop if any condition is true:
 
-- Latest Copilot review says it generated no comments.
-- There are zero unresolved Copilot review comments.
+- Latest Copilot review round is complete and `unresolved_copilot_thread_ids` is empty.
 - Max iterations reached (report remaining items).
+
+Never treat "resolved by the agent" alone as terminal after a push; require a
+fresh Copilot review pass.
 
 #### F. Process each Copilot thread
 
@@ -84,16 +135,20 @@ For each unresolved Copilot thread:
 Fetch unresolved threads (paginate if needed):
 
 ```bash
-gh api graphql -f query='
-query($cursor: String) {
-  repository(owner: "OWNER", name: "REPO") {
-    pullRequest(number: PR_NUMBER) {
+gh api graphql \
+  -F owner="<OWNER>" \
+  -F repo="<REPO>" \
+  -F pr=<PR_NUMBER> \
+  -f query='
+query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
       reviewThreads(first: 100, after: $cursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
           isResolved
-          comments(first: 1) {
+          comments(first: 10) {
             nodes { id body author { login } }
           }
         }
@@ -106,17 +161,24 @@ query($cursor: String) {
 Resolve addressed threads:
 
 ```bash
-gh api graphql -f query='
-mutation {
-  t1: resolveReviewThread(input: {threadId: "ID1"}) { thread { isResolved } }
-  t2: resolveReviewThread(input: {threadId: "ID2"}) { thread { isResolved } }
+for THREAD_ID in <THREAD_ID_1> <THREAD_ID_2> <THREAD_ID_N>; do
+  gh api graphql \
+    -F threadId="$THREAD_ID" \
+    -f query='
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread { isResolved }
+  }
 }'
+done
 ```
+
+If batching in one mutation, generate one alias per thread id (`t1..tN`) dynamically.
 
 Reply to non-actionable comments with rationale:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments -f body='Rationale here' -F in_reply_to=<COMMENT_ID>
+gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments -f body='Rationale here' -F in_reply_to=<COMMENT_ID>
 ```
 
 #### H. Commit and push once for the iteration
@@ -127,7 +189,8 @@ git commit -m "agent: address copilot review feedback (gh-pilot iteration N)"
 git push
 ```
 
-Then repeat from step **A**.
+After pushing code changes, go to Step **C** to request a fresh Copilot pass.
+If no code changes were made in this iteration, skip commit/push and return to Step **A**.
 
 ### 3. Report
 

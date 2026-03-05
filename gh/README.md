@@ -9,4 +9,4 @@ Skills for GitHub workflows and automations.
 | `gh-pr-creation` | Creates pull requests end-to-end, including scoped commits, quality checks, branch naming, PR metadata, and Copilot reviewer assignment. | 2026-03-04 14:42 |
 | `gh-address-copilot-review` | Processes Copilot review threads in a controlled batch workflow and applies scoped fixes. | 2026-03-04 14:42 |
 | `gh-autopilot` | Runs a persistent event-driven Copilot review supervisor with deterministic transitions, Stage 2 retry semantics, and `gh-cli`-referenced `gh` command usage. | 2026-03-04 19:16 |
-| `gh-pilot` | Runs a simple iterative Copilot review loop using direct `gh` commands and no helper scripts. | 2026-03-05 21:05 |
+| `gh-pilot` | Runs a simple iterative Copilot review loop using direct `gh` commands and no helper scripts. | 2026-03-05 21:18 |
