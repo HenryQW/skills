@@ -45,8 +45,9 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
         nodes {
           id
           isResolved
+          isOutdated
           comments(first: 10) {
-            nodes { id body author { login } createdAt }
+            nodes { id databaseId body author { login } createdAt }
           }
         }
       }
@@ -63,13 +64,18 @@ From these results, compute:
   - `Copilot`
 - `unresolved_copilot_thread_ids` from threads where:
   - `isResolved == false`
+  - `isOutdated == false`
+  - at least one comment author login is one of the Copilot logins above
+- `outdated_copilot_thread_ids` from threads where:
+  - `isResolved == false`
+  - `isOutdated == true`
   - at least one comment author login is one of the Copilot logins above
 
 #### B. Bootstrap decision
 
-- If `unresolved_copilot_thread_ids` is not empty, skip reviewer request and process them.
+- If Step H pushed code in the previous iteration, this takes priority: go to Step C regardless of other conditions.
+- Otherwise, if `unresolved_copilot_thread_ids` is not empty, skip reviewer request and process them.
 - If there is no Copilot review yet, request Copilot review.
-- If Step H pushed code in the previous iteration, request a fresh Copilot review.
 - Stop successfully only when:
   - `unresolved_copilot_thread_ids` is empty, and
   - no new code was pushed since the latest Copilot review round.
@@ -148,8 +154,9 @@ query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
         nodes {
           id
           isResolved
+          isOutdated
           comments(first: 10) {
-            nodes { id body author { login } }
+            nodes { id databaseId body author { login } }
           }
         }
       }
@@ -178,16 +185,21 @@ If batching in one mutation, generate one alias per thread id (`t1..tN`) dynamic
 Reply to non-actionable comments with rationale:
 
 ```bash
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments -f body='Rationale here' -F in_reply_to=<COMMENT_ID>
+gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments -f body='Rationale here' -F in_reply_to=<COMMENT_DATABASE_ID>
 ```
+
+Use the comment `databaseId` from the GraphQL thread query for `in_reply_to`.
 
 #### H. Commit and push once for the iteration
 
 ```bash
-git add -A
+git add -- <CHANGED_FILE_1> <CHANGED_FILE_2> <CHANGED_FILE_N>
+git status --short
 git commit -m "agent: address copilot review feedback (gh-pilot iteration N)"
 git push
 ```
+
+Verify staged files before committing; do not include unrelated files.
 
 After pushing code changes, go to Step **C** to request a fresh Copilot pass.
 If no code changes were made in this iteration, skip commit/push and return to Step **A**.
