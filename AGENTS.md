@@ -26,11 +26,11 @@ Each folder that contains skills must have a `README.md`, with the following str
 Description of the folder's theme and purpose.
 
 ## Skills
-| Name | Description | Last updated (UTC) |
-|---|---|---|
-| `first-skill-name` | A short, plain-language description for the first skill. | YYYY-MM-DD HH:MM |
-| `second-skill-name` | A short, plain-language description for the second skill. | YYYY-MM-DD HH:MM |
-| `nth-skill-name` | A short, plain-language description for the nth skill. | YYYY-MM-DD HH:MM |
+| Name | Description | Install | Last updated (UTC) |
+|---|---|---|---|
+| `first-skill-name` | A short, plain-language description for the first skill. | `npx install HenryQW/skills first-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| `second-skill-name` | A short, plain-language description for the second skill. | `npx install HenryQW/skills second-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| `nth-skill-name` | A short, plain-language description for the nth skill. | `npx install HenryQW/skills nth-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
 ```
 
 ## Change Policy (Mandatory)
@@ -49,7 +49,8 @@ At minimum, update:
 - The root `README.md` folder list when folder-level contents change.
 - The root `README.md` subfolder description text to exactly match each subfolder README description.
 - The `## Skills` table rows.
+- The `Install` column, with command `npx install HenryQW/skills <skill name> -a codex`.
 - Any changed description(s).
-- The `Last updated` timestamp in UTC.
+- The `Last updated` timestamp in UTC, only update then the skill's implementation changes, not for documentation-only updates.
 
 Do not leave README updates for a later commit.
