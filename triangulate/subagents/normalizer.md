@@ -36,6 +36,10 @@ Every retained finding must remain grounded in the original artifacts.
 
 - Re-read the original artifacts directly before normalizing.
 - Do not invent claims unsupported by the original artifacts.
+- Do not add any novel finding that is not derived from one or more
+  initializer rows.
+- Every normalized row must trace back to initializer content through keeping,
+  merging, splitting, tightening, standardizing, or removing existing findings.
 - Do not propose fixes.
 - Do not preserve initializer row identity.
 - Emit a fresh canonical sequence of `index` and `finding_id` values after
