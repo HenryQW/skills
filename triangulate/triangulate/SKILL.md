@@ -219,7 +219,8 @@ The top-level orchestrator must validate all of the following.
 
 ### Pass 1: generate candidate findings
 
-Invoke the `initializer` subagent using its internal prompt file with:
+Invoke the `initializer` subagent using the prompt file at
+`../subagents/initializer.md` with:
 
 - original artifacts
 - optional domain context
@@ -234,7 +235,8 @@ Persist the raw validated JSON to `.context/triangulate/initializer.json`.
 
 ### Pass 2: normalize the claim set
 
-Invoke the `normalizer` subagent using its internal prompt file with:
+Invoke the `normalizer` subagent using the prompt file at
+`../subagents/normalizer.md` with:
 
 - original artifacts
 - the validated initializer JSON
@@ -250,7 +252,8 @@ Persist the raw validated JSON to `.context/triangulate/normalized.json`.
 
 ### Pass 3: challenge the normalized claims
 
-Invoke the `adversary` subagent using its internal prompt file with:
+Invoke the `adversary` subagent using the prompt file at
+`../subagents/adversary.md` with:
 
 - original artifacts
 - the validated normalized JSON
@@ -266,7 +269,8 @@ Persist the raw validated JSON to `.context/triangulate/adversary.json`.
 
 ### Pass 4: adjudicate the final conclusions
 
-Invoke the `referee` subagent using its internal prompt file with:
+Invoke the `referee` subagent using the prompt file at
+`../subagents/referee.md` with:
 
 - original artifacts
 - the validated normalized JSON
