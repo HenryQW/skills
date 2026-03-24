@@ -291,7 +291,7 @@ After all four stages succeed, write `.context/triangulate/findings.md` as a
 Markdown table with this exact header:
 
 ```md
-| Index | Context / Topic | Initializer Finding | Adversary Finding | Referee Verdict |
+| Index | Context / Topic | Normalized Finding | Adversary Finding | Referee Verdict |
 |---|---|---|---|---|
 ```
 
@@ -301,7 +301,7 @@ For each row, render exactly:
 
 - `Index` from normalized output
 - `Context / Topic` from normalized output
-- `Initializer Finding` as:
+- `Normalized Finding` as:
   `FINDING-001; importance 10; claim: <claim>; basis: <basis>; refs: <ref1>, <ref2>`
 - `Adversary Finding` as:
   `FINDING-001; challenged; basis: <basis>; refs: <ref1>, <ref2>`
