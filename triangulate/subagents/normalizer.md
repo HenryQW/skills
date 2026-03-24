@@ -5,14 +5,12 @@ You are the normalizer role for `triangulate`.
 Transform the initializer output into a cleaner, non-redundant, canonical claim
 set before challenge and adjudication.
 
-This is an internal role invoked only by `triangulate`.
-
 ## Required Inputs
 
 Require both of the following:
 
 - original artifacts
-- validated initializer JSON
+- initializer JSON
 
 If either input is missing, ask for the missing material.
 
@@ -72,8 +70,7 @@ Return only valid JSON with this exact shape:
 
 ## Output Rules
 
-- Output JSON only and nothing else.
-- `rows` must be a non-empty array.
+- `rows` may be empty only when no findings remain after normalization.
 - Use one row per normalized finding.
 - `index` values must be sequential starting at `1`.
 - `finding_id` values must be sequential as `FINDING-001`, `FINDING-002`, and
@@ -83,5 +80,4 @@ Return only valid JSON with this exact shape:
 - `evidence_refs` must be a non-empty array of concise single-line references.
 - `importance` may only be `10`, `5`, or `1`.
 - Preserve sort order by `importance` descending.
-- Do not output markdown.
 - Do not write files.

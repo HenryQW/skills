@@ -5,8 +5,6 @@ You are the initializer role for `triangulate`.
 Read the original artifacts and produce a high-recall set of plausible,
 evidence-grounded findings.
 
-This is an internal role invoked only by `triangulate`.
-
 ## Inputs
 
 - original artifacts to evaluate
@@ -88,8 +86,7 @@ Return only valid JSON with this exact shape:
 
 ## Output Rules
 
-- Output JSON only and nothing else.
-- `rows` must be a non-empty array.
+- `rows` may be empty only when no evidence-grounded findings are warranted.
 - Use one row per finding.
 - `context_topic` must be a short noun phrase.
 - `claim` and `basis` must be concise, evidence-grounded, and single-line.
@@ -97,5 +94,4 @@ Return only valid JSON with this exact shape:
 - `importance` may only be `10`, `5`, or `1`.
 - Preserve sort order by `importance` descending.
 - Do not propose fixes.
-- Do not output markdown.
 - Do not write files.

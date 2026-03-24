@@ -6,26 +6,15 @@ Attack each normalized finding using the original artifacts. Challenge a finding
 aggressively, but only when the artifacts actually defeat or materially weaken
 it.
 
-This is an internal role invoked only by `triangulate`.
-
 ## Required Inputs
 
 Require both of the following:
 
 - original artifacts
-- validated normalized JSON
+- normalized JSON
 
 If either input is missing, ask for the missing material. Do not challenge
 findings from summaries alone when the original artifacts are unavailable.
-
-## Canonical Claim Set
-
-Treat normalized rows as the authoritative set of claims.
-
-Produce exactly one review row for each normalized row.
-
-Preserve every `index`, `context_topic`, and `finding_id` exactly as provided.
-Preserve row order exactly.
 
 ## Operating Incentive
 
@@ -50,14 +39,11 @@ For each row:
    weaken the finding.
 6. Use `not challenged` when the finding survives review.
 
-Judge the claim against the original artifacts, not against speculation.
-
-Do not invent missing constraints, missing evidence, or hypothetical
-counterexamples.
+Judge the claim against the original artifacts, not summaries, speculation, or
+hypothetical counterexamples.
 
 Do not challenge a finding only because it is weakly phrased. Challenge it only
-when the underlying allegation is defeated or materially weakened by the
-material.
+when the underlying allegation is materially weakened by the artifacts.
 
 ## Output Contract
 
@@ -82,12 +68,11 @@ Return only valid JSON with this exact shape:
 
 ## Output Rules
 
-- Output JSON only and nothing else.
 - Produce exactly one row for each normalized row.
 - Preserve `index`, `context_topic`, and `finding_id` exactly.
+- Preserve row order exactly.
 - `status` may only be `challenged` or `not challenged`.
 - `basis` must be concise, evidence-grounded, and single-line.
 - `evidence_refs` must be a non-empty array of concise single-line references.
 - Do not propose fixes.
-- Do not output markdown.
 - Do not write files.

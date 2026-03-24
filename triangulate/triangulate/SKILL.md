@@ -158,7 +158,7 @@ The top-level orchestrator must validate all of the following.
 
 - output is valid JSON
 - top-level object contains `rows`
-- `rows` is a non-empty array
+- `rows` is an array
 - every row contains `index`, `context_topic`, `finding_id`, `importance`,
   `claim`, `basis`, and `evidence_refs`
 - `index` values are sequential integers starting at `1`
@@ -169,12 +169,13 @@ The top-level orchestrator must validate all of the following.
 - `evidence_refs` is a non-empty array of non-empty single-line strings
 - rows are sorted by `importance` descending
 - `finding_id` values are unique
+- `rows` may be empty only when no evidence-grounded findings are warranted
 
 ### Normalizer validation
 
 - output is valid JSON
 - top-level object contains `rows`
-- `rows` is a non-empty array
+- `rows` is an array
 - every row contains `index`, `context_topic`, `finding_id`, `importance`,
   `claim`, `basis`, and `evidence_refs`
 - duplicate or overlapping initializer findings may be merged, split, removed,
@@ -188,6 +189,7 @@ The top-level orchestrator must validate all of the following.
 - `evidence_refs` is a non-empty array of non-empty single-line strings
 - rows are sorted by `importance` descending
 - `finding_id` values are unique
+- `rows` may be empty only when no findings remain after normalization
 
 ### Adversary validation
 
@@ -297,6 +299,9 @@ Markdown table with this exact header:
 
 Use normalized rows as the authoritative row order.
 
+If normalized `rows` is empty, write only the header row and separator row, then
+return success.
+
 For each row, render exactly:
 
 - `Index` from normalized output
@@ -314,10 +319,35 @@ For each row, render exactly:
 Do not rewrite any copied cell text during consolidation except to render the
 required final string formats from validated JSON.
 
+## Stage Output Correction
+
+If a stage executes and returns content, but that content is malformed or fails
+schema or row-identity validation, do not fail immediately.
+
+Instead, re-invoke the same stage with:
+
+- the original stage inputs
+- the invalid returned output verbatim
+- the exact list of validation failures or parse failures
+- an instruction to return corrected JSON only
+
+Make up to `2` correction attempts per stage.
+
+Treat valid JSON that fails schema or row-identity checks as `malformed output`
+for both retry handling and final error classification.
+
+If a correction attempt succeeds, persist the corrected JSON and continue the
+workflow normally.
+
+If all correction attempts fail, stop and return the terminal error for that
+stage.
+
 ## Failure Handling
 
-If any subagent is unavailable, returns malformed JSON, fails validation, or
-fails during execution, stop immediately.
+If any subagent is unavailable or fails during execution, stop immediately.
+
+If a subagent returns malformed output, use the correction loop above before
+failing the run.
 
 Do not continue to later stages after a failure.
 
