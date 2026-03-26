@@ -201,7 +201,7 @@ class TestGitHelpers:
         def _fake_run(cmd, **kwargs):
             result = type("Result", (), {})()
             result.returncode = 0
-            result.stdout = b" M tracked.py\0?? new_file.py\0R  old.py\0renamed.py\0"
+            result.stdout = b" M tracked.py\0?? new_file.py\0R  renamed.py\0old.py\0"
             result.stderr = ""
             return result
 
@@ -219,7 +219,7 @@ class TestGitHelpers:
             result.returncode = 0
             result.stdout = (
                 b" M dir with spaces/file name.py\0"
-                b"R  old name.py\0new name.py\0"
+                b"R  new name.py\0old name.py\0"
             )
             result.stderr = ""
             return result
@@ -471,6 +471,22 @@ class TestSubprocessConstruction:
             cmd = args[0]
             assert isinstance(cmd, list), f"Expected list, got {type(cmd)}"
 
+    def test_prompt_is_passed_via_stdin_not_cli_argument(
+        self, tmp_path, monkeypatch, make_task, mock_process
+    ):
+        calls = self._capture_popen_calls(
+            tmp_path,
+            monkeypatch,
+            make_task,
+            mock_process,
+        )
+
+        cmd = calls[0][0][0]
+        kwargs = calls[0][1]
+        assert cmd[:3] == ["codex", "e", "-"]
+        assert "Do something" not in cmd
+        assert kwargs["stdin"] is not None
+
     def test_shell_is_never_true(
         self, tmp_path, monkeypatch, make_task, mock_process
     ):
@@ -691,6 +707,37 @@ class TestSummaryGeneration:
         assert summary["tasks"][0]["id"] == "boom"
         assert summary["tasks"][0]["status"] == "failure"
         assert summary["tasks"][0]["error"] == "disk full"
+
+    def test_stream_failure_still_cleans_up_pid_and_writes_runner_error_meta(
+        self, tmp_path, monkeypatch, make_task, mock_process
+    ):
+        original_stream_pipe = run_batch_module._stream_pipe
+
+        def _broken_stream_pipe(source, destination, *, summary_limit=None):
+            if summary_limit is not None:
+                raise OSError("disk full")
+            return original_stream_pipe(
+                source,
+                destination,
+                summary_limit=summary_limit,
+            )
+
+        monkeypatch.setattr(run_batch_module, "_stream_pipe", _broken_stream_pipe)
+
+        exit_code, stdout = _run_main(
+            tmp_path,
+            {"tasks": [make_task(tid="stream-error")]},
+            monkeypatch=monkeypatch,
+        )
+        summary = json.loads(stdout)
+        task_dir = tmp_path / ".context" / "codex-subagent" / "test-run" / "stream-error"
+        meta = json.loads((task_dir / "meta.json").read_text(encoding="utf-8"))
+
+        assert exit_code == 1
+        assert summary["tasks"][0]["id"] == "stream-error"
+        assert summary["tasks"][0]["error"] == "disk full"
+        assert not (task_dir / "pid").exists()
+        assert "runner_error" in meta
 
     def test_per_task_fields_present(
         self, tmp_path, monkeypatch, make_task, mock_process

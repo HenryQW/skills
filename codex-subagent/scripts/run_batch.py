@@ -101,7 +101,6 @@ def _git_changed_files(cwd: str) -> list[str]:
         if status.startswith(("R", "C")):
             if idx >= len(entries):
                 break
-            path_part = entries[idx]
             idx += 1
 
         if path_part:
@@ -153,14 +152,15 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
     if not isinstance(tasks, list):
         _die("'tasks' must be an array.")
 
-    required_fields = {"id", "type", "prompt", "cwd"}
+    required_fields = ["id", "type", "prompt", "cwd"]
+    required_fields_set = set(required_fields)
     seen_ids: set[str] = set()
 
     for idx, task in enumerate(tasks):
         if not isinstance(task, dict):
             _die(f"Task index {idx}: each task must be a JSON object.")
 
-        missing = required_fields - set(task.keys())
+        missing = required_fields_set - set(task.keys())
         if missing:
             _die(f"Task index {idx}: missing required fields {sorted(missing)}")
 
@@ -291,9 +291,10 @@ def run_task(
     with open(os.path.join(task_dir, "prompt.txt"), "w", encoding="utf-8") as f:
         f.write(prompt)
 
+    prompt_path = os.path.join(task_dir, "prompt.txt")
     # Build command (never shell=True).
     cmd: list[str] = [
-        "codex", "e", prompt,
+        "codex", "e", "-",
         "-s", sandbox,
         "-c", f'model_reasoning_effort="{effort}"',
         "-C", resolved_cwd,
@@ -307,11 +308,13 @@ def run_task(
         pre_files = _git_changed_files(resolved_cwd)
 
     t0 = time.time()
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    with open(prompt_path, "rb") as prompt_file:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=prompt_file,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
     # Write PID file.
     pid_path = os.path.join(task_dir, "pid")
@@ -320,64 +323,76 @@ def run_task(
 
     stdout_path = os.path.join(task_dir, "stdout.txt")
     stderr_path = os.path.join(task_dir, "stderr.txt")
-    with open(stdout_path, "wb") as stdout_file, open(stderr_path, "wb") as stderr_file:
-        stdout_thread_result: dict[str, tuple[int, bytes]] = {}
-        stderr_thread_result: dict[str, tuple[int, bytes]] = {}
-        thread_errors: list[Exception] = []
-
-        def _read_stdout() -> None:
-            try:
-                stdout_thread_result["value"] = _stream_pipe(
-                    proc.stdout,
-                    stdout_file,
-                    summary_limit=MAX_OUTPUT_BYTES,
-                )
-            except Exception as exc:  # noqa: BLE001
-                thread_errors.append(exc)
-
-        def _read_stderr() -> None:
-            try:
-                stderr_thread_result["value"] = _stream_pipe(proc.stderr, stderr_file)
-            except Exception as exc:  # noqa: BLE001
-                thread_errors.append(exc)
-
-        stdout_thread = threading.Thread(target=_read_stdout)
-        stderr_thread = threading.Thread(target=_read_stderr)
-        stdout_thread.start()
-        stderr_thread.start()
-        proc.wait()
-        stdout_thread.join()
-        stderr_thread.join()
-
-    if thread_errors:
-        raise thread_errors[0]
-
-    elapsed = time.time() - t0
-    stdout_size, stdout_summary_bytes = stdout_thread_result["value"]
-
-    # Remove PID file.
-    try:
-        os.remove(pid_path)
-    except OSError:
-        pass
-
-    # Compute files-changed delta for workspace-write tasks.
+    stdout_thread_result: dict[str, tuple[int, bytes]] = {}
+    thread_errors: list[Exception] = []
+    runner_error: Exception | None = None
+    elapsed = 0.0
+    stdout_size = 0
+    stdout_summary_bytes = b""
     files_changed: list[str] | None = None
-    if sandbox == "workspace-write" and pre_files is not None:
-        post_files = _git_changed_files(resolved_cwd)
-        files_changed = sorted(set(post_files) - set(pre_files))
 
-    # Write meta.json.
-    meta = {
-        "exit_code": proc.returncode,
-        "elapsed_seconds": round(elapsed, 3),
-        "sandbox": sandbox,
-        "effort": effort,
-        "model": model if model else None,
-        "files_changed": files_changed,
-    }
-    with open(os.path.join(task_dir, "meta.json"), "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2)
+    try:
+        with open(stdout_path, "wb") as stdout_file, open(stderr_path, "wb") as stderr_file:
+            def _read_stdout() -> None:
+                try:
+                    stdout_thread_result["value"] = _stream_pipe(
+                        proc.stdout,
+                        stdout_file,
+                        summary_limit=MAX_OUTPUT_BYTES,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    thread_errors.append(exc)
+
+            def _read_stderr() -> None:
+                try:
+                    _stream_pipe(proc.stderr, stderr_file)
+                except Exception as exc:  # noqa: BLE001
+                    thread_errors.append(exc)
+
+            stdout_thread = threading.Thread(target=_read_stdout)
+            stderr_thread = threading.Thread(target=_read_stderr)
+            stdout_thread.start()
+            stderr_thread.start()
+            proc.wait()
+            stdout_thread.join()
+            stderr_thread.join()
+
+        elapsed = time.time() - t0
+        if thread_errors:
+            runner_error = thread_errors[0]
+        else:
+            stdout_size, stdout_summary_bytes = stdout_thread_result["value"]
+    except Exception as exc:  # noqa: BLE001
+        elapsed = time.time() - t0
+        runner_error = exc
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    finally:
+        if sandbox == "workspace-write" and pre_files is not None:
+            post_files = _git_changed_files(resolved_cwd)
+            files_changed = sorted(set(post_files) - set(pre_files))
+
+        meta: dict[str, Any] = {
+            "exit_code": proc.returncode,
+            "elapsed_seconds": round(elapsed, 3),
+            "sandbox": sandbox,
+            "effort": effort,
+            "model": model if model else None,
+            "files_changed": files_changed,
+        }
+        if runner_error is not None:
+            meta["runner_error"] = repr(runner_error)
+        with open(os.path.join(task_dir, "meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
+
+        try:
+            os.remove(pid_path)
+        except OSError:
+            pass
+
+    if runner_error is not None:
+        raise runner_error
 
     # Build summary entry.
     truncated = stdout_size > MAX_OUTPUT_BYTES
