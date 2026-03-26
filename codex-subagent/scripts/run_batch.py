@@ -309,7 +309,7 @@ def run_task(
     if sandbox == "workspace-write":
         pre_files = _git_changed_files(resolved_cwd)
 
-    t0 = time.time()
+    t0 = time.monotonic()
     pid_path = os.path.join(task_dir, "pid")
     stdout_path = os.path.join(task_dir, "stdout.txt")
     stderr_path = os.path.join(task_dir, "stderr.txt")
@@ -370,13 +370,13 @@ def run_task(
             stdout_thread.join()
             stderr_thread.join()
 
-        elapsed = time.time() - t0
+        elapsed = time.monotonic() - t0
         if thread_errors:
             runner_error = thread_errors[0]
         else:
             stdout_size, stdout_summary_bytes = stdout_thread_result["value"]
     except Exception as exc:  # noqa: BLE001
-        elapsed = time.time() - t0
+        elapsed = time.monotonic() - t0
         runner_error = exc
         if proc is not None and proc.poll() is None:
             proc.kill()
@@ -484,7 +484,7 @@ def main() -> None:
 
     # Dispatch tasks in parallel.
     results: list[dict[str, Any]] = []
-    overall_t0 = time.time()
+    overall_t0 = time.monotonic()
     max_workers = max(1, min(len(tasks), args.max_concurrency))
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -499,7 +499,7 @@ def main() -> None:
             except Exception as exc:  # noqa: BLE001
                 results.append(_build_failure_result(task, exc))
 
-    total_elapsed = time.time() - overall_t0
+    total_elapsed = time.monotonic() - overall_t0
 
     # Sort results by original task order.
     id_order = {t["id"]: i for i, t in enumerate(tasks)}
