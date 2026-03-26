@@ -231,7 +231,6 @@ class TestGitHelpers:
             "new name.py",
         ]
 
-
 # ===================================================================
 # Group 3: Exit Code Semantics
 # ===================================================================
@@ -293,6 +292,10 @@ class TestExitCodes:
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 2
+
+    def test_empty_tasks_exit_2(self, tmp_path, monkeypatch):
+        exit_code, _ = _run_main(tmp_path, {"tasks": []}, monkeypatch=monkeypatch)
+        assert exit_code == 2
 
     def test_missing_codex_exit_2(self, tmp_path, monkeypatch, make_task):
         monkeypatch.setattr("shutil.which", lambda name: None)
@@ -737,6 +740,29 @@ class TestSummaryGeneration:
         assert summary["tasks"][0]["id"] == "stream-error"
         assert summary["tasks"][0]["error"] == "disk full"
         assert not (task_dir / "pid").exists()
+        assert "runner_error" in meta
+
+    def test_popen_failure_still_writes_runner_error_meta(
+        self, tmp_path, monkeypatch, make_task
+    ):
+        def _boom(*args, **kwargs):
+            raise OSError("spawn failed")
+
+        monkeypatch.setattr("subprocess.Popen", _boom)
+
+        exit_code, stdout = _run_main(
+            tmp_path,
+            {"tasks": [make_task(tid="spawn-error")]},
+            monkeypatch=monkeypatch,
+        )
+        summary = json.loads(stdout)
+        task_dir = tmp_path / ".context" / "codex-subagent" / "test-run" / "spawn-error"
+        meta = json.loads((task_dir / "meta.json").read_text(encoding="utf-8"))
+
+        assert exit_code == 1
+        assert summary["tasks"][0]["error"] == "spawn failed"
+        assert not (task_dir / "pid").exists()
+        assert meta["exit_code"] == -1
         assert "runner_error" in meta
 
     def test_per_task_fields_present(

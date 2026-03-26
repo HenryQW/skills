@@ -151,6 +151,8 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
     tasks = data["tasks"]
     if not isinstance(tasks, list):
         _die("'tasks' must be an array.")
+    if not tasks:
+        _die("'tasks' must contain at least one task.")
 
     required_fields = ["id", "type", "prompt", "cwd"]
     required_fields_set = set(required_fields)
@@ -308,19 +310,7 @@ def run_task(
         pre_files = _git_changed_files(resolved_cwd)
 
     t0 = time.time()
-    with open(prompt_path, "rb") as prompt_file:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=prompt_file,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-    # Write PID file.
     pid_path = os.path.join(task_dir, "pid")
-    with open(pid_path, "w", encoding="utf-8") as f:
-        f.write(str(proc.pid))
-
     stdout_path = os.path.join(task_dir, "stdout.txt")
     stderr_path = os.path.join(task_dir, "stderr.txt")
     stdout_thread_result: dict[str, tuple[int, bytes]] = {}
@@ -330,8 +320,20 @@ def run_task(
     stdout_size = 0
     stdout_summary_bytes = b""
     files_changed: list[str] | None = None
+    proc: subprocess.Popen[bytes] | None = None
 
     try:
+        with open(prompt_path, "rb") as prompt_file:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=prompt_file,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        with open(pid_path, "w", encoding="utf-8") as f:
+            f.write(str(proc.pid))
+
         with open(stdout_path, "wb") as stdout_file, open(stderr_path, "wb") as stderr_file:
             def _read_stdout() -> None:
                 try:
@@ -353,6 +355,14 @@ def run_task(
             stderr_thread = threading.Thread(target=_read_stderr)
             stdout_thread.start()
             stderr_thread.start()
+            while proc.poll() is None:
+                if thread_errors:
+                    try:
+                        proc.kill()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    break
+                time.sleep(0.01)
             proc.wait()
             stdout_thread.join()
             stderr_thread.join()
@@ -365,7 +375,7 @@ def run_task(
     except Exception as exc:  # noqa: BLE001
         elapsed = time.time() - t0
         runner_error = exc
-        if proc.poll() is None:
+        if proc is not None and proc.poll() is None:
             proc.kill()
             proc.wait()
     finally:
@@ -374,7 +384,7 @@ def run_task(
             files_changed = sorted(set(post_files) - set(pre_files))
 
         meta: dict[str, Any] = {
-            "exit_code": proc.returncode,
+            "exit_code": proc.returncode if proc is not None else -1,
             "elapsed_seconds": round(elapsed, 3),
             "sandbox": sandbox,
             "effort": effort,
