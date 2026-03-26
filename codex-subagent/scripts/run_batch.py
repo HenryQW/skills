@@ -54,6 +54,7 @@ def _get_repo_root(start_path: str) -> str:
     else:
         repo_probe_cwd = os.path.abspath(start_path) or "."
 
+    result: subprocess.CompletedProcess[str] | None = None
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -64,8 +65,9 @@ def _get_repo_root(start_path: str) -> str:
     except OSError as exc:
         _die(f"Failed to detect git repo root: {exc}")
 
-    if result.returncode != 0:
-        _die(f"Failed to detect git repo root: {result.stderr.strip()}")
+    if result is None or result.returncode != 0:
+        stderr = result.stderr.strip() if result is not None else "unknown error"
+        _die(f"Failed to detect git repo root: {stderr}")
     return result.stdout.strip()
 
 
@@ -129,6 +131,7 @@ def preflight() -> None:
     if shutil.which("codex") is None:
         _die("Error: 'codex' not found on PATH. Install Codex CLI first.")
 
+    result: subprocess.CompletedProcess[str] | None = None
     try:
         result = subprocess.run(
             ["codex", "login", "status"],
@@ -140,7 +143,7 @@ def preflight() -> None:
             f"Error: Failed to execute 'codex' binary found on PATH: {exc}. "
             "Check file permissions and binary format."
         )
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         _die("Error: Codex auth check failed. Run 'codex login' to authenticate.")
 
 
