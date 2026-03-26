@@ -10,10 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -35,6 +35,7 @@ TYPE_CONFIG: dict[str, dict[str, str]] = {
 DEFAULT_CONFIG: dict[str, str] = {"sandbox": "read-only", "effort": "high"}
 
 MAX_OUTPUT_BYTES = 10 * 1024  # 10 KB cap for summary output field
+SAFE_PATH_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -57,10 +58,18 @@ def _get_repo_root() -> str:
     return result.stdout.strip()
 
 
+def _validate_path_component(value: str, label: str) -> str:
+    if value in {".", ".."} or SAFE_PATH_COMPONENT_RE.fullmatch(value) is None:
+        raise ValueError(
+            f"{label} {value!r} must contain only letters, numbers, '.', '_' or '-'."
+        )
+    return value
+
+
 def _git_changed_files(cwd: str) -> list[str]:
-    """Return list of changed file names in *cwd* via ``git diff --name-only``."""
+    """Return list of changed file names in *cwd* via ``git diff HEAD --name-only``."""
     result = subprocess.run(
-        ["git", "diff", "--name-only"],
+        ["git", "diff", "HEAD", "--name-only"],
         capture_output=True,
         text=True,
         cwd=cwd,
@@ -111,6 +120,9 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
     seen_ids: set[str] = set()
 
     for idx, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            _die(f"Task index {idx}: each task must be a JSON object.")
+
         missing = required_fields - set(task.keys())
         if missing:
             _die(f"Task index {idx}: missing required fields {sorted(missing)}")
@@ -120,6 +132,10 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
                 _die(f"Task index {idx}: field '{field}' must be a string.")
 
         tid = task["id"]
+        try:
+            _validate_path_component(tid, f"Task index {idx} id")
+        except ValueError as exc:
+            _die(str(exc))
         if tid in seen_ids:
             _die(f"Duplicate task id: '{tid}'")
         seen_ids.add(tid)
@@ -148,6 +164,37 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Path validation
+# ---------------------------------------------------------------------------
+
+
+def _resolve_task_cwd(repo_root: str, cwd: str, tid: str) -> str:
+    repo_root_real = os.path.realpath(repo_root)
+    if os.path.isabs(cwd):
+        raise ValueError(
+            f"Task {tid!r} has absolute cwd {cwd!r}; only relative paths are allowed."
+        )
+
+    resolved_cwd = os.path.realpath(os.path.join(repo_root_real, cwd))
+    if os.path.commonpath([repo_root_real, resolved_cwd]) != repo_root_real:
+        raise ValueError(
+            f"Task {tid!r} cwd {cwd!r} resolves outside repo root {repo_root_real!r}."
+        )
+    return resolved_cwd
+
+
+def _prepare_tasks(tasks: list[dict[str, Any]], repo_root: str) -> list[dict[str, Any]]:
+    prepared: list[dict[str, Any]] = []
+    for task in tasks:
+        prepared_task = dict(task)
+        prepared_task["resolved_cwd"] = _resolve_task_cwd(
+            repo_root, task["cwd"], task["id"]
+        )
+        prepared.append(prepared_task)
+    return prepared
+
+
+# ---------------------------------------------------------------------------
 # Single-task runner (executed inside a thread)
 # ---------------------------------------------------------------------------
 
@@ -155,9 +202,7 @@ def load_manifest(path: str) -> list[dict[str, Any]]:
 def run_task(
     task: dict[str, Any],
     artifact_dir: str,
-    repo_root: str,
     model: str | None,
-    semaphore: threading.Semaphore,
 ) -> dict[str, Any]:
     """Run one Codex subagent task. Returns a result dict for the summary."""
 
@@ -169,7 +214,7 @@ def run_task(
     sandbox = cfg["sandbox"]
     effort = cfg["effort"]
 
-    resolved_cwd = os.path.realpath(os.path.join(repo_root, task["cwd"]))
+    resolved_cwd = task["resolved_cwd"]
     task_dir = os.path.join(artifact_dir, tid)
     os.makedirs(task_dir, exist_ok=True)
 
@@ -192,22 +237,20 @@ def run_task(
     if sandbox == "workspace-write":
         pre_files = _git_changed_files(resolved_cwd)
 
-    # Acquire semaphore to respect max concurrency.
-    with semaphore:
-        t0 = time.time()
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+    t0 = time.time()
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
-        # Write PID file.
-        pid_path = os.path.join(task_dir, "pid")
-        with open(pid_path, "w", encoding="utf-8") as f:
-            f.write(str(proc.pid))
+    # Write PID file.
+    pid_path = os.path.join(task_dir, "pid")
+    with open(pid_path, "w", encoding="utf-8") as f:
+        f.write(str(proc.pid))
 
-        stdout_bytes, stderr_bytes = proc.communicate()
-        elapsed = time.time() - t0
+    stdout_bytes, stderr_bytes = proc.communicate()
+    elapsed = time.time() - t0
 
     # Decode output.
     stdout_text = stdout_bytes.decode("utf-8", errors="replace")
@@ -263,6 +306,20 @@ def run_task(
     }
 
 
+def _build_failure_result(task: dict[str, Any], exc: Exception) -> dict[str, Any]:
+    return {
+        "id": task["id"],
+        "type": task.get("type", "unknown"),
+        "status": "failure",
+        "exit_code": -1,
+        "elapsed_seconds": 0,
+        "output": "",
+        "truncated": False,
+        "files_changed": None,
+        "error": str(exc),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
@@ -283,6 +340,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.max_concurrency < 1:
+        _die("--max-concurrency must be at least 1.")
+
+    try:
+        run_id = _validate_path_component(args.run_id, "run_id")
+    except ValueError as exc:
+        _die(str(exc))
+
     # Pre-flight.
     preflight()
 
@@ -291,25 +356,31 @@ def main() -> None:
 
     # Resolve repo root.
     repo_root = _get_repo_root()
+    try:
+        tasks = _prepare_tasks(tasks, repo_root)
+    except ValueError as exc:
+        _die(str(exc))
 
     # Create artifact directory.
-    artifact_dir = os.path.join(".context", "codex-subagent", args.run_id)
+    artifact_dir = os.path.join(repo_root, ".context", "codex-subagent", run_id)
     os.makedirs(artifact_dir, exist_ok=True)
 
     # Dispatch tasks in parallel.
-    semaphore = threading.Semaphore(args.max_concurrency)
     results: list[dict[str, Any]] = []
     overall_t0 = time.time()
+    max_workers = max(1, min(len(tasks), args.max_concurrency))
 
-    with ThreadPoolExecutor(max_workers=len(tasks) or 1) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(
-                run_task, task, artifact_dir, repo_root, args.model, semaphore
-            ): task["id"]
+            pool.submit(run_task, task, artifact_dir, args.model): task
             for task in tasks
         }
         for future in as_completed(futures):
-            results.append(future.result())
+            task = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as exc:  # noqa: BLE001
+                results.append(_build_failure_result(task, exc))
 
     total_elapsed = time.time() - overall_t0
 

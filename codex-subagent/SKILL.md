@@ -38,10 +38,10 @@ Unknown types default to read-only / high.
 1. Receive explicit task descriptions from the user or calling skill.
 2. Do NOT invent tasks beyond what was described.
 3. Build a manifest JSON with a `tasks` array. Each task requires:
-   - `id` -- unique string identifier
+   - `id` -- unique string identifier using only letters, numbers, `.`, `_`, or `-`
    - `type` -- one of the canonical types above
    - `prompt` -- full task instruction string
-   - `cwd` -- working directory relative to git root (usually `"."`)
+   - `cwd` -- working directory relative to git root and staying inside the repo (usually `"."`)
 
 Example manifest:
 
@@ -66,7 +66,7 @@ Example manifest:
 
 ## Execution Flow
 
-1. Create `.context/codex-subagent/` if it does not exist.
+1. Create `.context/codex-subagent/` under the repo root if it does not exist.
 2. Write the manifest to `.context/codex-subagent/manifest.json`.
 3. Run the runner:
 
@@ -77,6 +77,8 @@ python "<skill-install-path>/codex-subagent/scripts/run_batch.py" \
 ```
 
 To specify a model, add `--model <model>`.
+
+`--run-id` must also use only letters, numbers, `.`, `_`, or `-`.
 
 4. The runner prints summary JSON to stdout.
 

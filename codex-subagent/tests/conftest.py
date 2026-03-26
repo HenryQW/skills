@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -72,7 +73,11 @@ def _patch_subprocess_run(monkeypatch):
     def _fake_run(cmd, **kwargs):
         result = MagicMock()
         result.returncode = 0
-        result.stdout = "/tmp/fake-repo\n"
+        cwd = kwargs.get("cwd") or os.getcwd()
+        if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            result.stdout = f"{cwd}\n"
+        else:
+            result.stdout = ""
         result.stderr = ""
         return result
 
