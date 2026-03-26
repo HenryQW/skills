@@ -742,6 +742,42 @@ class TestSummaryGeneration:
         assert not (task_dir / "pid").exists()
         assert "runner_error" in meta
 
+    def test_stream_failure_summary_uses_elapsed_from_meta(
+        self, tmp_path, monkeypatch, make_task
+    ):
+        original_stream_pipe = run_batch_module._stream_pipe
+
+        def _broken_stream_pipe(source, destination, *, summary_limit=None):
+            if summary_limit is not None:
+                raise OSError("disk full")
+            return original_stream_pipe(
+                source,
+                destination,
+                summary_limit=summary_limit,
+            )
+
+        monotonic_values = iter([10.0, 20.0, 20.75, 11.0])
+
+        monkeypatch.setattr(run_batch_module, "_stream_pipe", _broken_stream_pipe)
+        monkeypatch.setattr(
+            run_batch_module.time,
+            "monotonic",
+            lambda: next(monotonic_values),
+        )
+
+        exit_code, stdout = _run_main(
+            tmp_path,
+            {"tasks": [make_task(tid="stream-error-elapsed")]},
+            monkeypatch=monkeypatch,
+        )
+        summary = json.loads(stdout)
+        task_result = summary["tasks"][0]
+
+        assert exit_code == 1
+        assert task_result["error"] == "disk full"
+        assert task_result["elapsed_seconds"] == 0.75
+        assert task_result["exit_code"] == 0
+
     def test_popen_failure_still_writes_runner_error_meta(
         self, tmp_path, monkeypatch, make_task
     ):

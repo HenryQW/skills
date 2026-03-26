@@ -109,6 +109,17 @@ def _git_changed_files(cwd: str) -> list[str]:
     return sorted(files)
 
 
+def _read_task_meta(artifact_dir: str, task_id: str) -> dict[str, Any] | None:
+    meta_path = os.path.join(artifact_dir, task_id, "meta.json")
+    try:
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    return meta if isinstance(meta, dict) else None
+
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
@@ -423,16 +434,21 @@ def run_task(
     }
 
 
-def _build_failure_result(task: dict[str, Any], exc: Exception) -> dict[str, Any]:
+def _build_failure_result(
+    task: dict[str, Any],
+    artifact_dir: str,
+    exc: Exception,
+) -> dict[str, Any]:
+    meta = _read_task_meta(artifact_dir, task["id"])
     return {
         "id": task["id"],
         "type": task.get("type", "unknown"),
         "status": "failure",
-        "exit_code": -1,
-        "elapsed_seconds": 0,
+        "exit_code": meta.get("exit_code", -1) if meta else -1,
+        "elapsed_seconds": meta.get("elapsed_seconds", 0) if meta else 0,
         "output": "",
         "truncated": False,
-        "files_changed": None,
+        "files_changed": meta.get("files_changed") if meta else None,
         "error": str(exc),
     }
 
@@ -497,7 +513,7 @@ def main() -> None:
             try:
                 results.append(future.result())
             except Exception as exc:  # noqa: BLE001
-                results.append(_build_failure_result(task, exc))
+                results.append(_build_failure_result(task, artifact_dir, exc))
 
     total_elapsed = time.monotonic() - overall_t0
 
