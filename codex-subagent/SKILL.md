@@ -1,20 +1,19 @@
 ---
 name: codex-subagent
-description: Dispatch parallel tasks to Codex CLI subagents to save Claude Code tokens. Accepts explicit task descriptions, auto-selects sandbox (read-only vs workspace-write) and reasoning effort (high vs xhigh) based on task type, and collects structured results with durable artifacts.
+description: Dispatch one or more tasks to Codex CLI subagents to save Claude Code tokens. Accepts explicit task descriptions, auto-selects sandbox (read-only vs workspace-write) and reasoning effort (high vs xhigh) based on task type, and collects structured results with durable artifacts.
 ---
 
 # Codex Subagent
 
-Dispatch 2+ independent tasks to Codex CLI subagents in parallel. Collect structured results with durable artifacts.
+Dispatch one or more tasks to Codex CLI subagents. Multiple tasks run in parallel. Collect structured results with durable artifacts.
 
 ## When to Use
 
-- The user or a calling skill needs to run 2+ independent tasks in parallel.
-- Tasks can be offloaded to Codex to save Claude Code tokens.
+- The user or a calling skill needs to offload tasks to Codex to save Claude Code tokens.
+- For 2+ independent tasks, parallel dispatch is the primary value.
 
 Do NOT use this skill when:
 
-- There is only one task (run `codex e` directly instead).
 - Tasks depend on each other's output (run them sequentially instead).
 
 ## Task Types (Reference)
