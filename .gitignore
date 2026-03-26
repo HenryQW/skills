@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .ruff_cache/
+.pytest_cache/
 
 # macOS metadata
 .DS_Store
