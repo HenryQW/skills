@@ -232,7 +232,6 @@ class TestExitCodes:
             ]
         }
 
-        proc = mock_process(returncode=0, stdout=b"done")
         monkeypatch.setattr(
             "subprocess.Popen", lambda *a, **kw: mock_process(returncode=0, stdout=b"ok")
         )
@@ -373,6 +372,31 @@ class TestExitCodes:
 
         assert exc_info.value.code == 0
         assert seen_cwds == [str(nested)]
+
+    def test_relative_manifest_filename_uses_current_directory(self, tmp_path, monkeypatch):
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps({"tasks": []}), encoding="utf-8")
+
+        seen_cwds: list[str] = []
+
+        def _fake_run(cmd, **kwargs):
+            result = type("Result", (), {})()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                seen_cwds.append(kwargs.get("cwd"))
+                result.stdout = f"{tmp_path}\n"
+            elif cmd[:3] == ["git", "status", "--porcelain"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        monkeypatch.setattr("subprocess.run", _fake_run)
+        monkeypatch.chdir(tmp_path)
+
+        assert run_batch_module._get_repo_root("manifest.json") == str(tmp_path)
+        assert seen_cwds == [str(tmp_path)]
 
 
 # ===================================================================

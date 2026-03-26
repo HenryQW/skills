@@ -48,16 +48,21 @@ def _die(msg: str) -> None:
 
 
 def _get_repo_root(start_path: str) -> str:
-    repo_probe_cwd = start_path
     if os.path.isfile(start_path):
-        repo_probe_cwd = os.path.dirname(start_path)
+        repo_probe_cwd = os.path.dirname(os.path.abspath(start_path)) or "."
+    else:
+        repo_probe_cwd = os.path.abspath(start_path) or "."
 
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        cwd=repo_probe_cwd,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            cwd=repo_probe_cwd,
+        )
+    except OSError as exc:
+        _die(f"Failed to detect git repo root: {exc}")
+
     if result.returncode != 0:
         _die(f"Failed to detect git repo root: {result.stderr.strip()}")
     return result.stdout.strip()
