@@ -692,6 +692,23 @@ class TestSummaryGeneration:
         )
         assert stdout_artifact.read_bytes() == large_output
 
+    def test_summary_uses_replacement_characters_for_invalid_utf8(
+        self, tmp_path, monkeypatch, make_task, mock_process
+    ):
+        invalid_output = b"ok\xffdone"
+
+        summary = self._get_summary(
+            tmp_path,
+            monkeypatch,
+            make_task,
+            mock_process,
+            popen_factory=lambda *a, **kw: mock_process(
+                returncode=0, stdout=invalid_output
+            ),
+        )
+
+        assert summary["tasks"][0]["output"] == "ok�done"
+
     def test_worker_exception_becomes_failure_summary(
         self, tmp_path, monkeypatch, make_task, mock_process
     ):

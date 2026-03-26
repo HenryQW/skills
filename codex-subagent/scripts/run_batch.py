@@ -420,7 +420,7 @@ def run_task(
 
     # Build summary entry.
     truncated = stdout_size > MAX_OUTPUT_BYTES
-    output_for_summary = stdout_summary_bytes.decode("utf-8", errors="ignore")
+    output_for_summary = stdout_summary_bytes.decode("utf-8", errors="replace")
 
     return {
         "id": tid,
