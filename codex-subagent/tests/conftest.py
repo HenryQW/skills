@@ -78,8 +78,8 @@ def _patch_subprocess_run(monkeypatch):
         cwd = kwargs.get("cwd") or os.getcwd()
         if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
             result.stdout = f"{cwd}\n"
-        elif cmd[:3] == ["git", "status", "--porcelain"]:
-            result.stdout = ""
+        elif cmd[:2] == ["git", "status"]:
+            result.stdout = b""
         else:
             result.stdout = ""
         result.stderr = ""
@@ -91,4 +91,4 @@ def _patch_subprocess_run(monkeypatch):
 @pytest.fixture(autouse=True)
 def _patch_popen(monkeypatch, mock_process):
     """Stub subprocess.Popen to return a successful mock process."""
-    monkeypatch.setattr("subprocess.Popen", lambda *a, **kw: _make_mock_process())
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **kw: mock_process())

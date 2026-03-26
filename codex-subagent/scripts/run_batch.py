@@ -78,26 +78,34 @@ def _validate_path_component(value: str, label: str) -> str:
 
 
 def _git_changed_files(cwd: str) -> list[str]:
-    """Return changed and untracked file names in *cwd* via ``git status --porcelain``."""
+    """Return changed and untracked file names in *cwd* via ``git status --porcelain=v1 -z``."""
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain=v1", "-z"],
         capture_output=True,
-        text=True,
         cwd=cwd,
     )
     if result.returncode != 0:
         return []
 
+    entries = result.stdout.split(b"\0")
     files: set[str] = set()
-    for line in result.stdout.splitlines():
-        if not line.strip():
+    idx = 0
+    while idx < len(entries):
+        entry = entries[idx]
+        idx += 1
+        if not entry:
             continue
 
-        path_part = line[3:]
-        if " -> " in path_part:
-            _, path_part = path_part.split(" -> ", 1)
+        status = entry[:2].decode("utf-8", errors="replace")
+        path_part = entry[3:]
+        if status.startswith(("R", "C")):
+            if idx >= len(entries):
+                break
+            path_part = entries[idx]
+            idx += 1
+
         if path_part:
-            files.add(path_part)
+            files.add(path_part.decode("utf-8", errors="replace"))
 
     return sorted(files)
 
@@ -111,11 +119,17 @@ def preflight() -> None:
     if shutil.which("codex") is None:
         _die("Error: 'codex' not found on PATH. Install Codex CLI first.")
 
-    result = subprocess.run(
-        ["codex", "login", "status"],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["codex", "login", "status"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        _die(
+            f"Error: Failed to execute 'codex' binary found on PATH: {exc}. "
+            "Check file permissions and binary format."
+        )
     if result.returncode != 0:
         _die("Error: Codex auth check failed. Run 'codex login' to authenticate.")
 

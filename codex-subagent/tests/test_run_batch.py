@@ -201,7 +201,7 @@ class TestGitHelpers:
         def _fake_run(cmd, **kwargs):
             result = type("Result", (), {})()
             result.returncode = 0
-            result.stdout = " M tracked.py\n?? new_file.py\nR  old.py -> renamed.py\n"
+            result.stdout = b" M tracked.py\0?? new_file.py\0R  old.py\0renamed.py\0"
             result.stderr = ""
             return result
 
@@ -211,6 +211,24 @@ class TestGitHelpers:
             "new_file.py",
             "renamed.py",
             "tracked.py",
+        ]
+
+    def test_git_changed_files_handles_spaces(self, monkeypatch):
+        def _fake_run(cmd, **kwargs):
+            result = type("Result", (), {})()
+            result.returncode = 0
+            result.stdout = (
+                b" M dir with spaces/file name.py\0"
+                b"R  old name.py\0new name.py\0"
+            )
+            result.stderr = ""
+            return result
+
+        monkeypatch.setattr("subprocess.run", _fake_run)
+
+        assert run_batch_module._git_changed_files("/repo") == [
+            "dir with spaces/file name.py",
+            "new name.py",
         ]
 
 
@@ -292,6 +310,18 @@ class TestExitCodes:
             main()
         assert exc_info.value.code == 2
 
+    def test_preflight_codex_oserror_exit_2(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/codex")
+
+        def _boom(*args, **kwargs):
+            raise OSError("exec format error")
+
+        monkeypatch.setattr("subprocess.run", _boom)
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_batch_module.preflight()
+        assert exc_info.value.code == 2
+
     def test_invalid_run_id_exit_2(self, tmp_path, monkeypatch, make_task):
         manifest = {"tasks": [make_task()]}
         exit_code, _ = _run_main(
@@ -343,8 +373,8 @@ class TestExitCodes:
             if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
                 seen_cwds.append(kwargs.get("cwd"))
                 result.stdout = f"{repo_root}\n"
-            elif cmd[:3] == ["git", "status", "--porcelain"]:
-                result.stdout = ""
+            elif cmd[:2] == ["git", "status"]:
+                result.stdout = b""
             else:
                 result.stdout = ""
             return result
@@ -386,8 +416,8 @@ class TestExitCodes:
             if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
                 seen_cwds.append(kwargs.get("cwd"))
                 result.stdout = f"{tmp_path}\n"
-            elif cmd[:3] == ["git", "status", "--porcelain"]:
-                result.stdout = ""
+            elif cmd[:2] == ["git", "status"]:
+                result.stdout = b""
             else:
                 result.stdout = ""
             return result
@@ -486,6 +516,8 @@ class TestSubprocessConstruction:
             result.stderr = ""
             if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
                 result.stdout = f"{repo_root}\n"
+            elif cmd[:2] == ["git", "status"]:
+                result.stdout = b""
             else:
                 result.stdout = ""
             return result
