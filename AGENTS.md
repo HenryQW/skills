@@ -49,7 +49,7 @@ At minimum, update:
 - The root `README.md` folder list when folder-level contents change.
 - The root `README.md` subfolder description text to exactly match each subfolder README description.
 - The `## Skills` table rows.
-- The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -a claude-code`.
+- The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -a claude-code -y`.
 - Any changed description(s).
 - The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
 
