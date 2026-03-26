@@ -28,15 +28,15 @@ class TriangulateSkillLayoutTests(unittest.TestCase):
                 f"prompt reference must use references/: {relative_path}",
             )
             self.assertTrue(
-                resolved.is_file(),
-                f"referenced prompt file is missing: {relative_path}",
-            )
-            self.assertTrue(
                 resolved.is_relative_to(references_dir),
                 (
                     "referenced prompt file must ship inside references/: "
                     f"{relative_path}"
                 ),
+            )
+            self.assertTrue(
+                resolved.is_file(),
+                f"referenced prompt file is missing: {relative_path}",
             )
 
 
