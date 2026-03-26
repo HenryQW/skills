@@ -355,14 +355,17 @@ def run_task(
             stderr_thread = threading.Thread(target=_read_stderr)
             stdout_thread.start()
             stderr_thread.start()
-            while proc.poll() is None:
-                if thread_errors:
-                    try:
-                        proc.kill()
-                    except Exception:  # noqa: BLE001
-                        pass
+            while True:
+                try:
+                    proc.wait(timeout=0.5)
                     break
-                time.sleep(0.01)
+                except subprocess.TimeoutExpired:
+                    if thread_errors:
+                        try:
+                            proc.kill()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        break
             proc.wait()
             stdout_thread.join()
             stderr_thread.join()
