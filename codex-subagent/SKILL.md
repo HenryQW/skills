@@ -101,7 +101,7 @@ If a read-only task has been running >15 minutes or a workspace-write task >30 m
 
 ## Write Isolation Warning
 
-When dispatching multiple workspace-write tasks, the caller must ensure non-overlapping file sets. The runner warns but does not prevent overlapping writes. If parallel writes to the same files are needed, run the tasks sequentially instead.
+When dispatching multiple workspace-write tasks, the caller must ensure non-overlapping file sets. The runner only warns when multiple workspace-write tasks share the same `cwd`; it does not detect overlapping file sets within a directory and does not prevent concurrent writes. If isolation cannot be guaranteed, use distinct `cwd` values or run the tasks sequentially instead.
 
 ## Exit Codes
 

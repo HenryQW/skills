@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 from unittest.mock import MagicMock
 
@@ -44,8 +45,9 @@ def _make_mock_process(
     proc.pid = pid
     proc.returncode = returncode
     proc.communicate.return_value = (stdout, stderr)
-    proc.stdout = stdout
-    proc.stderr = stderr
+    proc.stdout = io.BytesIO(stdout)
+    proc.stderr = io.BytesIO(stderr)
+    proc.wait.return_value = returncode
     return proc
 
 

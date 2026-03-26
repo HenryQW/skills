@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -217,6 +218,38 @@ def _prepare_tasks(tasks: list[dict[str, Any]], repo_root: str) -> list[dict[str
 
 
 # ---------------------------------------------------------------------------
+# Stream helpers
+# ---------------------------------------------------------------------------
+
+
+def _stream_pipe(
+    source: Any,
+    destination: Any,
+    *,
+    summary_limit: int | None = None,
+) -> tuple[int, bytes]:
+    total_bytes = 0
+    summary_chunks: list[bytes] = []
+    remaining_summary = summary_limit
+
+    while True:
+        chunk = source.read(4096)
+        if not chunk:
+            break
+
+        destination.write(chunk)
+        total_bytes += len(chunk)
+
+        if remaining_summary is not None and remaining_summary > 0:
+            summary_chunk = chunk[:remaining_summary]
+            summary_chunks.append(summary_chunk)
+            remaining_summary -= len(summary_chunk)
+
+    destination.flush()
+    return total_bytes, b"".join(summary_chunks)
+
+
+# ---------------------------------------------------------------------------
 # Single-task runner (executed inside a thread)
 # ---------------------------------------------------------------------------
 
@@ -271,18 +304,42 @@ def run_task(
     with open(pid_path, "w", encoding="utf-8") as f:
         f.write(str(proc.pid))
 
-    stdout_bytes, stderr_bytes = proc.communicate()
+    stdout_path = os.path.join(task_dir, "stdout.txt")
+    stderr_path = os.path.join(task_dir, "stderr.txt")
+    with open(stdout_path, "wb") as stdout_file, open(stderr_path, "wb") as stderr_file:
+        stdout_thread_result: dict[str, tuple[int, bytes]] = {}
+        stderr_thread_result: dict[str, tuple[int, bytes]] = {}
+        thread_errors: list[Exception] = []
+
+        def _read_stdout() -> None:
+            try:
+                stdout_thread_result["value"] = _stream_pipe(
+                    proc.stdout,
+                    stdout_file,
+                    summary_limit=MAX_OUTPUT_BYTES,
+                )
+            except Exception as exc:  # noqa: BLE001
+                thread_errors.append(exc)
+
+        def _read_stderr() -> None:
+            try:
+                stderr_thread_result["value"] = _stream_pipe(proc.stderr, stderr_file)
+            except Exception as exc:  # noqa: BLE001
+                thread_errors.append(exc)
+
+        stdout_thread = threading.Thread(target=_read_stdout)
+        stderr_thread = threading.Thread(target=_read_stderr)
+        stdout_thread.start()
+        stderr_thread.start()
+        proc.wait()
+        stdout_thread.join()
+        stderr_thread.join()
+
+    if thread_errors:
+        raise thread_errors[0]
+
     elapsed = time.time() - t0
-
-    # Decode output.
-    stdout_text = stdout_bytes.decode("utf-8", errors="replace")
-    stderr_text = stderr_bytes.decode("utf-8", errors="replace")
-
-    # Write stdout / stderr artifacts.
-    with open(os.path.join(task_dir, "stdout.txt"), "w", encoding="utf-8") as f:
-        f.write(stdout_text)
-    with open(os.path.join(task_dir, "stderr.txt"), "w", encoding="utf-8") as f:
-        f.write(stderr_text)
+    stdout_size, stdout_summary_bytes = stdout_thread_result["value"]
 
     # Remove PID file.
     try:
@@ -309,12 +366,8 @@ def run_task(
         json.dump(meta, f, indent=2)
 
     # Build summary entry.
-    truncated = len(stdout_text.encode("utf-8")) > MAX_OUTPUT_BYTES
-    output_for_summary = stdout_text
-    if truncated:
-        output_for_summary = stdout_text.encode("utf-8")[:MAX_OUTPUT_BYTES].decode(
-            "utf-8", errors="ignore"
-        )
+    truncated = stdout_size > MAX_OUTPUT_BYTES
+    output_for_summary = stdout_summary_bytes.decode("utf-8", errors="ignore")
 
     return {
         "id": tid,

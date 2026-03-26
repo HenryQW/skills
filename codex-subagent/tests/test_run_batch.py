@@ -619,6 +619,28 @@ class TestSummaryGeneration:
         assert task_result["truncated"] is True
         assert len(task_result["output"].encode("utf-8")) <= MAX_OUTPUT_BYTES
 
+    def test_stdout_artifact_keeps_full_output_when_summary_truncates(
+        self, tmp_path, monkeypatch, make_task, mock_process
+    ):
+        large_output = b"A" * (MAX_OUTPUT_BYTES + 1024)
+
+        monkeypatch.setattr(
+            "subprocess.Popen",
+            lambda *a, **kw: mock_process(returncode=0, stdout=large_output),
+        )
+
+        _run_main(tmp_path, {"tasks": [make_task(tid="artifact-full-output")]}, monkeypatch=monkeypatch)
+
+        stdout_artifact = (
+            tmp_path
+            / ".context"
+            / "codex-subagent"
+            / "test-run"
+            / "artifact-full-output"
+            / "stdout.txt"
+        )
+        assert stdout_artifact.read_bytes() == large_output
+
     def test_worker_exception_becomes_failure_summary(
         self, tmp_path, monkeypatch, make_task, mock_process
     ):
