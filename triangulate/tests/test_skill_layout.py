@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 SKILL_PATH = Path(__file__).resolve().parents[1] / "triangulate" / "SKILL.md"
@@ -22,11 +22,17 @@ class TriangulateSkillLayoutTests(unittest.TestCase):
         self.assertTrue(referenced_paths, "expected relative markdown prompt references")
 
         for relative_path in referenced_paths:
-            resolved = (skill_dir / relative_path).resolve()
+            path_parts = PurePosixPath(relative_path).parts
             self.assertTrue(
-                relative_path.startswith("./references/"),
+                path_parts[:1] == ("references",),
                 f"prompt reference must use references/: {relative_path}",
             )
+            self.assertNotIn(
+                "..",
+                path_parts,
+                f"prompt reference must not traverse outside references/: {relative_path}",
+            )
+            resolved = (skill_dir / PurePosixPath(relative_path)).resolve()
             self.assertTrue(
                 resolved.is_relative_to(references_dir),
                 (
