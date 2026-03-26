@@ -51,6 +51,6 @@ At minimum, update:
 - The `## Skills` table rows.
 - The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -a claude-code`.
 - Any changed description(s).
-- The `Last updated` timestamp in UTC, only update then the skill's implementation changes, not for documentation-only updates.
+- The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
 
 Do not leave README updates for a later commit.
