@@ -192,6 +192,29 @@ class TestTypeMapping:
 
 
 # ===================================================================
+# Group 2.5: Git Helpers
+# ===================================================================
+
+
+class TestGitHelpers:
+    def test_git_changed_files_includes_tracked_and_untracked(self, monkeypatch):
+        def _fake_run(cmd, **kwargs):
+            result = type("Result", (), {})()
+            result.returncode = 0
+            result.stdout = " M tracked.py\n?? new_file.py\nR  old.py -> renamed.py\n"
+            result.stderr = ""
+            return result
+
+        monkeypatch.setattr("subprocess.run", _fake_run)
+
+        assert run_batch_module._git_changed_files("/repo") == [
+            "new_file.py",
+            "renamed.py",
+            "tracked.py",
+        ]
+
+
+# ===================================================================
 # Group 3: Exit Code Semantics
 # ===================================================================
 
@@ -299,6 +322,57 @@ class TestExitCodes:
         manifest = {"tasks": [make_task(cwd="../outside")]}
         exit_code, _ = _run_main(tmp_path, manifest, monkeypatch=monkeypatch)
         assert exit_code == 2
+
+    def test_manifest_path_drives_repo_root_lookup(self, tmp_path, monkeypatch, make_task):
+        repo_root = tmp_path / "repo-root"
+        nested = repo_root / "manifests"
+        elsewhere = tmp_path / "elsewhere"
+        repo_root.mkdir()
+        nested.mkdir()
+        elsewhere.mkdir()
+
+        manifest = {"tasks": [make_task()]}
+        manifest_path = nested / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        seen_cwds: list[str] = []
+
+        def _fake_run(cmd, **kwargs):
+            result = type("Result", (), {})()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
+                seen_cwds.append(kwargs.get("cwd"))
+                result.stdout = f"{repo_root}\n"
+            elif cmd[:3] == ["git", "status", "--porcelain"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        monkeypatch.setattr("subprocess.run", _fake_run)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "run_batch.py",
+                "--manifest",
+                str(manifest_path),
+                "--run-id",
+                "test-run",
+            ],
+        )
+        monkeypatch.chdir(elsewhere)
+
+        from io import StringIO
+
+        captured = StringIO()
+        monkeypatch.setattr("sys.stdout", captured)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
+        assert seen_cwds == [str(nested)]
 
 
 # ===================================================================

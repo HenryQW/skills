@@ -76,6 +76,8 @@ def _patch_subprocess_run(monkeypatch):
         cwd = kwargs.get("cwd") or os.getcwd()
         if cmd[:3] == ["git", "rev-parse", "--show-toplevel"]:
             result.stdout = f"{cwd}\n"
+        elif cmd[:3] == ["git", "status", "--porcelain"]:
+            result.stdout = ""
         else:
             result.stdout = ""
         result.stderr = ""

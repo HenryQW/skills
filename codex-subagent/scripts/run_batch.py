@@ -47,11 +47,16 @@ def _die(msg: str) -> None:
     sys.exit(2)
 
 
-def _get_repo_root() -> str:
+def _get_repo_root(start_path: str) -> str:
+    repo_probe_cwd = start_path
+    if os.path.isfile(start_path):
+        repo_probe_cwd = os.path.dirname(start_path)
+
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
+        cwd=repo_probe_cwd,
     )
     if result.returncode != 0:
         _die(f"Failed to detect git repo root: {result.stderr.strip()}")
@@ -67,16 +72,28 @@ def _validate_path_component(value: str, label: str) -> str:
 
 
 def _git_changed_files(cwd: str) -> list[str]:
-    """Return list of changed file names in *cwd* via ``git diff HEAD --name-only``."""
+    """Return changed and untracked file names in *cwd* via ``git status --porcelain``."""
     result = subprocess.run(
-        ["git", "diff", "HEAD", "--name-only"],
+        ["git", "status", "--porcelain"],
         capture_output=True,
         text=True,
         cwd=cwd,
     )
     if result.returncode != 0:
         return []
-    return [f for f in result.stdout.strip().splitlines() if f]
+
+    files: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+
+        path_part = line[3:]
+        if " -> " in path_part:
+            _, path_part = path_part.split(" -> ", 1)
+        if path_part:
+            files.add(path_part)
+
+    return sorted(files)
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +372,7 @@ def main() -> None:
     tasks = load_manifest(args.manifest)
 
     # Resolve repo root.
-    repo_root = _get_repo_root()
+    repo_root = _get_repo_root(args.manifest)
     try:
         tasks = _prepare_tasks(tasks, repo_root)
     except ValueError as exc:
