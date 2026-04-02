@@ -46,6 +46,7 @@ Follow this workflow every time the user asks to create a new PR.
 - After PR creation, resolve the PR number.
 - MUST add Copilot reviewer with:
   - `gh pr edit <PR number> --add-reviewer "copilot-pull-request-reviewer"`
+  - If `--add-reviewer` succeeds without error, assume Copilot was added, do not verify.
 
 Do not skip reviewer assignment.
 
