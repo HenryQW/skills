@@ -38,11 +38,13 @@ Recommended shape:
   "pageFormats": {
     "markdown": [
       "https://example.com/{path}/index.md",
-      "https://example.com/{path}?mode=agent",
-      "Accept: text/markdown on supported page URLs"
+      "https://example.com/{path}?mode=agent"
     ],
     "plainText": [
       "https://example.com/{path}/llms.txt"
+    ],
+    "negotiation": [
+      "Accept: text/markdown"
     ]
   }
 }
