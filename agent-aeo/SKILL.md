@@ -114,7 +114,7 @@ The rewrite layer should:
 - detect `?mode=agent`
 - detect supported page URLs when `Accept` includes `text/markdown`
 - set `Vary: Accept` for content-negotiated responses
-- pass the original requested path in a header and or query parameter when the
+- pass the original requested path in a header and/or query parameter when the
   framework mutates URL state during rewrites
 - leave root `/llms.txt`, `/llms-full.txt`, and `/.well-known/agent.json`
   owned by their root routes
