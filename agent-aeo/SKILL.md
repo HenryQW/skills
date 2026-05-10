@@ -114,6 +114,10 @@ The rewrite layer should:
 - detect `?mode=agent`
 - detect supported page URLs when `Accept` includes `text/markdown`
 - set `Vary: Accept` for content-negotiated responses
+- resolve the canonical `path` from `requestedPath` before calling the content
+  function: strip `/index.md`, `/llms.txt` suffixes, and `?mode=agent` to get
+  the bare page path (e.g. `requestedPath: "/services/index.md"` → `path:
+  "/services"`)
 - pass the original requested path in a header and/or query parameter when the
   framework mutates URL state during rewrites
 - leave root `/llms.txt`, `/llms-full.txt`, and `/.well-known/agent.json`
