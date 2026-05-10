@@ -100,7 +100,7 @@ Use a small resolver object instead of repeating inline branches:
 
 ```ts
 type AgentRewrite = {
-  contentType?: "text/markdown" | "text/plain";
+  contentType: "text/markdown" | "text/plain";
   locale?: string;
   requestedPath: string;
   varyAccept: boolean;
