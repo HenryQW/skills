@@ -24,6 +24,126 @@ Treat the durable workflow as:
 - Do not treat flat PR comments as complete review-thread state.
 - Ignore already-resolved review threads unless the user asks to audit them.
 
+Use the command recipes below instead of inventing new `gh` calls when they fit.
+
+## Known Working `gh` Commands
+
+Set these variables before running the recipes:
+
+```bash
+OWNER="<owner>"
+REPO="<repo>"
+PR="<number>"
+BRANCH="<head-branch>"
+```
+
+Resolve current-branch PR context:
+
+```bash
+gh auth status
+gh pr view --json number,url,headRefName,baseRefName,headRepositoryOwner,headRepository
+```
+
+Fetch unresolved review threads with stable GraphQL fields:
+
+```bash
+gh api graphql \
+  -F owner="$OWNER" \
+  -F name="$REPO" \
+  -F number="$PR" \
+  -f query='
+query($owner:String!, $name:String!, $number:Int!) {
+  repository(owner:$owner, name:$name) {
+    pullRequest(number:$number) {
+      id
+      number
+      url
+      reviewThreads(first:100) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          viewerCanReply
+          viewerCanResolve
+          path
+          line
+          originalLine
+          startLine
+          originalStartLine
+          comments(first:20) {
+            nodes {
+              id
+              author { login }
+              body
+              createdAt
+              url
+            }
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+Reply to a review thread:
+
+```bash
+gh api graphql \
+  -F threadId="$THREAD_ID" \
+  -F body="$BODY" \
+  -f query='
+mutation($threadId:ID!, $body:String!) {
+  addPullRequestReviewThreadReply(input:{
+    pullRequestReviewThreadId:$threadId,
+    body:$body
+  }) {
+    comment { id url }
+  }
+}'
+```
+
+Resolve a review thread:
+
+```bash
+gh api graphql \
+  -F threadId="$THREAD_ID" \
+  -f query='
+mutation($threadId:ID!) {
+  resolveReviewThread(input:{threadId:$threadId}) {
+    thread { id isResolved }
+  }
+}'
+```
+
+Inspect PR checks and failing Actions logs:
+
+```bash
+gh pr checks "$PR" --json name,state,bucket,link,workflow,startedAt,completedAt
+gh pr checks "$PR" --required --json name,state,bucket,link,workflow
+gh run view "$RUN_ID" --json databaseId,status,conclusion,url,workflowName,jobs
+gh run view "$RUN_ID" --log-failed
+gh run view --job "$JOB_ID" --log-failed
+```
+
+Commit and push the current branch:
+
+```bash
+git status --short
+git add <intended-files>
+git commit -m "<type>(<scope>): <summary>"
+git push -u origin "$BRANCH"
+git rev-parse HEAD
+```
+
+Add or re-request Copilot review after any pushed commit:
+
+```bash
+gh pr edit "$PR" --add-reviewer "@copilot"
+```
+
+Use `--repo "$OWNER/$REPO"` on `gh pr ...` and `gh run ...` commands when the current working directory is not the target repository.
+
 ## 3) Classify Feedback
 
 For each unresolved thread or failing check, classify it as:
