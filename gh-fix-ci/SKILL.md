@@ -9,19 +9,21 @@ Use this skill when the user asks to fix GitHub PR feedback, CI failures, unreso
 
 Treat the durable workflow as:
 
-`fix actionable -> commit + push -> resolve fixed threads -> reply to non-actionable with reason -> resolve -> add or re-add Copilot reviewer if anything was committed`
+`inspect all unresolved threads -> fix actionable -> commit + explicit push -> reply directly to every selected thread -> resolve replied threads -> add or re-add Copilot reviewer if anything was committed`
 
 ## 1) Resolve PR Context
 
 - If the user provides a repository and PR number or URL, use that directly.
 - If the request is about the current branch PR, use local git context plus `gh auth status` and `gh pr view --json number,url,headRefName,baseRefName`.
 - If CLI authentication fails, ask the user to refresh `gh` auth before making GitHub writes.
+- Inspect repository instructions, PR templates, and existing commit style before choosing commit messages, PR replies, or verification scope.
 
 ## 2) Fetch Source Of Truth
 
 - Fetch thread-aware review data with GraphQL or an existing repository script that returns `reviewThreads`, `isResolved`, `isOutdated`, file anchors, line anchors, and comment bodies.
 - Fetch failing checks with `gh pr checks` and, when needed, inspect failing GitHub Actions logs before editing.
 - Do not treat flat PR comments as complete review-thread state.
+- Inspect every unresolved review thread in the selected scope before editing, replying, or resolving so code changes, rationale-only replies, and commit boundaries are chosen from the full request state.
 - Ignore already-resolved review threads unless the user asks to audit them.
 
 Use the command recipes below instead of inventing new `gh` calls when they fit.
@@ -44,21 +46,22 @@ gh auth status
 gh pr view --json number,url,headRefName,baseRefName,headRepositoryOwner,headRepository
 ```
 
-Fetch unresolved review threads with stable GraphQL fields:
+Fetch unresolved review threads with stable GraphQL fields. Use pagination or an equivalent repository helper; do not proceed from only the first page when more review threads exist.
 
 ```bash
-gh api graphql \
+gh api graphql --paginate \
   -F owner="$OWNER" \
   -F name="$REPO" \
   -F number="$PR" \
   -f query='
-query($owner:String!, $name:String!, $number:Int!) {
+query($owner:String!, $name:String!, $number:Int!, $endCursor:String) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$number) {
       id
       number
       url
-      reviewThreads(first:100) {
+      reviewThreads(first:100, after:$endCursor) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           isResolved
@@ -70,7 +73,8 @@ query($owner:String!, $name:String!, $number:Int!) {
           originalLine
           startLine
           originalStartLine
-          comments(first:20) {
+          comments(first:100) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               id
               author { login }
@@ -86,12 +90,18 @@ query($owner:String!, $name:String!, $number:Int!) {
 }'
 ```
 
+If any thread has more than 100 comments, fetch the remaining comments for that thread before classifying it.
+
 Reply to a review thread:
 
 ```bash
+BODY_FILE="$(mktemp)"
+cat > "$BODY_FILE" <<'EOF'
+<reply body>
+EOF
 gh api graphql \
   -F threadId="$THREAD_ID" \
-  -F body="$BODY" \
+  -F body=@"$BODY_FILE" \
   -f query='
 mutation($threadId:ID!, $body:String!) {
   addPullRequestReviewThreadReply(input:{
@@ -101,6 +111,7 @@ mutation($threadId:ID!, $body:String!) {
     comment { id url }
   }
 }'
+rm -f "$BODY_FILE"
 ```
 
 Resolve a review thread:
@@ -132,13 +143,18 @@ Commit and push the current branch:
 git status --short
 git add <intended-files>
 git commit -m "<type>(<scope>): <summary>"
-git push -u origin "$BRANCH"
+if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+  git push
+else
+  git push --set-upstream origin HEAD
+fi
 git rev-parse HEAD
 ```
 
 Add or re-request Copilot review after any pushed commit:
 
 ```bash
+gh pr edit "$PR" --remove-reviewer "@copilot"
 gh pr edit "$PR" --add-reviewer "@copilot"
 ```
 
@@ -167,8 +183,9 @@ If the user says to fix all feedback, proceed with all unresolved actionable ite
 If files changed:
 
 - Inspect the diff and stage only the intended files.
-- Commit with a scoped Conventional Commit message.
-- Push the branch.
+- Split unrelated fix sets into separate commits; keep each commit focused on the threads or checks it resolves.
+- Commit with scoped Conventional Commit messages.
+- Push explicitly: check upstream with `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`. If no upstream is configured, run `git push --set-upstream origin HEAD`; otherwise run `git push`.
 - Record the pushed commit SHA for later replies.
 
 Do not resolve fixed review threads before the commit is pushed unless the user explicitly directs otherwise.
@@ -180,18 +197,20 @@ Resolve threads after the pushed commit when code changed. If no files changed b
 - For each actionable thread fixed by the commit, reply with a short note that names the fix and, when useful, the commit SHA or verification run.
 - Resolve that review thread.
 - For each non-actionable thread, reply with the concrete reason it is not actionable, then resolve the thread.
+- Never resolve a selected unresolved thread without first posting a direct thread reply with either the concrete fix summary or the code-level rationale for no change.
 - For ambiguous threads that cannot be safely resolved, leave them unresolved and report exactly what is needed, unless the user's instruction explicitly says to clear them with a blocker reply.
 - Re-fetch review threads after resolving and continue until the selected thread set is closed or a real blocker remains.
 
 ## 7) Add Or Re-Add Copilot Reviewer
 
-If any commit was pushed during this workflow, add or re-add Copilot as reviewer after the push and thread updates:
+If any commit was pushed during this workflow, remove and re-add Copilot as reviewer after the push and thread updates:
 
 ```bash
-gh pr edit <PR number> --add-reviewer "copilot-pull-request-reviewer"
+gh pr edit <PR number> --remove-reviewer "@copilot"
+gh pr edit <PR number> --add-reviewer "@copilot"
 ```
 
-If the command succeeds without error, assume Copilot was added. Do not spend extra time verifying reviewer state unless the command fails or the user asks.
+If the remove command only fails because Copilot was not currently requested, continue with the add command. If the add command succeeds without error, assume Copilot was added. Do not spend extra time verifying reviewer state unless the command fails or the user asks.
 
 ## 8) Report Results
 
@@ -199,8 +218,7 @@ Final response must include:
 
 - PR URL or number.
 - Pushed commit SHA, if any.
-- Threads fixed and resolved.
-- Threads replied as non-actionable and resolved.
+- Each reviewed thread and whether it was fixed by code or resolved with rationale only.
 - Any unresolved blockers.
 - Checks or verification actually run.
 
