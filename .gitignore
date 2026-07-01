@@ -8,4 +8,6 @@ __pycache__/
 .DS_Store
 
 .sc/
-.context/
+
+# Agent local progress
+.context/progress.md
