@@ -14,9 +14,9 @@ The repository root `README.md` must include detailed skill information in a mar
 ```md
 | Name | Description | Install | Last updated (UTC) |
 |---|---|---|---|
-| `first-skill-name` | A short, plain-language description for the first skill. | `npx skills install HenryQW/skills first-skill-name -a codex -a claude-code -y` | YYYY-MM-DD HH:MM |
-| `second-skill-name` | A short, plain-language description for the second skill. | `npx skills install HenryQW/skills second-skill-name -a codex -a claude-code -y` | YYYY-MM-DD HH:MM |
-| `nth-skill-name` | A short, plain-language description for the nth skill. | `npx skills install HenryQW/skills nth-skill-name -a codex -a claude-code -y` | YYYY-MM-DD HH:MM |
+| `first-skill-name` | A short, plain-language description for the first skill. | `npx skills install HenryQW/skills first-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| `second-skill-name` | A short, plain-language description for the second skill. | `npx skills install HenryQW/skills second-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| `nth-skill-name` | A short, plain-language description for the nth skill. | `npx skills install HenryQW/skills nth-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
 ```
 
 ## Change Policy (Mandatory)
@@ -31,7 +31,7 @@ When updating skills in this repository, do not preserve backward compatibility 
 This rule applies to internal implementation APIs, not user-facing CLI or operational interfaces. CLI compatibility may be retained when required for safe rollout or existing workflows.
 
 At minimum, update the root `README.md`:
-- The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -a claude-code -y`.
+- The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -y`.
 - Any changed description(s).
 - The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
 
