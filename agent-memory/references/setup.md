@@ -5,9 +5,10 @@ Setup mode installs deterministic project plumbing. Keep edits minimal and idemp
 ## Required Inputs
 
 - repo root
-- project Obsidian `Agent/` folder, usually `${OBSIDIAN_VAULT_PATH}/projects/<Project>/.../Agent`
+- `AGENT_MEMORY_ROOT`, the markdown root for durable memory files
+- project markdown `Agent/` folder under `${AGENT_MEMORY_ROOT}/projects/<Project>/.../Agent`
 
-Ask for the Obsidian path if it cannot be inferred.
+Ask for the markdown memory path if it cannot be inferred.
 
 ## Deterministic Repo Effects
 
@@ -15,7 +16,7 @@ Ask for the Obsidian path if it cannot be inferred.
 - `.gitignore` contains `.context/progress.md`.
 - `AGENTS.md` has `## Context and precedence`.
 - `AGENTS.md` points agents to the project `Agent/Memory/index.md`.
-- `AGENTS.md` explains that `$agent-memory` distills progress into real memories only when durable context exists.
+- `AGENTS.md` explains that `$agent-memory` distills progress into real memory notes only when durable context exists.
 
 Use `references/agents.md` as the canonical source for deterministic `AGENTS.md` snippets. The setup script should render those snippets instead of retyping them.
 

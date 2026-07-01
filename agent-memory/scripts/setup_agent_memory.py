@@ -50,10 +50,12 @@ def main() -> int:
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
+    memory_root = parse_memory_root(parser)
     agent_path = Path(os.path.expandvars(args.agent_path)).resolve()
+    require_under_memory_root(parser, agent_path, memory_root)
     instruction_path = project_root / args.instruction_file
 
-    memory_index_ref = obsidian_ref(agent_path / "Memory" / "index.md")
+    memory_index_ref = memory_ref(agent_path / "Memory" / "index.md")
 
     ensure_progress(project_root)
     ensure_gitignore(project_root)
@@ -64,15 +66,23 @@ def main() -> int:
     return 0
 
 
-def obsidian_ref(path: Path) -> str:
-    vault = os.environ.get("OBSIDIAN_VAULT_PATH")
-    if vault:
-        try:
-            rel = path.resolve().relative_to(Path(vault).resolve())
-            return "${OBSIDIAN_VAULT_PATH}/" + rel.as_posix()
-        except ValueError:
-            pass
-    return str(path)
+def parse_memory_root(parser: argparse.ArgumentParser) -> Path:
+    root = os.environ.get("AGENT_MEMORY_ROOT")
+    if not root:
+        parser.error("set AGENT_MEMORY_ROOT to the markdown root before running setup")
+    return Path(root).expanduser().resolve()
+
+
+def require_under_memory_root(parser: argparse.ArgumentParser, path: Path, root: Path) -> None:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        parser.error("--agent-path must be under AGENT_MEMORY_ROOT")
+
+
+def memory_ref(path: Path) -> str:
+    rel = path.resolve().relative_to(Path(os.environ["AGENT_MEMORY_ROOT"]).expanduser().resolve())
+    return "${AGENT_MEMORY_ROOT}/" + rel.as_posix()
 
 
 def ensure_progress(project_root: Path) -> None:
@@ -107,8 +117,8 @@ def ensure_agents(path: Path, memory_index_ref: str, agent_path: Path) -> None:
     text = ensure_section(text, "Context and precedence")
     text = ensure_section(text, "Execution")
 
-    snippets = load_agents_snippets(memory_index_ref, obsidian_ref(agent_path / "Memory"))
-    text = remove_generated_distill_bullet(text, snippets["Execution item"])
+    snippets = load_agents_snippets(memory_index_ref, memory_ref(agent_path / "Memory"))
+    text = remove_generated_memory_lines(text)
     context_line = snippets["Context and precedence item"]
     text = ensure_before_project_work_item(text, context_line)
 
@@ -140,16 +150,25 @@ def extract_fenced_block(text: str, heading: str) -> str:
     return text[fence_start:fence_end]
 
 
-def remove_generated_distill_bullet(text: str, bullet: str) -> str:
+def remove_generated_memory_lines(text: str) -> str:
     lines = text.splitlines()
     execution_start = find_section_start(lines, "Execution")
-    if execution_start is None:
-        return text
-    execution_end = find_next_section(lines, execution_start)
+    execution_end = find_next_section(lines, execution_start) if execution_start is not None else -1
+    context_start = find_section_start(lines, "Context and precedence")
+    context_end = find_next_section(lines, context_start) if context_start is not None else -1
     kept = []
     for i, line in enumerate(lines):
-        in_execution = execution_start < i < execution_end
-        if not (in_execution and line == bullet):
+        in_execution = execution_start is not None and execution_start < i < execution_end
+        in_context = context_start is not None and context_start < i < context_end
+        generated_execution = (
+            in_execution
+            and line.startswith("- When `$agent-memory` is invoked or progress distillation is requested, ")
+            and ".context/progress.md" in line
+            and "future agents would otherwise rediscover" in line
+            and "Skip routine progress" in line
+        )
+        generated_context = in_context and line.strip().startswith("- `") and "/Agent/Memory/index.md`" in line
+        if not (generated_execution or generated_context):
             kept.append(line)
     return "\n".join(kept) + "\n"
 
