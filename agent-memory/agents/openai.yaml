@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Memory"
+  short_description: "Set up and distill project agent memory"
+  default_prompt: "Use $agent-memory to set up or distill .context/progress.md into project Agent memory."
