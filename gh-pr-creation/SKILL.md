@@ -1,6 +1,6 @@
 ---
 name: gh-pr-creation
-description: Create a new GitHub pull request end-to-end when the user asks to open or create a PR. Use when Codex must turn local uncommitted work into a reviewable PR by making multiple scoped commits, running and passing all repository quality gates, renaming the branch so it reflects the changes, creating a Conventional Commits PR title, writing a PR description with summary/rationale/migration steps, and assigning Copilot as reviewer.
+description: Create a new GitHub pull request end-to-end when the user asks to open or create a PR. Use when Codex must turn local uncommitted work into a reviewable PR by making multiple scoped commits, running and passing all repository quality gates, renaming the branch so it reflects the changes, creating a Conventional Commits PR title, and writing a PR description with summary/rationale/migration steps.
 ---
 
 # GitHub PR Creation
@@ -41,16 +41,7 @@ Follow this workflow every time the user asks to create a new PR.
   - Never use `\n` for newlines in the description, always use actual newlines.
 - Create the PR using `gh pr create` with explicit title and body.
 
-## 5) Assign Copilot reviewer (required)
-
-- After PR creation, resolve the PR number.
-- MUST add Copilot reviewer with:
-  - `gh pr edit <PR number> --add-reviewer "copilot-pull-request-reviewer"`
-  - If `--add-reviewer` succeeds without error, assume Copilot was added, do not verify.
-
-Do not skip reviewer assignment.
-
-## 6) Report completion details
+## 5) Report completion details
 
 - Provide PR URL.
 - List commits included.

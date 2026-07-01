@@ -1,6 +1,6 @@
 ---
 name: gh-fix-ci
-description: Fix actionable GitHub PR review comments or CI feedback end-to-end. Use when Codex must inspect unresolved review threads or failing checks, implement actionable fixes, commit and push those fixes, resolve fixed threads, reply and resolve non-actionable threads, and add or re-add Copilot as reviewer after any pushed commit.
+description: Fix actionable GitHub PR review comments or CI feedback end-to-end. Use when Codex must inspect unresolved review threads or failing checks, implement actionable fixes, commit and push those fixes, resolve fixed threads, and reply to non-actionable threads.
 ---
 
 # GitHub Fix CI And Review Comments
@@ -9,7 +9,7 @@ Use this skill when the user asks to fix GitHub PR feedback, CI failures, unreso
 
 Treat the durable workflow as:
 
-`inspect all unresolved threads -> fix actionable -> commit + explicit push -> reply directly to every selected thread -> resolve replied threads -> add or re-add Copilot reviewer if anything was committed`
+`inspect all unresolved threads -> fix actionable -> commit + explicit push -> reply directly to every selected thread -> resolve replied threads`
 
 ## 1) Resolve PR Context
 
@@ -151,13 +151,6 @@ fi
 git rev-parse HEAD
 ```
 
-Add or re-request Copilot review after any pushed commit:
-
-```bash
-gh pr edit "$PR" --remove-reviewer "@copilot"
-gh pr edit "$PR" --add-reviewer "@copilot"
-```
-
 Use `--repo "$OWNER/$REPO"` on `gh pr ...` and `gh run ...` commands when the current working directory is not the target repository.
 
 ## 3) Classify Feedback
@@ -201,18 +194,7 @@ Resolve threads after the pushed commit when code changed. If no files changed b
 - For ambiguous threads that cannot be safely resolved, leave them unresolved and report exactly what is needed, unless the user's instruction explicitly says to clear them with a blocker reply.
 - Re-fetch review threads after resolving and continue until the selected thread set is closed or a real blocker remains.
 
-## 7) Add Or Re-Add Copilot Reviewer
-
-If any commit was pushed during this workflow, remove and re-add Copilot as reviewer after the push and thread updates:
-
-```bash
-gh pr edit <PR number> --remove-reviewer "@copilot"
-gh pr edit <PR number> --add-reviewer "@copilot"
-```
-
-If the remove command only fails because Copilot was not currently requested, continue with the add command. If the add command succeeds without error, assume Copilot was added. Do not spend extra time verifying reviewer state unless the command fails or the user asks.
-
-## 8) Report Results
+## 7) Report Results
 
 Final response must include:
 
@@ -224,4 +206,4 @@ Final response must include:
 
 ## Write Policy
 
-This skill is intentionally write-capable. When it triggers, the default expectation is to commit, push, reply, resolve, and refresh Copilot reviewer when those actions are needed to complete the PR cleanup. Stop only when GitHub authentication, missing PR context, conflicting requirements, or unsafe ambiguity prevents correct action.
+This skill is intentionally write-capable. When it triggers, the default expectation is to commit, push, reply, and resolve when those actions are needed to complete the PR cleanup. Stop only when GitHub authentication, missing PR context, conflicting requirements, or unsafe ambiguity prevents correct action.
