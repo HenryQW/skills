@@ -148,7 +148,7 @@ Retrieve or resume that review session with:
 greptile review show <review_id> --agent
 ```
 
-If the review is still running, wait and run `greptile review show <review_id> --agent` again. Do not start another review just to poll or re-read results.
+Greptile reviews are slow. If the review is still running, wait 60 seconds and run `greptile review show <review_id> --agent` again. Repeat until the review completes. Do not start another review just to poll or re-read results.
 
 Classify findings from the full `greptile review show <review_id> --agent` output.
 
