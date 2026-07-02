@@ -1,26 +1,38 @@
 ---
 name: fix-ci-failures
-description: Take a GitHub or GitLab review request from failing CI to green or clearly improved CI by inspecting failures, applying minimal fixes, verifying narrowly, committing, and pushing.
+description: Take a GitHub review request from failing CI to green or clearly improved CI using gh, minimal fixes, narrow verification, focused commits, and explicit pushes.
 ---
 
 # Fix CI Failures
 
-Use when a review request has failing CI and the user wants it fixed, improved, committed, and pushed.
+Use when a GitHub review request has failing CI and the user wants it fixed, improved, committed, and pushed.
 
 ## Checklist
 
 1. Inspect repository state.
    - Run `git status --short --branch`.
    - Identify the current branch.
-   - Detect the forge from `git remote -v`.
-   - Use `gh` for GitHub and `glab` for GitLab.
-   - Inspect the current review request before choosing commit messages, titles, bodies, or replies.
+   - Confirm GitHub remote context with `git remote -v`.
+   - Use `gh`; if `gh auth status` fails, stop for credentials.
+   - Inspect the current PR before choosing commit messages, titles, bodies, or replies.
+
+```bash
+gh auth status
+gh pr view --json number,url,headRefName,baseRefName,title,body,reviewDecision
+```
 
 2. Inspect failing CI before editing.
-   - GitHub: start with `gh pr checks`; use `gh run view <run-id>` and `gh run view <run-id> --log-failed` when logs are needed.
-   - GitLab: start with `glab ci status`; use `glab pipeline view` and job logs when logs are needed.
+   - Start with PR checks; inspect the failed run logs before editing.
    - Identify the failing job, failing step, and concrete error.
    - Do not edit code before identifying the likely root cause.
+
+```bash
+PR="<number>"
+gh pr checks "$PR" --json name,state,bucket,link,workflow
+gh run view "<run-id>" --json databaseId,status,conclusion,url,workflowName,jobs
+gh run view "<run-id>" --log-failed
+gh run view --job "<job-id>" --log-failed
+```
 
 3. Determine the minimal fix.
    - Map the error to the smallest code, test, dependency, config, or CI change that addresses it.
@@ -47,11 +59,34 @@ Use when a review request has failing CI and the user wants it fixed, improved, 
    - If it fails, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
 
-7. Use noninteractive forge operations.
+7. Use noninteractive GitHub operations.
    - Do not open editors.
-   - For multi-line review request content, write the body to a temp file or heredoc and pass that file to `gh` or `glab`.
+   - For multi-line PR comments or review bodies, write a temp file or heredoc and pass it to `gh`.
    - If a command fails, resolve the issue and retry when reasonable.
    - Stop only for missing credentials, missing permissions, or unsafe repository state.
+
+```bash
+BODY_FILE="$(mktemp)"
+cat > "$BODY_FILE" <<'EOF'
+<body>
+EOF
+gh pr comment "$PR" --body-file "$BODY_FILE"
+rm -f "$BODY_FILE"
+```
+
+## Commit And Push Example
+
+```bash
+git diff
+git add <intended-files>
+git commit -m "fix(scope): summary"
+git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
+# If the upstream command failed:
+git push --set-upstream origin HEAD
+# Otherwise:
+git push
+git rev-parse --short HEAD
+```
 
 8. Final response.
    - Include failing check.
