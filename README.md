@@ -11,4 +11,5 @@ Repository of custom skills.
 | `greptile-loop` | Runs compact Greptile review loops on the current branch and fixes actionable findings. | `npx skills install HenryQW/skills greptile-loop -a codex -y` | 2026-07-02 17:34 |
 | `grill-to-issues` | Turns approved `$grill-with-docs` specs into dependency-aware GitHub child issues plus an implementation tracker issue and exactly one `final_check` child. | `npx skills install HenryQW/skills grill-to-issues -a codex -y` | 2026-07-01 20:45 |
 | `issue-to-code` | Implements a GitHub issue into a clean feature branch, runs Greptile review loops, commits, and returns only the branch name. | `npx skills install HenryQW/skills issue-to-code -a codex -y` | 2026-07-02 17:03 |
+| `review-repo` | Reviews a repository for evidence-backed maintainability, DRY, SOLID, testing, and architecture improvements without editing code. | `npx skills install HenryQW/skills review-repo -a codex -y` | 2026-07-02 17:51 |
 | `triangulate` | Runs structured multi-agent evaluation workflows that generate, challenge, and adjudicate evidence-backed findings. | `npx skills install HenryQW/skills triangulate -a codex -y` | 2026-04-03 12:40 |
