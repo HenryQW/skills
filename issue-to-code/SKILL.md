@@ -12,6 +12,11 @@ It does not run Greptile review.
 It does not push.
 It does not create a PR.
 
+## Bundled resources
+
+- Use `scripts/branch_name.py` to generate the issue branch name when preparing the branch.
+- Read `references/implementation-checklist.md` when deciding scope, validation, or staging.
+
 ## Inputs
 
 - `issue_number` is required.
@@ -72,21 +77,21 @@ git checkout <base_branch>
 git pull origin <base_branch>
 ```
 
-Create a branch.
-
-Use this format when branch_slug is provided:
+Create the branch name with the helper:
 
 ```bash
-git checkout -b issue-<issue_number>-<branch_slug>
+python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug]
 ```
 
-Use this format when branch_slug is missing:
+Then create the branch:
 
 ```bash
-git checkout -b issue-<issue_number>
+git checkout -b <branch_name>
 ```
 
 ### 4. Inspect the repository before editing
+
+When scope is unclear, read `references/implementation-checklist.md`.
 
 Identify the smallest relevant files or modules.
 
@@ -128,6 +133,8 @@ Check:
 Stop if the diff contains unrelated changes.
 
 ### 7. Run relevant local validation
+
+Use `references/implementation-checklist.md` for validation discovery.
 
 Run the smallest relevant tests, type checks, linters, or build commands that are discoverable from the repository.
 

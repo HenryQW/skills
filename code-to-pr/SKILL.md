@@ -9,6 +9,11 @@ description: Use this skill when asked to run Greptile review on the current iss
 Run Greptile review loops on the current branch, fix actionable findings, push the branch, and open a PR.
 This skill assumes implementation work already exists on a non-base branch.
 
+## Bundled resources
+
+- Read `references/greptile-review.md` when classifying findings or deciding whether to stop.
+- Use `scripts/pr_body.py` to draft a concise PR body when no repository PR template exists.
+
 ## Inputs
 
 - `base_branch` is required.
@@ -102,6 +107,8 @@ If Greptile output is empty and the command succeeded, treat it as no actionable
 ### 3.2 Classify findings
 
 For each finding, classify it as actionable or non-actionable using the actionability rule.
+
+Read `references/greptile-review.md` when a finding is borderline.
 
 Do not fix non-actionable findings.
 
@@ -216,6 +223,12 @@ If no PR template exists, create a concise PR body with these sections:
 
 ## Scope
 - <notable exclusions or constraints>
+```
+
+You may draft this body with:
+
+```bash
+python3 <skill_dir>/scripts/pr_body.py <base_branch> [--issue-number <issue_number>] [--issue-link closes|refs] [--test <command-or-result>]
 ```
 
 If issue_number is provided and the implementation fully resolves the issue, include:
