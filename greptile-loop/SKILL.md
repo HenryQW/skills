@@ -11,7 +11,7 @@ Use Greptile as a branch-diff review gate. Fix only deterministic, in-scope find
 
 ## Inputs
 
-- `max_iterations` is optional and defaults to `3`.
+- `max_iterations` is optional and defaults to `5`.
 
 ## Rules
 

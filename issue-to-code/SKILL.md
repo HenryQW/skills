@@ -22,7 +22,7 @@ Stop after committing. Do not push or open a PR.
 - `issue_number` is required.
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
-- `max_iterations` is optional and defaults to `3`.
+- `max_iterations` is optional and defaults to `5`.
 
 ## Scope and boundaries
 

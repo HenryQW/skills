@@ -9,8 +9,8 @@ Create a PR from the current branch.
 
 ## Inputs
 
-- `base` is required.
-- `issue_number` is optional.
+- `base_branch` is optional and defaults to the repository default branch.
+- `issue_number` is optional and can be derived from the branch name or PR title.
 
 ## Procedure
 
@@ -29,20 +29,23 @@ Create a PR from the current branch.
 7. Draft the PR title and body from the actual diff.
 8. Write multi-line PR body content to a temp file or heredoc.
 9. Use `gh` for GitHub or `glab` for GitLab.
-10. Create the PR against `base`.
+10. Create the PR against `base_branch`.
 11. Compact `.context/progress.md`.
 
 Always use this PR body template:
 
 ```markdown
 ## Summary
+
 - <2 to 4 bullets covering the main changes>
 
 ## Testing
+
 - <commands actually run>
 - <or "Not run (not requested)">
 
 ## Close Issue
+
 - Closes #<issue_number>
 ```
 
