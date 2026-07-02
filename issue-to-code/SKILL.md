@@ -1,6 +1,6 @@
 ---
 name: issue-to-code
-description: Use this skill when asked to implement a GitHub issue into a clean feature branch. It reads the issue, creates an issue branch, applies a minimal implementation, runs Greptile review loops, commits the result, and returns only the branch name. Do not use this skill for PR creation.
+description: Use this skill when asked to implement a GitHub issue into a clean feature branch. It reads the issue, creates an issue branch, applies a minimal implementation, runs Greptile review loops, commits the result, and hands off to gh-pr-creation after Greptile returns no actionable findings.
 ---
 
 # issue-to-code
@@ -9,7 +9,7 @@ description: Use this skill when asked to implement a GitHub issue into a clean 
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
 Run Greptile review loops on that branch and fix actionable findings before returning.
-Stop after committing. Do not push or open a PR.
+After the latest completed Greptile review returns no actionable findings, hand off to gh-pr-creation on the current branch.
 
 ## Bundled resources
 
@@ -34,7 +34,7 @@ Stop after committing. Do not push or open a PR.
 - Do not modify `.context/` except local uncommitted Greptile review IDs in `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
-- Return only the branch name on success.
+- Return only the PR URL on success.
 
 Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
@@ -173,7 +173,7 @@ Each iteration must resolve at least one actionable finding or reduce the action
 
 Use the latest completed Greptile review session as the final gate only when no commit happened after it. Stop if actionable findings remain after the iteration budget.
 
-### 10. Final verification
+### 10. Final handoff
 
 Run:
 
@@ -183,11 +183,13 @@ git log --oneline -5
 git branch --show-current
 ```
 
-No staged or tracked code changes should remain. `.context/progress.md` may remain local and uncommitted for review IDs.
+No staged or tracked code changes should remain before gh-pr-creation runs. `.context/progress.md` may remain local and uncommitted for review IDs.
+
+Then run `gh-pr-creation` on the current branch and return only the PR URL.
 
 ## Output
 
-Return only the current branch name.
+Return only the PR URL.
 
 Do not include explanations.
 
