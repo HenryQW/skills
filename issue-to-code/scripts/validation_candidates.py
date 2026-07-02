@@ -56,15 +56,42 @@ def changed_files(base: str | None) -> list[str]:
     return sorted(files)
 
 
-def package_scripts() -> list[str]:
-    path = Path("package.json")
-    if not path.exists():
-        return []
-    scripts = json.loads(path.read_text()).get("scripts", {})
+def package_manager(directory: Path) -> str:
+    for current in (directory, *directory.parents):
+        if (current / "pnpm-lock.yaml").exists():
+            return "pnpm"
+        if (current / "yarn.lock").exists():
+            return "yarn"
+        if (current / "bun.lock").exists() or (current / "bun.lockb").exists():
+            return "bun"
+    return "npm"
+
+
+def package_jsons(files: list[str]) -> list[Path]:
+    paths = set()
+    if Path("package.json").exists():
+        paths.add(Path("package.json"))
+    for name in files:
+        path = Path(name)
+        start = path if path.is_dir() else path.parent
+        for current in (start, *start.parents):
+            candidate = current / "package.json"
+            if candidate.exists():
+                paths.add(candidate)
+    return sorted(paths, key=lambda item: len(item.parts), reverse=True)
+
+
+def package_scripts(files: list[str]) -> list[str]:
     commands = []
-    for name in ("test", "typecheck", "lint", "build"):
-        if name in scripts:
-            commands.append(f"npm run {name}")
+    for path in package_jsons(files):
+        scripts = json.loads(path.read_text()).get("scripts", {})
+        directory = path.parent
+        prefix = "" if directory == Path(".") else f"(cd {shlex.quote(str(directory))} && "
+        suffix = "" if directory == Path(".") else ")"
+        manager = package_manager(directory)
+        for name in ("test", "typecheck", "lint", "build"):
+            if name in scripts:
+                commands.append(f"{prefix}{manager} run {name}{suffix}")
     return commands
 
 
@@ -89,7 +116,7 @@ def main() -> int:
 
     files = changed_files(args.base)
     commands = []
-    commands.extend(package_scripts())
+    commands.extend(package_scripts(files))
     commands.extend(python_commands(files))
     commands.extend(make_commands())
 

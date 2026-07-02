@@ -57,7 +57,7 @@ Run:
 python3 <skill_dir>/scripts/issue_snapshot.py <issue_number>
 ```
 
-If the snapshot shows truncation or omits context needed to decide scope, rerun it with larger limits before implementing.
+If truncation or omitted comments hide context needed to decide scope, rerun it with larger limits before implementing.
 
 Use the issue requirements as the implementation scope. Do not invent product behavior.
 
@@ -67,13 +67,11 @@ Run:
 
 ```bash
 git fetch origin
-git checkout <base_branch>
-git pull origin <base_branch>
 ```
 
 ```bash
 branch_name=$(python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug])
-git checkout -b "$branch_name"
+git checkout -b "$branch_name" "origin/<base_branch>"
 ```
 
 ### 4. Inspect the repository before editing

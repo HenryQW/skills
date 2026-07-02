@@ -5,7 +5,7 @@ Use this reference when deciding scope, validation, and staging for `issue-to-co
 ## Scope source
 
 - Treat `scripts/issue_snapshot.py <issue_number>` as the compact requirements source.
-- If the snapshot shows truncation or omits needed context, rerun it with larger limits before implementing.
+- If truncation or omitted comments hide context needed to decide scope, rerun it with larger limits before implementing.
 - Extract explicit requirements, acceptance criteria, constraints, named files, named modules, and named behavior.
 - Stop when the issue lacks an actionable implementation request.
 - Stop when a product decision is required.

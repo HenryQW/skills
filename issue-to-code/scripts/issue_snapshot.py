@@ -55,9 +55,13 @@ def main() -> int:
     print("\n## Body")
     print(clip(issue.get("body"), args.body_chars) or "[empty]")
 
-    comments = (issue.get("comments") or [])[-args.max_comments :]
+    all_comments = issue.get("comments") or []
+    omitted = max(0, len(all_comments) - args.max_comments)
+    comments = all_comments[-args.max_comments :]
     if comments:
         print("\n## Comments")
+        if omitted:
+            print(f"\n[omitted {omitted} older comment{'s' if omitted != 1 else ''}]")
     for comment in comments:
         author = (comment.get("author") or {}).get("login", "unknown")
         created = comment.get("createdAt", "")

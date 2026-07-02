@@ -124,7 +124,9 @@ Each iteration must resolve at least one actionable finding or reduce the action
 
 ### 5. Final review gate
 
-Run Greptile one final time:
+If the most recent Greptile run happened after the last review-fix commit and had no actionable findings, use that result as the final gate.
+
+Otherwise, run Greptile one final time:
 
 ```bash
 greptile review --json --no-color
@@ -154,13 +156,15 @@ If no PR template exists, draft a body with:
 python3 <skill_dir>/scripts/pr_body.py <base_branch> [--issue-number <issue_number>] [--issue-link closes|refs] [--test <command-or-result>] [--body-file <path>]
 ```
 
-If issue_number is provided and the implementation fully resolves the issue, include:
+Default to `Refs` when issue_number is provided.
+
+Use `Closes` only when the issue has been inspected and the branch fully resolves it:
 
 ```text
 Closes #<issue_number>
 ```
 
-If the branch only partially addresses the issue, include:
+Otherwise include:
 
 ```text
 Refs #<issue_number>
@@ -176,7 +180,12 @@ Fix #<issue_number>
 
 or a short behavior-focused title when more descriptive.
 
-Create the PR with gh pr create.
+Create the PR non-interactively:
+
+```bash
+current_branch=$(git branch --show-current)
+gh pr create --base <base_branch> --head "$current_branch" --title "<title>" --body-file <body_file>
+```
 
 Use --draft only when draft_pr is true.
 
