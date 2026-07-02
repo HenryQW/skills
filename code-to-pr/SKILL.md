@@ -12,7 +12,7 @@ Assume implementation work already exists.
 ## Bundled resources
 
 - `scripts/diff_guard.py`: forbidden-path guard.
-- `scripts/greptile_compact.py`: compact Greptile JSON output.
+- `scripts/greptile_compact.py`: compact Greptile review output.
 - `scripts/validation_candidates.py`: validation command suggestions.
 - `scripts/pr_body.py`: fallback PR body generation.
 - `references/greptile-review.md`: actionability and fix rules.
@@ -75,16 +75,26 @@ Use this diff as the review scope. Fixes must stay inside it unless a directly n
 
 Repeat up to max_iterations. Default max_iterations is 3.
 
-Run exactly:
+Start one Greptile review session:
 
 ```bash
 greptile review --json --no-color
 ```
 
-If the output is too noisy to classify, rerun the same command through the compact helper:
+Record the review ID returned by Greptile. Stop if no review ID is returned.
+
+Retrieve or resume that review session with:
 
 ```bash
-greptile review --json --no-color | python3 <skill_dir>/scripts/greptile_compact.py
+greptile review show <review_id>
+```
+
+If the review is still running, wait and run `greptile review show <review_id>` again. Do not start another review just to poll or re-read results.
+
+If the retrieved output is too noisy to classify, compact the same review session:
+
+```bash
+greptile review show <review_id> | python3 <skill_dir>/scripts/greptile_compact.py
 ```
 
 If Greptile fails, stop. If no actionable findings remain, exit the loop.
@@ -122,15 +132,19 @@ git commit -m "fix(api): handle missing review edge case"
 
 Each iteration must resolve at least one actionable finding or reduce the actionable finding set.
 
+After committing review fixes, start a new Greptile review session for the changed branch diff.
+
 ### 5. Final review gate
 
-If the most recent Greptile run happened after the last review-fix commit and had no actionable findings, use that result as the final gate.
+If the most recent completed Greptile review session happened after the last review-fix commit and had no actionable findings, use that review ID as the final gate.
 
-Otherwise, run Greptile one final time:
+Otherwise, start one final review session:
 
 ```bash
 greptile review --json --no-color
 ```
+
+Retrieve it with `greptile review show <review_id>` until it completes.
 
 Open a PR only if no actionable findings remain.
 

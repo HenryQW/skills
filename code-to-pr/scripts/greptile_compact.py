@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compact Greptile JSON without assuming a fixed schema."""
+"""Compact Greptile review output without assuming a fixed schema."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def main() -> int:
         data = json.loads(raw)
     except json.JSONDecodeError:
         print(raw[: args.limit])
-        return 2
+        return 0
 
     findings = walk(data)
     if not findings:

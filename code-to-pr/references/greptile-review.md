@@ -5,8 +5,11 @@ Use this reference when classifying Greptile findings and preparing the PR.
 ## Scope source
 
 - Treat `git diff <base_branch>...HEAD` as the implementation scope.
-- Treat Greptile output as the only review signal for this skill.
-- Use `scripts/greptile_compact.py` when raw Greptile JSON is too noisy.
+- Treat Greptile review sessions as the only review signal for this skill.
+- `greptile review --json --no-color` starts a long-running review session and returns a review ID.
+- Use `greptile review show <review_id>` to retrieve, poll, or resume that review session.
+- Do not start a new review session just to re-read or compact an existing review.
+- Use `scripts/greptile_compact.py` when retrieved review output is too noisy.
 - Fixes should stay inside files already visible in the branch diff unless a directly necessary adjacent file is required.
 - Do not use issue text to expand scope during this skill. Issue text only helps decide whether the branch fully resolves the issue for `Closes` vs `Refs`.
 
@@ -29,6 +32,8 @@ Stop instead of guessing when Greptile identifies a real risk but the correct be
 - If a finding repeats after a reasonable targeted fix, stop instead of cycling.
 - If a finding becomes non-actionable after inspection, leave it unfixed and continue only if no actionable findings remain.
 - Each committed fix iteration must reduce the actionable finding set.
+- After committing review fixes, start a new review session and classify that new review.
+- Reuse the latest completed review ID as the final gate only when no commit happened after it.
 
 ## Fix discipline
 
