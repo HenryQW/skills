@@ -7,6 +7,11 @@ These skills are meant for AI agents to execute, not for human readers. Keep ins
 
 - Keep each skill in its own subfolder with its instruction file(s) and related assets.
 
+## Skill Quality
+
+- When creating or updating skills, keep instructions compact, accurate, stable, and token-efficient.
+- Prefer durable operational rules over verbose narrative, examples, or implementation details that agents can infer from the repository.
+
 ## Root README Requirement
 
 The repository root `README.md` must include detailed skill information in a markdown table.
