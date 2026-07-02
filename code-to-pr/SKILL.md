@@ -13,9 +13,7 @@ Assume implementation work already exists.
 
 - `scripts/diff_guard.py`: forbidden-path guard.
 - `scripts/greptile_compact.py`: compact Greptile review output.
-- `scripts/validation_candidates.py`: validation command suggestions.
 - `scripts/pr_body.py`: fallback PR body generation.
-- `references/greptile-review.md`: actionability and fix rules.
 
 ## Inputs
 
@@ -24,12 +22,13 @@ Assume implementation work already exists.
 - `max_iterations` is optional and defaults to `3`.
 - `draft_pr` is optional and defaults to `false`.
 
-## Hard boundaries
+## Scope and boundaries
 
 - Do not run on the base branch.
 - Greptile review sessions are the only review signal for this skill.
-- Fix only actionable Greptile findings.
-- Only modify files related to actionable findings.
+- Treat `git diff <base_branch>...HEAD` as the implementation scope.
+- Fix only actionable Greptile findings in the branch diff.
+- Do not use issue text to expand scope; use it only for `Closes` vs `Refs`.
 - Do not expand product scope.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless Greptile directly identifies an issue in those files and the fix is deterministic.
@@ -39,7 +38,9 @@ Assume implementation work already exists.
 - Open a PR only when no actionable Greptile findings remain.
 - Return only the PR URL on success.
 
-Read `references/greptile-review.md` before classifying findings.
+A finding is actionable only when it refers to code visible in the branch diff, the fix is deterministic, the fix does not require a product decision, the fix does not expand issue scope, and the fix can be made in the referenced file or a directly necessary adjacent file.
+
+Ignore findings that request clarification, broad cleanup, optional improvements, or behavior beyond the issue. Stop when a real risk requires a product decision or when a finding repeats after a reasonable targeted fix.
 
 ## Procedure
 
@@ -104,8 +105,6 @@ Classify findings from the full `greptile review show <review_id>` output. Do no
 
 If Greptile fails, stop. If no actionable findings remain, exit the loop.
 
-Classify findings with `references/greptile-review.md`. Ignore non-actionable findings.
-
 Apply only the smallest deterministic fixes for actionable findings.
 
 ### 4. Inspect and validate each fix
@@ -118,10 +117,9 @@ git status --short
 git diff --stat
 git diff
 python3 <skill_dir>/scripts/diff_guard.py --base <base_branch> --allow .context/progress.md
-python3 <skill_dir>/scripts/validation_candidates.py --base <base_branch>
 ```
 
-Run the smallest relevant suggested validation command.
+Run the smallest relevant validation command discoverable from nearby tests, `package.json`, `pyproject.toml`, `tox.ini`, `noxfile.py`, `pytest.ini`, or `Makefile`. If no command is obvious, continue without inventing tooling.
 
 Stage explicit inspected paths only:
 

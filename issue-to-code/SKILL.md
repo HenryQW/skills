@@ -14,8 +14,6 @@ Stop after committing. Do not push, open a PR, or run Greptile.
 - `scripts/issue_snapshot.py`: compact issue text and comments.
 - `scripts/branch_name.py`: deterministic branch names.
 - `scripts/diff_guard.py`: forbidden-path guard.
-- `scripts/validation_candidates.py`: validation command suggestions.
-- `references/implementation-checklist.md`: scope, validation, and staging rules.
 
 ## Inputs
 
@@ -23,7 +21,7 @@ Stop after committing. Do not push, open a PR, or run Greptile.
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
 
-## Hard boundaries
+## Scope and boundaries
 
 - Only modify files required by the issue.
 - Do not perform unrelated refactors.
@@ -31,6 +29,8 @@ Stop after committing. Do not push, open a PR, or run Greptile.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the branch name on success.
+
+Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
 ## Procedure
 
@@ -56,7 +56,7 @@ python3 <skill_dir>/scripts/issue_snapshot.py <issue_number>
 
 If truncation or omitted comments hide context needed to decide scope, rerun it with larger limits before implementing.
 
-Use the issue requirements as the implementation scope. Do not invent product behavior.
+Extract explicit requirements, acceptance criteria, constraints, named files, named modules, and named behavior. Use that as the implementation scope. Do not invent product behavior.
 
 ### 3. Prepare the branch
 
@@ -79,9 +79,7 @@ git checkout -b "$branch_name" "origin/$base_branch"
 
 ### 4. Inspect the repository before editing
 
-Read `references/implementation-checklist.md`.
-
-Identify the smallest relevant files or modules. Prefer existing patterns. Avoid new dependencies unless the issue requires them.
+Identify the smallest relevant files or modules with `rg` or `rg --files`. Prefer existing patterns, tests, helpers, and conventions. Avoid new dependencies unless the issue requires them.
 
 ### 5. Implement
 
@@ -104,13 +102,7 @@ Every changed file and line must trace to the issue. Stop if the diff contains u
 
 ### 7. Run relevant local validation
 
-Run:
-
-```bash
-python3 <skill_dir>/scripts/validation_candidates.py
-```
-
-Run the smallest relevant suggested command. If none is obvious, continue without inventing tooling.
+Run the smallest relevant validation command discoverable from nearby tests, `package.json`, `pyproject.toml`, `tox.ini`, `noxfile.py`, `pytest.ini`, or `Makefile`. If no command is obvious, continue without inventing tooling.
 
 ### 8. Commit
 
