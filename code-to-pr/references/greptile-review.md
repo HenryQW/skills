@@ -8,8 +8,10 @@ Use this reference when classifying Greptile findings and preparing the PR.
 - Treat Greptile review sessions as the only review signal for this skill.
 - `greptile review --json --no-color` starts a long-running review session and returns a review ID.
 - Use `greptile review show <review_id>` to retrieve, poll, or resume that review session.
+- Save each review ID locally in `.context/progress.md`; keep that file uncommitted.
 - Do not start a new review session just to re-read or compact an existing review.
-- Use `scripts/greptile_compact.py` when retrieved review output is too noisy.
+- Use `scripts/greptile_compact.py` only to navigate noisy review output.
+- Classify findings from the full `greptile review show <review_id>` output. Do not treat compacted output as authoritative.
 - Fixes should stay inside files already visible in the branch diff unless a directly necessary adjacent file is required.
 - Do not use issue text to expand scope during this skill. Issue text only helps decide whether the branch fully resolves the issue for `Closes` vs `Refs`.
 
@@ -41,8 +43,27 @@ Stop instead of guessing when Greptile identifies a real risk but the correct be
 - Prefer local edits in referenced files.
 - Do not introduce new abstractions unless required to fix the finding.
 - Do not add dependencies unless the dependency is already used elsewhere and no smaller local fix exists.
-- Do not touch secrets, env files, generated files, lockfiles, `.context/`, `.agents/`, or infrastructure files unless Greptile directly identifies a deterministic issue in that file.
-- Run `scripts/diff_guard.py --base <base_branch>` before staging.
+- Do not touch secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless Greptile directly identifies a deterministic issue in that file.
+- Do not touch `.context/` except `.context/progress.md` for local review IDs.
+- Run `scripts/diff_guard.py --base <base_branch> --allow .context/progress.md` before staging.
+- If Greptile directly identifies a deterministic issue in a blocked path, verify the finding, then rerun `scripts/diff_guard.py --base <base_branch> --allow .context/progress.md --allow <path>`.
+
+## Stop conditions
+
+Stop instead of guessing when any condition applies:
+
+- The current branch is the base branch.
+- Greptile fails to run.
+- Greptile does not return a review ID.
+- A Greptile finding is real but needs a product decision.
+- The same actionable finding repeats after a reasonable targeted fix.
+- A fix would modify forbidden paths without a deterministic Greptile finding in those files, except local `.context/progress.md` review IDs.
+- The diff expands beyond review scope.
+- Actionable findings remain after the iteration budget.
+
+Ignore non-actionable findings instead of stopping.
+
+Do not open a PR until no actionable Greptile findings remain.
 
 ## PR preparation
 

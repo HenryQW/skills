@@ -16,7 +16,6 @@ Assume implementation work already exists.
 - `scripts/validation_candidates.py`: validation command suggestions.
 - `scripts/pr_body.py`: fallback PR body generation.
 - `references/greptile-review.md`: actionability and fix rules.
-- `references/stop-conditions.md`: stop instead of guessing.
 
 ## Inputs
 
@@ -28,19 +27,19 @@ Assume implementation work already exists.
 ## Hard boundaries
 
 - Do not run on the base branch.
-- Greptile review output is the only review signal for this skill.
+- Greptile review sessions are the only review signal for this skill.
 - Fix only actionable Greptile findings.
 - Only modify files related to actionable findings.
 - Do not expand product scope.
 - Do not perform unrelated refactors.
-- Do not modify secrets, env files, generated files, lockfiles, `.context/`, `.agents/`, or infrastructure files unless Greptile directly identifies an issue in those files and the fix is deterministic.
+- Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless Greptile directly identifies an issue in those files and the fix is deterministic.
+- Do not modify `.context/` except local uncommitted review IDs in `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Open a PR only when no actionable Greptile findings remain.
 - Return only the PR URL on success.
 
 Read `references/greptile-review.md` before classifying findings.
-Read `references/stop-conditions.md` whenever a stop condition may apply.
 
 ## Procedure
 
@@ -66,8 +65,10 @@ Run:
 ```bash
 git diff <base_branch>...HEAD --stat
 git diff <base_branch>...HEAD
-python3 <skill_dir>/scripts/diff_guard.py --base <base_branch>
+python3 <skill_dir>/scripts/diff_guard.py --base <base_branch> --allow .context/progress.md
 ```
+
+If Greptile directly identifies a deterministic issue in a blocked path, verify that finding, then rerun the guard with `--allow .context/progress.md --allow <path>`.
 
 Use this diff as the review scope. Fixes must stay inside it unless a directly necessary adjacent file is required.
 
@@ -83,6 +84,8 @@ greptile review --json --no-color
 
 Record the review ID returned by Greptile. Stop if no review ID is returned.
 
+Save each review ID locally in `.context/progress.md`. Keep `.context/progress.md` uncommitted; if it appears in `git status`, do not stage it.
+
 Retrieve or resume that review session with:
 
 ```bash
@@ -91,11 +94,13 @@ greptile review show <review_id>
 
 If the review is still running, wait and run `greptile review show <review_id>` again. Do not start another review just to poll or re-read results.
 
-If the retrieved output is too noisy to classify, compact the same review session:
+If the retrieved output is too noisy to navigate, compact the same review session for orientation only:
 
 ```bash
 greptile review show <review_id> | python3 <skill_dir>/scripts/greptile_compact.py
 ```
+
+Classify findings from the full `greptile review show <review_id>` output. Do not treat compacted output as authoritative.
 
 If Greptile fails, stop. If no actionable findings remain, exit the loop.
 
@@ -112,7 +117,7 @@ After each fix iteration, run:
 git status --short
 git diff --stat
 git diff
-python3 <skill_dir>/scripts/diff_guard.py --base <base_branch>
+python3 <skill_dir>/scripts/diff_guard.py --base <base_branch> --allow .context/progress.md
 python3 <skill_dir>/scripts/validation_candidates.py --base <base_branch>
 ```
 

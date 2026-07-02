@@ -27,6 +27,12 @@ If one appears in `git diff`, either justify it from the issue text or revert yo
 
 Run `scripts/diff_guard.py` before staging.
 
+If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun:
+
+```bash
+python3 <skill_dir>/scripts/diff_guard.py --allow <path>
+```
+
 ## Repository inspection
 
 - Use `rg` and `rg --files` for discovery.
@@ -65,3 +71,17 @@ git add <file1> <file2>
 ```
 
 Do not use `git add .` unless the full diff has been inspected and every changed file is intentional.
+
+## Stop conditions
+
+Stop instead of guessing when any condition applies:
+
+- The working tree has pre-existing changes and the user did not ask to continue with them.
+- The issue is not an actionable implementation request.
+- The issue requires a product decision or behavior not stated in the issue.
+- The smallest implementation would modify forbidden paths without explicit issue text requiring it.
+- The diff contains unrelated changes, broad formatting, generated output, or adjacent cleanup.
+- Validation failure points outside the requested implementation and requires a separate decision.
+- Commit scope would mix unrelated logical units.
+
+Do not push, open a PR, or run Greptile in this skill.

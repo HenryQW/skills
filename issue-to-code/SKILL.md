@@ -16,7 +16,6 @@ Stop after committing. Do not push, open a PR, or run Greptile.
 - `scripts/diff_guard.py`: forbidden-path guard.
 - `scripts/validation_candidates.py`: validation command suggestions.
 - `references/implementation-checklist.md`: scope, validation, and staging rules.
-- `references/stop-conditions.md`: stop instead of guessing.
 
 ## Inputs
 
@@ -32,8 +31,6 @@ Stop after committing. Do not push, open a PR, or run Greptile.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the branch name on success.
-
-Read `references/stop-conditions.md` whenever a stop condition may apply.
 
 ## Procedure
 
@@ -63,6 +60,12 @@ Use the issue requirements as the implementation scope. Do not invent product be
 
 ### 3. Prepare the branch
 
+Use the provided `base_branch` input. If it is omitted, resolve the repository default branch:
+
+```bash
+base_branch=${base_branch:-$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)}
+```
+
 Run:
 
 ```bash
@@ -71,7 +74,7 @@ git fetch origin
 
 ```bash
 branch_name=$(python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug])
-git checkout -b "$branch_name" "origin/<base_branch>"
+git checkout -b "$branch_name" "origin/$base_branch"
 ```
 
 ### 4. Inspect the repository before editing
@@ -94,6 +97,8 @@ git diff --stat
 git diff
 python3 <skill_dir>/scripts/diff_guard.py
 ```
+
+If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--allow <path>`.
 
 Every changed file and line must trace to the issue. Stop if the diff contains unrelated changes.
 
