@@ -26,14 +26,13 @@ Create a PR from the current branch.
    - Run `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`.
    - If no upstream exists, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
-7. Check for a PR template and follow it when present.
-8. Draft the PR title and body from the actual diff.
-9. Write multi-line PR body content to a temp file or heredoc.
-10. Use `gh` for GitHub or `glab` for GitLab.
-11. Create the PR against `base`.
-12. Compact `.context/progress.md`.
+7. Draft the PR title and body from the actual diff.
+8. Write multi-line PR body content to a temp file or heredoc.
+9. Use `gh` for GitHub or `glab` for GitLab.
+10. Create the PR against `base`.
+11. Compact `.context/progress.md`.
 
-If no PR template exists, use:
+Always use this PR body template:
 
 ```markdown
 ## Summary
