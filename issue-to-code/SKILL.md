@@ -6,16 +6,17 @@ description: Use this skill when asked to implement a GitHub issue into a clean 
 
 ## Goal
 
-Implement a GitHub issue into a clean feature branch with a minimal intentional diff.
-This skill stops after committing the implementation.
-It does not run Greptile review.
-It does not push.
-It does not create a PR.
+Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
+Stop after committing. Do not push, open a PR, or run Greptile.
 
 ## Bundled resources
 
-- Use `scripts/branch_name.py` to generate the issue branch name when preparing the branch.
-- Read `references/implementation-checklist.md` when deciding scope, validation, or staging.
+- `scripts/issue_snapshot.py`: compact issue text and comments.
+- `scripts/branch_name.py`: deterministic branch names.
+- `scripts/diff_guard.py`: forbidden-path guard.
+- `scripts/validation_candidates.py`: validation command suggestions.
+- `references/implementation-checklist.md`: scope, validation, and staging rules.
+- `references/stop-conditions.md`: stop instead of guessing.
 
 ## Inputs
 
@@ -31,6 +32,8 @@ It does not create a PR.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the branch name on success.
+
+Read `references/stop-conditions.md` whenever a stop condition may apply.
 
 ## Procedure
 
@@ -51,21 +54,12 @@ Do not overwrite or discard user changes.
 Run:
 
 ```bash
-gh issue view <issue_number> --comments
+python3 <skill_dir>/scripts/issue_snapshot.py <issue_number>
 ```
 
-Extract:
+If the snapshot shows truncation or omits context needed to decide scope, rerun it with larger limits before implementing.
 
-- Requirements.
-- Acceptance criteria.
-- Explicit constraints.
-- Files, modules, or behaviors mentioned in the issue.
-
-Stop if the issue does not contain an actionable implementation request.
-
-Do not invent product behavior.
-
-When the issue is partially ambiguous, make the smallest reasonable implementation that satisfies the explicit issue text.
+Use the issue requirements as the implementation scope. Do not invent product behavior.
 
 ### 3. Prepare the branch
 
@@ -77,41 +71,20 @@ git checkout <base_branch>
 git pull origin <base_branch>
 ```
 
-Create the branch name with the helper:
-
 ```bash
-python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug]
-```
-
-Then create the branch:
-
-```bash
-git checkout -b <branch_name>
+branch_name=$(python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug])
+git checkout -b "$branch_name"
 ```
 
 ### 4. Inspect the repository before editing
 
-When scope is unclear, read `references/implementation-checklist.md`.
+Read `references/implementation-checklist.md`.
 
-Identify the smallest relevant files or modules.
+Identify the smallest relevant files or modules. Prefer existing patterns. Avoid new dependencies unless the issue requires them.
 
-Prefer existing patterns over new abstractions.
+### 5. Implement
 
-Do not introduce new dependencies unless the issue explicitly requires them.
-
-Do not expand scope to adjacent cleanup.
-
-### 5. Implement the issue
-
-Apply the smallest code change that satisfies the issue.
-
-Keep changes local, traceable, and reviewable.
-
-Add or update tests only when they directly validate the issue behavior.
-
-Do not make broad formatting changes.
-
-Do not touch unrelated files.
+Apply the smallest code change that satisfies the issue. Add or update tests only when they directly validate requested behavior.
 
 ### 6. Inspect the diff
 
@@ -121,59 +94,30 @@ Run:
 git status --short
 git diff --stat
 git diff
+python3 <skill_dir>/scripts/diff_guard.py
 ```
 
-Check:
-
-- Every changed file is related to the issue.
-- The diff is minimal.
-- No unrelated formatting or refactoring slipped in.
-- No secrets, env files, generated files, lockfiles, .context/, .agents/, or infrastructure files were changed unless explicitly required.
-
-Stop if the diff contains unrelated changes.
+Every changed file and line must trace to the issue. Stop if the diff contains unrelated changes.
 
 ### 7. Run relevant local validation
 
-Use `references/implementation-checklist.md` for validation discovery.
+Run:
 
-Run the smallest relevant tests, type checks, linters, or build commands that are discoverable from the repository.
+```bash
+python3 <skill_dir>/scripts/validation_candidates.py
+```
 
-Prefer targeted commands over full-suite commands when the issue is narrow.
-
-If no validation command is obvious, continue but note that tests were not run in the internal commit planning.
-
-Do not add extra files just to satisfy local tooling unless the issue requires it.
+Run the smallest relevant suggested command. If none is obvious, continue without inventing tooling.
 
 ### 8. Commit
 
-Stage only inspected files.
-
-Use explicit file paths.
-
-Example:
+Stage explicit inspected paths only:
 
 ```bash
 git add <file1> <file2>
 ```
 
-Do not use git add . unless the entire diff has been inspected and every changed file is intentional.
-
-Create one or more Conventional Commits.
-
-Each commit must represent one logical unit.
-
-Do not mix categories in one commit.
-
-Allowed commit types:
-
-- feat
-- fix
-- test
-- refactor
-- chore
-- docs
-
-Example:
+Commit one logical unit at a time with Conventional Commits:
 
 ```bash
 git commit -m "feat(auth): add token refresh handling"
@@ -189,7 +133,7 @@ git log --oneline -5
 git branch --show-current
 ```
 
-The working tree should be clean.
+The working tree must be clean.
 
 ## Output
 

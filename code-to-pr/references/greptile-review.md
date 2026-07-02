@@ -6,6 +6,7 @@ Use this reference when classifying Greptile findings and preparing the PR.
 
 - Treat `git diff <base_branch>...HEAD` as the implementation scope.
 - Treat Greptile output as the only review signal for this skill.
+- Use `scripts/greptile_compact.py` when raw Greptile JSON is too noisy.
 - Fixes should stay inside files already visible in the branch diff unless a directly necessary adjacent file is required.
 - Do not use issue text to expand scope during this skill. Issue text only helps decide whether the branch fully resolves the issue for `Closes` vs `Refs`.
 
@@ -36,6 +37,7 @@ Stop instead of guessing when Greptile identifies a real risk but the correct be
 - Do not introduce new abstractions unless required to fix the finding.
 - Do not add dependencies unless the dependency is already used elsewhere and no smaller local fix exists.
 - Do not touch secrets, env files, generated files, lockfiles, `.context/`, `.agents/`, or infrastructure files unless Greptile directly identifies a deterministic issue in that file.
+- Run `scripts/diff_guard.py --base <base_branch>` before staging.
 
 ## PR preparation
 
