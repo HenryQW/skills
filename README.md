@@ -1,25 +1,10 @@
 # Skills
 
-Repository of custom skills for Codex agents.
+Custom skills for real engineering workflows.
 
-Codex is the default agent target, but these skills may be adapted for other agents that support comparable skill instructions.
+Codex is the default agent target, but these skills may be adapted for other agents that support comparable skill instructions. The skills are small, composable, and intentionally narrow: each one owns a specific part of the path from fuzzy work to reviewed, mergeable code.
 
-The table is the canonical skill inventory: description, install command, and last implementation update.
-
-| Name | Description | Install | Last updated (UTC) |
-|---|---|---|---|
-| `agent-aeo` | Implements agent-oriented website access patterns, including discovery metadata, markdown page views, llms.txt, and Accept negotiation. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-05-10 12:32 |
-| `agent-memory` | Sets up project-scoped agent memory and distills `.context/progress.md` into markdown Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-01 20:11 |
-| `gh-address-comments` | Addresses actionable GitHub PR review feedback using thread-aware review reads and focused local fixes. | `npx skills install HenryQW/skills gh-address-comments -a codex -y` | 2026-07-03 10:25 |
-| `gh-fix-ci` | Debugs failing GitHub Actions PR checks with `gh`, log inspection, root-cause summaries, and approved focused fixes. | `npx skills install HenryQW/skills gh-fix-ci -a codex -y` | 2026-07-03 10:25 |
-| `gh-pr-creation` | Creates or publishes GitHub or GitLab pull requests from the current branch with diff inspection, Conventional Commit titles, explicit push handling, and a fixed PR body template. | `npx skills install HenryQW/skills gh-pr-creation -a codex -y` | 2026-07-02 16:45 |
-| `greptile-loop` | Runs compact Greptile review loops on the current branch and fixes actionable findings. | `npx skills install HenryQW/skills greptile-loop -a codex -y` | 2026-07-03 01:44 |
-| `grill-to-issues` | Turns approved `$grill-with-docs` specs into dependency-aware GitHub child issues plus one parent issue and exactly one `final_check` child. | `npx skills install HenryQW/skills grill-to-issues -a codex -y` | 2026-07-01 20:45 |
-| `shipyard` | Executes a dependency-aware parent issue by running child issues through `issue-to-code`, then routes PR CI and review cleanup to the right skills. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-03 13:49 |
-| `issue-to-code` | Implements a GitHub issue into a clean feature branch, runs Greptile review loops, commits, and hands off to `gh-pr-creation` after a clean pass. | `npx skills install HenryQW/skills issue-to-code -a codex -y` | 2026-07-03 01:44 |
-| `review-repo` | Reviews a repository for evidence-backed maintainability, DRY, SOLID, testing, and architecture improvements without editing code. | `npx skills install HenryQW/skills review-repo -a codex -y` | 2026-07-02 17:51 |
-
-## Workflows
+## Workflow Map
 
 ```mermaid
 flowchart TD
@@ -50,6 +35,8 @@ flowchart TD
   more -->|No| final["final_check"]
   final --> issue
 ```
+
+## Workflows
 
 ### Audit to Issue Plan
 
@@ -127,3 +114,20 @@ flowchart LR
 - Use `gh-fix-ci` for failing GitHub Actions checks.
 - Use `gh-address-comments` for unresolved review threads or requested changes.
 - Re-check the PR after each cleanup pass.
+
+## Skill Reference
+
+This table is the canonical skill inventory: category, purpose, install command, and last implementation update.
+
+| Category | Name | Purpose | Install | Last updated (UTC) |
+|---|---|---|---|---|
+| Planning | `review-repo` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills review-repo -a codex -y` | 2026-07-02 17:51 |
+| Planning | `grill-to-issues` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills grill-to-issues -a codex -y` | 2026-07-01 20:45 |
+| Execution | `shipyard` | Advance a parent issue by running ready children through PRs. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-03 13:49 |
+| Execution | `issue-to-code` | Implement one GitHub issue on a clean branch and open a reviewed PR. | `npx skills install HenryQW/skills issue-to-code -a codex -y` | 2026-07-03 01:44 |
+| Review gate | `greptile-loop` | Run Greptile on the current branch and fix actionable findings. | `npx skills install HenryQW/skills greptile-loop -a codex -y` | 2026-07-03 01:44 |
+| PR publishing | `gh-pr-creation` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills gh-pr-creation -a codex -y` | 2026-07-02 16:45 |
+| PR cleanup | `gh-fix-ci` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills gh-fix-ci -a codex -y` | 2026-07-03 10:25 |
+| PR cleanup | `gh-address-comments` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills gh-address-comments -a codex -y` | 2026-07-03 10:25 |
+| Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-01 20:11 |
+| Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-05-10 12:32 |

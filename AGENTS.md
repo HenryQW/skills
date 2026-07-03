@@ -14,14 +14,14 @@ These skills are meant for AI agents to execute, not for human readers. Keep ins
 
 ## Root README Requirement
 
-The repository root `README.md` must include detailed skill information in one markdown table. Treat that table as the canonical inventory; do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions. Alternate views, such as Mermaid workflow diagrams or grouped lists, are allowed only when they explain selection or sequencing without repeating table fields.
+The repository root `README.md` must include detailed skill information in one markdown table. Treat that table as the canonical inventory; a `Category` column is allowed when it improves scanability. Do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions. Alternate views, such as Mermaid workflow diagrams or grouped lists, are allowed only when they explain selection or sequencing without repeating table fields.
 
 ```md
-| Name | Description | Install | Last updated (UTC) |
-|---|---|---|---|
-| `first-skill-name` | A short, plain-language description for the first skill. | `npx skills install HenryQW/skills first-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
-| `second-skill-name` | A short, plain-language description for the second skill. | `npx skills install HenryQW/skills second-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
-| `nth-skill-name` | A short, plain-language description for the nth skill. | `npx skills install HenryQW/skills nth-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| Category | Name | Purpose | Install | Last updated (UTC) |
+|---|---|---|---|---|
+| Planning | `first-skill-name` | A short, plain-language purpose for the first skill. | `npx skills install HenryQW/skills first-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| Execution | `second-skill-name` | A short, plain-language purpose for the second skill. | `npx skills install HenryQW/skills second-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
+| Support | `nth-skill-name` | A short, plain-language purpose for the nth skill. | `npx skills install HenryQW/skills nth-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
 ```
 
 ## Change Policy (Mandatory)
@@ -37,7 +37,7 @@ This rule applies to internal implementation APIs, not user-facing CLI or operat
 
 At minimum, update the root `README.md`:
 - The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -y`.
-- Any changed description(s).
+- Any changed purpose or description text.
 - The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
 - Keep workflow guidance short and reference skill names instead of repeating each skill's role.
 
