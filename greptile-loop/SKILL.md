@@ -12,6 +12,7 @@ Use Greptile as a branch-diff review gate. Fix only deterministic, in-scope find
 ## Inputs
 
 - `max_iterations` is optional and defaults to `5`.
+- `poll_interval_seconds` is optional and defaults to `300`.
 
 ## Rules
 
@@ -46,7 +47,7 @@ Record the review ID. If none is returned, stop.
 greptile review show <review_id> --agent
 ```
 
-If still running, wait 60 seconds and run the same `show` command again until complete.
+If still running, wait `poll_interval_seconds` seconds and run the same `show` command again until complete.
 
 Classify findings from the full `show` output.
 

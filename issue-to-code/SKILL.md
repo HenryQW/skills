@@ -23,6 +23,7 @@ After the latest completed Greptile review returns no actionable findings, hand 
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
 - `max_iterations` is optional and defaults to `5`.
+- `poll_interval_seconds` is optional and defaults to `300`.
 
 ## Scope and boundaries
 
@@ -130,7 +131,7 @@ git commit -m "feat(auth): add token refresh handling"
 
 ### 9. Greptile review and fix loop
 
-Repeat up to max_iterations. Default max_iterations is 3.
+Repeat up to `max_iterations`.
 
 Start one Greptile review session:
 
@@ -148,7 +149,7 @@ Retrieve or resume that review session with:
 greptile review show <review_id> --agent
 ```
 
-Greptile reviews are slow. If the review is still running, wait 60 seconds and run `greptile review show <review_id> --agent` again. Repeat until the review completes. Do not start another review just to poll or re-read results.
+Greptile reviews are slow. If the review is still running, wait `poll_interval_seconds` seconds and run `greptile review show <review_id> --agent` again. Repeat until the review completes. Do not start another review just to poll or re-read results.
 
 Classify findings from the full `greptile review show <review_id> --agent` output.
 
