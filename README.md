@@ -2,6 +2,8 @@
 
 Repository of custom skills for Codex agents.
 
+Codex is the default agent target, but these skills may be adapted for other agents that support comparable skill instructions.
+
 The table is the canonical skill inventory: description, install command, and last implementation update.
 
 | Name | Description | Install | Last updated (UTC) |

@@ -14,7 +14,7 @@ These skills are meant for AI agents to execute, not for human readers. Keep ins
 
 ## Root README Requirement
 
-The repository root `README.md` must include detailed skill information in one markdown table. Treat that table as the canonical inventory; do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions.
+The repository root `README.md` must include detailed skill information in one markdown table. Treat that table as the canonical inventory; do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions. Alternate views, such as Mermaid workflow diagrams or grouped lists, are allowed only when they explain selection or sequencing without repeating table fields.
 
 ```md
 | Name | Description | Install | Last updated (UTC) |
