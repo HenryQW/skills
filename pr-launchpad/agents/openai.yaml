@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Launchpad"
+  short_description: "Publish the current branch as a pull request"
+  default_prompt: "Use $pr-launchpad to inspect the current branch, commit any focused pending work, push it, and create the pull request."
