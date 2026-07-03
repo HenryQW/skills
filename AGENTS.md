@@ -14,7 +14,7 @@ These skills are meant for AI agents to execute, not for human readers. Keep ins
 
 ## Root README Requirement
 
-The repository root `README.md` must include detailed skill information in a markdown table.
+The repository root `README.md` must include detailed skill information in one markdown table. Treat that table as the canonical inventory; do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions.
 
 ```md
 | Name | Description | Install | Last updated (UTC) |
@@ -39,6 +39,7 @@ At minimum, update the root `README.md`:
 - The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -y`.
 - Any changed description(s).
 - The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
+- Keep workflow guidance short and reference skill names instead of repeating each skill's role.
 
 Do not leave README updates for a later commit.
 
