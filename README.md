@@ -11,7 +11,7 @@ Repository of custom skills.
 | `gh-pr-creation` | Creates or publishes GitHub or GitLab pull requests from the current branch with diff inspection, Conventional Commit titles, explicit push handling, and a fixed PR body template. | `npx skills install HenryQW/skills gh-pr-creation -a codex -y` | 2026-07-02 16:45 |
 | `greptile-loop` | Runs compact Greptile review loops on the current branch and fixes actionable findings. | `npx skills install HenryQW/skills greptile-loop -a codex -y` | 2026-07-03 01:44 |
 | `grill-to-issues` | Turns approved `$grill-with-docs` specs into dependency-aware GitHub child issues plus an implementation tracker issue and exactly one `final_check` child. | `npx skills install HenryQW/skills grill-to-issues -a codex -y` | 2026-07-01 20:45 |
-| `issue-graph-runner` | Executes dependency-aware tracker child issues through `issue-to-code`, then routes PR CI and review cleanup to the right skills. | `npx skills install HenryQW/skills issue-graph-runner -a codex -y` | 2026-07-03 10:18 |
+| `shipyard` | Executes dependency-aware tracker child issues through `issue-to-code`, then routes PR CI and review cleanup to the right skills. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-03 10:18 |
 | `issue-to-code` | Implements a GitHub issue into a clean feature branch, runs Greptile review loops, commits, and hands off to `gh-pr-creation` after a clean pass. | `npx skills install HenryQW/skills issue-to-code -a codex -y` | 2026-07-03 01:44 |
 | `review-repo` | Reviews a repository for evidence-backed maintainability, DRY, SOLID, testing, and architecture improvements without editing code. | `npx skills install HenryQW/skills review-repo -a codex -y` | 2026-07-02 17:51 |
 
@@ -28,7 +28,7 @@ These skills form a small harness stack:
 flowchart TD
   review["review-repo<br/>read-only repo audit"]
   grill["grill-to-issues<br/>spec + dependency graph + tracker"]
-  runner["issue-graph-runner<br/>runs approved tracker children"]
+  runner["shipyard<br/>runs approved tracker children"]
   issue["issue-to-code<br/>one issue to branch + PR"]
   greptile["greptile-loop<br/>branch review gate"]
   pr["gh-pr-creation<br/>publish pull request"]
@@ -52,8 +52,8 @@ flowchart TD
 | Skill | Human-readable role | Usually feeds into |
 |---|---|---|
 | `review-repo` | Finds maintainability problems with evidence, without editing files or tracker state. | A human-approved issue plan or `grill-to-issues` style issue graph. |
-| `grill-to-issues` | Converts a rough plan into a grilled spec, dependency-aware child issues, one tracker issue, and one final check issue. | `issue-graph-runner`. |
-| `issue-graph-runner` | Orchestrates an existing tracker issue: pick unblocked children, run implementation, then route PR cleanup. | `issue-to-code`, `gh-fix-ci`, `gh-address-comments`. |
+| `grill-to-issues` | Converts a rough plan into a grilled spec, dependency-aware child issues, one tracker issue, and one final check issue. | `shipyard`. |
+| `shipyard` | Orchestrates an existing tracker issue: pick unblocked children, run implementation, then route PR cleanup. | `issue-to-code`, `gh-fix-ci`, `gh-address-comments`. |
 | `issue-to-code` | Implements exactly one issue on a clean branch, runs Greptile review loops, commits, and opens a PR. | `gh-pr-creation`, then PR hygiene skills. |
 | `greptile-loop` | Reviews the current branch with Greptile and fixes actionable branch-diff findings before PR publication. | `issue-to-code` or manual branch cleanup. |
 | `gh-pr-creation` | Publishes a reviewed local branch as a PR with the repository's expected title/body style. | `gh-fix-ci` and `gh-address-comments` if the PR is not clean. |
@@ -106,7 +106,7 @@ Use this after a tracker issue exists and implementation should proceed one chil
 
 ```mermaid
 flowchart TD
-  T["Tracker issue"] --> R["issue-graph-runner"]
+  T["Tracker issue"] --> R["shipyard"]
   R --> U{"Any unblocked child?"}
   U -->|No| S["Report blockers and stop"]
   U -->|Yes| I["issue-to-code"]

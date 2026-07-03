@@ -1,9 +1,9 @@
 ---
-name: issue-graph-runner
+name: shipyard
 description: Execute dependency-aware GitHub tracker issue graphs by running unblocked child issues through issue-to-code, then routing each created PR through CI and review-comment cleanup. Use when a tracker issue from grill-to-issues or review-to-issues should be advanced across child issues, PRs, checks, reviews, and the final_check child.
 ---
 
-# Issue Graph Runner
+# Shipyard
 
 ## Overview
 

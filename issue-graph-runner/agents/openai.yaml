@@ -1,4 +1,0 @@
-interface:
-  display_name: "Issue Graph Runner"
-  short_description: "Run tracker child issues through PRs"
-  default_prompt: "Use $issue-graph-runner to execute the ready child issues from tracker #123."
