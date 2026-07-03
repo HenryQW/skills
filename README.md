@@ -1,10 +1,10 @@
-# Autoship
+# Skills
 
-Agent skills for moving planned engineering work from rough input to mergeable pull request.
+Agent skills for harness engineering and loop engineering: turning planned work into reviewed, mergeable pull requests.
 
-Autoship is a small workflow fleet. Each skill owns one leg of the route: survey the repo, blueprint the issues, build one issue, launch the PR, repair CI or review feedback, and let `shipyard` coordinate the crossing. Codex is the default target, but the instructions are plain enough for comparable agents.
+These skills are small, composable workflow harnesses. Each one owns one leg of the loop: survey the repo, blueprint the issues, build one issue, launch the PR, repair CI or review feedback, and let `shipyard` coordinate the route. Codex is the default target, but the instructions are plain enough for comparable agents.
 
-## Workflow Map
+## 🧭 Workflow Map
 
 ```mermaid
 flowchart TD
@@ -36,9 +36,9 @@ flowchart TD
   final --> workbench
 ```
 
-## Workflows
+## 🔁 Workflows
 
-### Audit to Issue Plan
+### 🔍 Audit to Issue Plan
 
 Use this when the starting point is "audit this repo" and the output should become approved issue work.
 
@@ -56,7 +56,7 @@ flowchart LR
 - Drop cleanup-only work or fold it into nearby valuable work.
 - Use `issue-blueprint` only after the reduced issue list is approved.
 
-### Plan to Issue Graph
+### 🧱 Plan to Issue Graph
 
 Use this when the starting point is a rough plan that needs hard questioning before implementation.
 
@@ -72,7 +72,7 @@ flowchart LR
 - Run `issue-blueprint`.
 - Produce the spec, dependency-aware child issues, parent issue, and one `final_check` child.
 
-### Issue Graph to Pull Requests
+### 🚢 Issue Graph to Pull Requests
 
 Use this after a parent issue exists and implementation should proceed one child issue at a time.
 
@@ -96,7 +96,7 @@ flowchart TD
 - Do not stack PRs unless the parent issue explicitly requires it.
 - Run `final_check` only after all other children are merged or verified complete.
 
-### Pull Request to Mergeable
+### 🛠️ Pull Request to Mergeable
 
 Use this when a PR already exists and needs to become mergeable.
 
@@ -115,7 +115,7 @@ flowchart LR
 - Use `review-repairbay` for unresolved review threads or requested changes.
 - Re-check the PR after each cleanup pass.
 
-## Skill Reference
+## 📦 Skill Reference
 
 This table is the canonical skill inventory: category, purpose, install command, and last implementation update.
 
@@ -131,3 +131,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-03 14:39 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-01 20:11 |
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-05-10 12:32 |
+
+## 📄 License
+
+Apache License 2.0. See [LICENSE](LICENSE).
