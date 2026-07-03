@@ -1,9 +1,9 @@
 ---
-name: review-repo
+name: repo-surveyor
 description: Perform a full-repository maintainability review without editing code. Use when asked to scan a repo and propose evidence-backed improvements for readability, maintainability, DRY, SOLID design, tests, configs, build scripts, docs, or architecture.
 ---
 
-# review-repo
+# repo-surveyor
 
 Review only. Do not edit files, create patches, rewrite code, commit, or push.
 

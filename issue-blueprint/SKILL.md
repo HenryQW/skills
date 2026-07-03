@@ -1,9 +1,9 @@
 ---
-name: grill-to-issues
+name: issue-blueprint
 description: Turn a rough plan into a grilled spec, dependency graph, implementation tracker issue, final check issue, and GitHub child issue set. Requires grill-with-docs. Use when the user asks to use grill-with-docs plus subagents, create a spec/glossary, slice work into blocked/blocking GitHub issues, or publish a dependency-aware implementation issue graph.
 ---
 
-# Grill to Issues
+# Issue Blueprint
 
 ## Workflow
 
@@ -27,7 +27,7 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 7. Render issue markdown:
 
 ```bash
-python3 /path/to/grill-to-issues/scripts/render_issue_plan.py plan.json --out .context/issues
+python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .context/issues
 ```
 
 8. Create child issues first, then the implementation tracker issue, then re-render children with real numbers and update them.
@@ -65,7 +65,7 @@ gh label list --repo OWNER/REPO --limit 100
 2. Publish children, then the implementation tracker, then updated child bodies:
 
 ```bash
-python3 /path/to/grill-to-issues/scripts/publish_issue_plan.py \
+python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py \
   plan.json \
   --repo OWNER/REPO \
   --label enhancement \
@@ -95,9 +95,9 @@ The publisher writes `.context/issues/numbers.json`:
 Run:
 
 ```bash
-python3 /path/to/grill-to-issues/scripts/render_issue_plan.py --self-test
-python3 /path/to/grill-to-issues/scripts/publish_issue_plan.py --self-test
-python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/grill-to-issues  # if available
+python3 /path/to/issue-blueprint/scripts/render_issue_plan.py --self-test
+python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py --self-test
+python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/issue-blueprint  # if available
 ```
 
 After publishing, verify with `gh issue view` or the GitHub connector and report the implementation tracker issue plus child issue list.
