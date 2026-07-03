@@ -1,4 +1,4 @@
 interface:
   display_name: "Shipyard"
-  short_description: "Run tracker child issues through PRs"
-  default_prompt: "Use $shipyard to execute the ready child issues from tracker #123."
+  short_description: "Run parent issue children through PRs"
+  default_prompt: "Use $shipyard to execute parent issue #123."
