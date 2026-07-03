@@ -1,15 +1,15 @@
 ---
-name: issue-to-code
-description: Use this skill when asked to implement a GitHub issue into a clean feature branch. It reads the issue, creates an issue branch, applies a minimal implementation, runs Greptile review loops, commits the result, and hands off to gh-pr-creation after Greptile returns no actionable findings.
+name: issue-workbench
+description: Use this skill when asked to implement a GitHub issue into a clean feature branch. It reads the issue, creates an issue branch, applies a minimal implementation, runs Greptile review loops, commits the result, and hands off to pr-launchpad after Greptile returns no actionable findings.
 ---
 
-# issue-to-code
+# issue-workbench
 
 ## Goal
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
 Run Greptile review loops on that branch and fix actionable findings before returning.
-After the latest completed Greptile review returns no actionable findings, hand off to gh-pr-creation on the current branch.
+After the latest completed Greptile review returns no actionable findings, hand off to pr-launchpad on the current branch.
 
 ## Bundled resources
 
@@ -184,9 +184,9 @@ git log --oneline -5
 git branch --show-current
 ```
 
-No staged or tracked code changes should remain before gh-pr-creation runs. `.context/progress.md` may remain local and uncommitted for review IDs.
+No staged or tracked code changes should remain before pr-launchpad runs. `.context/progress.md` may remain local and uncommitted for review IDs.
 
-Then run `gh-pr-creation` on the current branch and return only the PR URL.
+Then run `pr-launchpad` on the current branch and return only the PR URL.
 
 ## Output
 

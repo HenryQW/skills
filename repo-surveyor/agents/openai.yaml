@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Surveyor"
+  short_description: "Audit a repository for maintainability"
+  default_prompt: "Use $repo-surveyor to audit this repository for maintainability, DRY, SOLID, tests, and architecture."

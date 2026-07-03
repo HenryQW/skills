@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print the deterministic branch name for issue-to-code."""
+"""Print the deterministic branch name for issue-workbench."""
 
 from __future__ import annotations
 

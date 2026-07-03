@@ -1,10 +1,10 @@
 ---
-name: "gh-fix-ci"
+name: "ci-repairbay"
 description: "Use when a user asks to debug or fix failing GitHub PR checks that run in GitHub Actions. Use the GitHub app from this plugin for PR metadata and patch context, and use `gh` for Actions check and log inspection before implementing any approved fix."
 ---
 
 
-# GitHub Actions CI Fix
+# CI Repairbay
 
 ## Overview
 

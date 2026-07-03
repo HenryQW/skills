@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Blueprint"
+  short_description: "Turn grilled specs into issue graphs"
+  default_prompt: "Use $issue-blueprint. Prefer existing approved specs, run at most one compact adversarial review unless correctness blockers remain, then publish the dependency-aware issue graph."

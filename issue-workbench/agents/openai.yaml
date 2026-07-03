@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Workbench"
+  short_description: "Implement one issue and open a reviewed PR"
+  default_prompt: "Use $issue-workbench to implement the selected GitHub issue on a clean branch, run review loops, and hand off to $pr-launchpad."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Greptile Loop"
-  short_description: "Run compact Greptile review loops"
-  default_prompt: "Use $greptile-loop to review this branch with Greptile and fix actionable findings."

@@ -1,9 +1,9 @@
 ---
-name: greptile-loop
+name: review-checkpoint
 description: Run Greptile review loops on the current branch and fix actionable findings. Use when Codex is asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
 ---
 
-# greptile-loop
+# review-checkpoint
 
 ## Goal
 

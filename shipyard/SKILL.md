@@ -1,6 +1,6 @@
 ---
 name: shipyard
-description: Execute a dependency-aware GitHub parent issue by running unblocked child issues through issue-to-code, then routing each created PR through CI and review-comment cleanup. Use when a parent issue from grill-to-issues or review-to-issues should be advanced across child issues, PRs, checks, reviews, and the final_check child.
+description: Execute a dependency-aware GitHub parent issue by running unblocked child issues through issue-workbench, then routing each created PR through CI and review-comment cleanup. Use when a parent issue from issue-blueprint should be advanced across child issues, PRs, checks, reviews, and the final_check child.
 ---
 
 # Shipyard
@@ -8,7 +8,7 @@ description: Execute a dependency-aware GitHub parent issue by running unblocked
 ## Overview
 
 Advance one dependency-aware parent issue without copying the child skills' work.
-This skill decides what runs next; `$issue-to-code`, `$gh-fix-ci`, and `$gh-address-comments` do the implementation, CI, and review-comment work.
+This skill decides what runs next; `$issue-workbench`, `$ci-repairbay`, and `$review-repairbay` do the implementation, CI, and review-comment work.
 
 ## Inputs
 
@@ -44,13 +44,13 @@ Infer everything else:
 
 4. Execute the next runnable child.
    - Ensure the worktree is clean, then switch to and fast-forward the base branch.
-   - Run `$issue-to-code <child_issue>` from the base branch.
+   - Run `$issue-workbench <child_issue>` from the base branch.
    - Treat the returned PR URL as the child implementation PR.
    - Record the child issue, branch, and PR URL in `.context/progress.md`; do not commit `.context/`.
 
 5. Route PR health by signal type.
-   - Failing GitHub Actions checks: use `$gh-fix-ci` on that PR.
-   - Unresolved review threads, requested changes, or inline comments: use `$gh-address-comments` on that PR for all unresolved actionable threads.
+   - Failing GitHub Actions checks: use `$ci-repairbay` on that PR.
+   - Unresolved review threads, requested changes, or inline comments: use `$review-repairbay` on that PR for all unresolved actionable threads.
    - External failed checks without GitHub Actions logs: report the check URL and stop.
    - Pending checks or pending reviews: stop and report the pending state unless the user asked to wait.
    - Clean PR with no unresolved review threads and passing checks: report that it is ready for merge.
@@ -70,12 +70,12 @@ Infer everything else:
 
 ## Health Router
 
-Use this order after every `$issue-to-code` PR:
+Use this order after every `$issue-workbench` PR:
 
 1. Read checks with `gh pr checks`.
-2. If a failing check is a GitHub Actions run, invoke `$gh-fix-ci`.
-3. If review state shows requested changes, unresolved threads, or inline comments, invoke `$gh-address-comments` on the PR.
-4. When the user asked to execute/run the parent issue, treat that as approval to let `$gh-address-comments` fix, reply, resolve, and re-fetch actionable review threads unless the user restricted GitHub writes.
+2. If a failing check is a GitHub Actions run, invoke `$ci-repairbay`.
+3. If review state shows requested changes, unresolved threads, or inline comments, invoke `$review-repairbay` on the PR.
+4. When the user asked to execute/run the parent issue, treat that as approval to let `$review-repairbay` fix, reply, resolve, and re-fetch actionable review threads unless the user restricted GitHub writes.
 5. When the user asked only to inspect or plan, report review state without writes.
 6. If only resolved, outdated, informational, approval, or top-level summary comments exist, do not run a cleanup skill.
 7. If the PR is blocked by human approval, merge permissions, or an external provider, stop and report the blocker.

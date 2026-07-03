@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Checkpoint"
+  short_description: "Run compact Greptile review loops"
+  default_prompt: "Use $review-checkpoint to review this branch with Greptile and fix actionable findings."
