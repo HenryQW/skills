@@ -21,6 +21,36 @@ The table is the canonical skill inventory: description, install command, and la
 
 ## Workflows
 
+```mermaid
+flowchart TD
+  rough["Rough plan"] --> grill["grill-to-issues"]
+  audit["Repo review request"] --> review["review-repo"]
+  review --> reduce["Reduce findings"]
+  reduce --> approved{"Approved issue plan?"}
+  approved -->|Yes| grill
+  approved -->|No| stop["Stop"]
+  grill --> parent["Parent issue"]
+  parent --> children["Dependency-aware child issues"]
+  children --> shipyard["shipyard"]
+  shipyard --> ready{"Unblocked child?"}
+  ready -->|No| blocked["Report blockers"]
+  ready -->|Yes| issue["issue-to-code"]
+  issue --> pr["Pull request"]
+  pr --> health{"PR clean?"}
+  health -->|CI failing| ci["gh-fix-ci"]
+  health -->|Review comments| comments["gh-address-comments"]
+  health -->|Yes| mergeable["Mergeable code"]
+  ci --> health
+  comments --> health
+  mergeable --> complete["Merged or verified complete"]
+  complete --> final_done{"Was final_check?"}
+  final_done -->|Yes| done["Done"]
+  final_done -->|No| more{"More children?"}
+  more -->|Yes| shipyard
+  more -->|No| final["final_check"]
+  final --> issue
+```
+
 ### Audit to Issue Plan
 
 Use this when the starting point is "audit this repo" and the output should become approved issue work.
