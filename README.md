@@ -1,8 +1,15 @@
 # Skills
 
-Agent skills for harness engineering and loop engineering: turning planned work into reviewed, mergeable pull requests.
+<h1 align="center">
+  🚢 Shipping ideas into production.
+</h1>
 
-These skills are small, composable workflow harnesses. Each one owns one leg of the loop: survey the repo, blueprint the issues, build one issue, launch the PR, repair CI or review feedback, and let `shipyard` coordinate the route. Codex is the default target, but the instructions are plain enough for comparable agents.
+A collection of skills for harness engineering and loop engineering: 🚢 shipping ideas into production.
+
+These skills are small, composable workflow harnesses.
+Each one owns one leg of the loop: survey the repo, blueprint the issues, build one issue, launch the PR, repair CI or review feedback, and let `shipyard` coordinate the route.
+
+Supports Codex and other agents that use `npx skills` manage skills.
 
 ## 🧭 Workflow Map
 
@@ -134,4 +141,5 @@ This table is the canonical skill inventory: category, purpose, install command,
 
 ## 📄 License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0.
+See [LICENSE](LICENSE).
