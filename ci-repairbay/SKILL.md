@@ -1,6 +1,6 @@
 ---
 name: "ci-repairbay"
-description: "Use when a user asks to debug or fix failing GitHub PR checks that run in GitHub Actions. Use the GitHub app from this plugin for PR metadata and patch context, and use `gh` for Actions check and log inspection before implementing any approved fix."
+description: "Use when a user asks to debug or fix failing GitHub PR checks that run in GitHub Actions. Use `gh` for PR resolution, Actions check inspection, and log inspection before implementing any approved fix."
 ---
 
 
@@ -8,17 +8,14 @@ description: "Use when a user asks to debug or fix failing GitHub PR checks that
 
 ## Overview
 
-Use this skill when the task is specifically about failing GitHub Actions checks on a pull request. This workflow is hybrid by design:
-
-- Use the GitHub app from this plugin for PR metadata, changed files, and review context.
-- Use `gh` for GitHub Actions checks and logs because the connector does not expose that workflow end to end.
+Use this skill when the task is specifically about failing GitHub Actions checks on a pull request. Use `gh` for PR metadata, changed files, checks, and logs.
 - Summarize the root cause first, propose a focused fix plan, and implement only after explicit approval.
 
 Prereq: authenticate with GitHub CLI once, then confirm with `gh auth status`. Repo and workflow scopes are typically required for Actions inspection.
 
 ## Inputs
 
-- `repo`: path inside the repo (default `.`)
+- `repo_path`: path inside the repo (default `.`); pass this to the script as `--repo`
 - `pr`: PR number or URL (optional; defaults to current branch PR)
 - `gh` authentication for the repo host
 
@@ -33,9 +30,11 @@ Prereq: authenticate with GitHub CLI once, then confirm with `gh auth status`. R
    - Run `gh auth status` in the repo.
    - If unauthenticated, ask the user to run `gh auth login` (ensuring repo + workflow scopes) before proceeding.
 2. Resolve the PR.
-   - If the user provides a PR number or URL, use that directly.
-   - Otherwise prefer the current branch PR with `gh pr view --json number,url`.
-   - When repo and PR are known, fetch PR metadata and patch context through the GitHub app from this plugin.
+   - Inputs: `repo_path` is a local path inside the target repository; `pr` is a PR number or GitHub pull request URL.
+   - If `pr` is a URL, use that URL directly with `gh`.
+   - If `pr` is a number, run from the target repository or pass the local path with `--repo`.
+   - If neither is provided, use the current branch PR with `gh pr view --json number,url`.
+   - Fetch PR metadata and changed files with `gh pr view`.
 3. Inspect failing checks (GitHub Actions only).
    - Preferred: run the bundled script (handles gh field drift and job-log fallbacks):
      - `python "<path-to-skill>/scripts/inspect_pr_checks.py" --repo "." --pr "<number-or-url>"`
@@ -76,6 +75,5 @@ Usage examples:
 
 ## Guardrails
 
-- Do not imply that the GitHub app can replace `gh` for Actions log retrieval.
 - Treat non-GitHub Actions providers as report-only unless the user explicitly wants a separate investigation path.
 - If the failure is clearly unrelated to the local diff, say so before proposing code changes.

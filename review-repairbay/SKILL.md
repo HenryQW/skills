@@ -1,23 +1,27 @@
 ---
 name: review-repairbay
-description: Address actionable GitHub pull request review feedback. Use when the user wants to inspect unresolved review threads, requested changes, or inline review comments on a PR, then implement selected fixes. Use the GitHub app for PR metadata and flat comment reads, and use the bundled GraphQL script via `gh` whenever thread-level state, resolution status, or inline review context matters.
+description: Address actionable GitHub pull request review feedback. Use when the user wants to inspect unresolved review threads, requested changes, or inline review comments on a PR, then implement selected fixes. Use `gh` and the bundled GraphQL script whenever thread-level state, resolution status, or inline review context matters.
 ---
 
 # Review Repairbay
 
-Use this skill when the user wants to work through requested changes on a GitHub pull request. Use the GitHub app from this plugin for PR metadata and patch context, but treat thread-aware review data as a `gh api graphql` problem because the connector comment surface is flat and does not preserve full review-thread state.
+Use this skill when the user wants to work through requested changes on a GitHub pull request. Treat thread-aware review data as a `gh api graphql` problem because flat comment surfaces do not preserve full review-thread state.
 
 Run all `gh` commands with elevated network access. If CLI auth is required, confirm `gh auth status` first and ask the user to authenticate with `gh auth login` if it fails.
 
 ## Workflow
 
 1. Resolve the PR.
-   - If the user provides a repository and PR number or URL, use that directly.
-   - If the request is about the current branch PR, use local git context plus `gh auth status` and `gh pr view --json number,url` to resolve it.
+   - Inputs: `repo_slug` is `OWNER/REPO`; `pr` is a PR number or GitHub pull request URL.
+   - If `pr` is a URL, derive `repo_slug` and the PR number from it.
+   - If `pr` is a number, require `repo_slug` and pass it to `scripts/fetch_comments.py` as `--repo`.
+   - If neither is provided, use the current branch PR with `gh pr view --json number,url`.
 2. Inspect review context with thread-aware reads.
-   - Use the GitHub app from this plugin to fetch PR metadata and patch context when the repo and PR are known.
-   - Use the bundled `scripts/fetch_comments.py` workflow whenever the task depends on unresolved review threads, inline review locations, or resolution state. That script fetches `reviewThreads`, `isResolved`, `isOutdated`, and file and line anchors that the connector comment surface does not preserve.
-   - Use connector-only comment reads only for lightweight top-level PR comment summaries.
+   - Use the bundled script whenever the task depends on unresolved review threads, inline review locations, or resolution state:
+     - `python "<path-to-skill>/scripts/fetch_comments.py" --repo OWNER/REPO --pr NUMBER`
+     - `python "<path-to-skill>/scripts/fetch_comments.py" --pr https://github.com/OWNER/REPO/pull/NUMBER`
+   - That script fetches `reviewThreads`, `isResolved`, `isOutdated`, and file and line anchors.
+   - Use flat PR comment reads only for lightweight top-level PR comment summaries.
 3. Cluster actionable review threads.
    - Group comments by file or behavior area.
    - Separate actionable change requests from informational comments, approvals, already-resolved threads, and duplicates.
@@ -36,9 +40,9 @@ Run all `gh` commands with elevated network access. If CLI auth is required, con
 - Do not reply on GitHub, resolve review threads, or submit a review unless the user explicitly asks for that write action.
 - If review comments conflict with each other or would cause a behavioral regression, surface the tradeoff before making changes.
 - If a comment is ambiguous, ask for clarification or draft a proposed response instead of guessing.
-- Do not treat flat PR comments from the connector as a complete representation of review-thread state.
+- Do not treat flat PR comments as a complete representation of review-thread state.
 - If `gh` hits auth or rate-limit issues mid-run, ask the user to re-authenticate and retry.
 
 ## Fallback
 
-If neither the connector nor `gh` can resolve the PR cleanly, tell the user whether the blocker is missing repository scope, missing PR context, or CLI authentication, then ask for the missing repo or PR identifier or for a refreshed `gh` login.
+If `gh` cannot resolve the PR cleanly, tell the user whether the blocker is missing repository scope, missing PR context, or CLI authentication, then ask for the missing repo or PR identifier or for a refreshed `gh` login.

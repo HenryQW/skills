@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
 Fetch all PR conversation comments + reviews + review threads (inline threads)
-for the PR associated with the current git branch, by shelling out to:
+by shelling out to:
 
   gh api graphql
 
 Requires:
   - `gh auth login` already set up
-  - current branch has an associated (open) PR
 
 Usage:
-  python fetch_comments.py > pr_comments.json
+  python fetch_comments.py --repo OWNER/REPO --pr 123 > pr_comments.json
+  python fetch_comments.py --pr https://github.com/OWNER/REPO/pull/123 > pr_comments.json
+  python fetch_comments.py > pr_comments.json  # current branch PR
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import re
 import subprocess
 import sys
 from typing import Any
@@ -115,20 +118,50 @@ def _ensure_gh_authenticated() -> None:
         raise RuntimeError("gh auth status failed; run `gh auth login` to authenticate the GitHub CLI") from None
 
 
-def gh_pr_view_json(fields: str) -> dict[str, Any]:
-    # fields is a comma-separated list like: "number,headRepositoryOwner,headRepository"
-    return _run_json(["gh", "pr", "view", "--json", fields])
+def gh_pr_view_json(fields: str, pr: str | None = None, repo: str | None = None) -> dict[str, Any]:
+    cmd = ["gh", "pr", "view"]
+    if pr:
+        cmd.append(pr)
+    if repo:
+        cmd += ["--repo", repo]
+    cmd += ["--json", fields]
+    return _run_json(cmd)
 
 
-def get_current_pr_ref() -> tuple[str, str, int]:
-    """
-    Resolve the PR for the current branch (whatever gh considers associated).
-    Works for cross-repo PRs too, by reading head repository owner/name.
-    """
-    pr = gh_pr_view_json("number,headRepositoryOwner,headRepository")
-    owner = pr["headRepositoryOwner"]["login"]
-    repo = pr["headRepository"]["name"]
-    number = int(pr["number"])
+def split_repo(repo: str) -> tuple[str, str]:
+    parts = repo.split("/", 1)
+    if len(parts) != 2 or not all(parts):
+        raise ValueError("--repo must be OWNER/REPO")
+    return parts[0], parts[1]
+
+
+def parse_pr_url(value: str) -> tuple[str, int] | None:
+    match = re.fullmatch(r"https://github\.com/([^/]+/[^/]+)/pull/([1-9][0-9]*)", value)
+    if not match:
+        return None
+    return match.group(1), int(match.group(2))
+
+
+def resolve_pr_ref(pr_arg: str | None, repo_arg: str | None) -> tuple[str, str, int]:
+    if pr_arg:
+        url_ref = parse_pr_url(pr_arg)
+        if url_ref:
+            repo_arg, number = url_ref
+            owner, repo = split_repo(repo_arg)
+            return owner, repo, number
+        if not re.fullmatch(r"[1-9][0-9]*", pr_arg):
+            raise ValueError("--pr must be a PR number or GitHub pull request URL")
+        if not repo_arg:
+            raise ValueError("--repo is required when --pr is a number")
+        owner, repo = split_repo(repo_arg)
+        return owner, repo, int(pr_arg)
+
+    pr = gh_pr_view_json("number,url", repo=repo_arg)
+    url_ref = parse_pr_url(pr["url"])
+    if not url_ref:
+        raise ValueError("unable to resolve base repository from current branch PR URL")
+    repo_arg, number = url_ref
+    owner, repo = split_repo(repo_arg)
     return owner, repo, number
 
 
@@ -226,9 +259,39 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
     }
 
 
+def self_test() -> None:
+    assert parse_pr_url("https://github.com/o/r/pull/12") == ("o/r", 12)
+    assert parse_pr_url("https://github.com/o/r/issues/12") is None
+    assert split_repo("owner/repo") == ("owner", "repo")
+    assert resolve_pr_ref("7", "owner/repo") == ("owner", "repo", 7)
+    assert resolve_pr_ref("https://github.com/owner/repo/pull/8", None) == ("owner", "repo", 8)
+    try:
+        resolve_pr_ref("7", None)
+    except ValueError as exc:
+        assert "--repo is required" in str(exc)
+    else:
+        raise AssertionError("numbered PR without repo should fail")
+
+
 def main() -> None:
-    _ensure_gh_authenticated()
-    owner, repo, number = get_current_pr_ref()
+    parser = argparse.ArgumentParser(description="Fetch GitHub PR comments, reviews, and review threads.")
+    parser.add_argument("--repo", help="Base repository as OWNER/REPO. Required when --pr is a number.")
+    parser.add_argument("--pr", help="PR number or https://github.com/OWNER/REPO/pull/NUMBER URL.")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        self_test()
+        return
+
+    try:
+        if args.pr:
+            owner, repo, number = resolve_pr_ref(args.pr, args.repo)
+            _ensure_gh_authenticated()
+        else:
+            _ensure_gh_authenticated()
+            owner, repo, number = resolve_pr_ref(None, args.repo)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     result = fetch_all(owner, repo, number)
     print(json.dumps(result, indent=2))
 

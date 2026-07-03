@@ -26,9 +26,16 @@ flowchart TD
   children --> shipyard["shipyard"]
   shipyard --> ready{"Unblocked child?"}
   ready -->|No| blocked["Report blockers"]
-  ready -->|Yes| workbench["issue-workbench"]
-  workbench --> pr["Pull request"]
-  pr --> health{"PR clean?"}
+  ready -->|Yes| mode{"Current branch is default?"}
+  mode -->|Yes| workbench["issue-workbench"]
+  workbench --> child_pr["Child pull request"]
+  mode -->|No| worktrees["Child worktrees"]
+  worktrees --> integrate["Current shipyard branch"]
+  integrate --> final_branch["final_check worktree"]
+  final_branch --> final_merge["Merge final_check"]
+  final_merge --> final_pr["Final shipyard pull request"]
+  child_pr --> health{"PR clean?"}
+  final_pr --> health
   health -->|CI failing| ci_repair["ci-repairbay"]
   health -->|Review comments| review_repair["review-repairbay"]
   health -->|Yes| mergeable["Mergeable code"]
@@ -39,8 +46,8 @@ flowchart TD
   final_done -->|Yes| done["Done"]
   final_done -->|No| more{"More children?"}
   more -->|Yes| shipyard
-  more -->|No| final["final_check"]
-  final --> workbench
+  more -->|No| final_child["final_check child"]
+  final_child --> workbench
 ```
 
 ## 🔁 Workflows
@@ -81,16 +88,23 @@ flowchart LR
 
 ### 🚢 Issue Graph to Pull Requests
 
-Use this after a parent issue exists and implementation should proceed one child issue at a time.
+Use this after a parent issue exists and implementation should proceed through child PRs on the default branch or through the current integration branch otherwise.
 
 ```mermaid
 flowchart TD
   parent["Parent issue"] --> shipyard["shipyard"]
-  shipyard --> ready{"Unblocked child?"}
+  shipyard --> mode{"Current branch is default?"}
+  mode -->|Yes| ready{"Unblocked child?"}
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| workbench["issue-workbench"]
-  workbench --> pr["Pull request"]
-  pr --> cleanup{"Needs cleanup?"}
+  workbench --> child_pr["Child pull request"]
+  mode -->|No| worktrees["Child worktrees"]
+  worktrees --> integrate["Merge into current branch"]
+  integrate --> final_branch["final_check worktree"]
+  final_branch --> final_merge["Merge final_check"]
+  final_merge --> final_pr["Final shipyard pull request"]
+  child_pr --> cleanup{"Needs cleanup?"}
+  final_pr --> cleanup
   cleanup -->|CI| ci_repair["ci-repairbay"]
   cleanup -->|Review| review_repair["review-repairbay"]
   cleanup -->|No| done["Ready"]
@@ -100,7 +114,8 @@ flowchart TD
 
 - Run `shipyard`.
 - Let it choose the next unblocked child and route implementation through `issue-workbench`.
-- Do not stack PRs unless the parent issue explicitly requires it.
+- On the default branch, use child PRs and do not merge child PRs itself.
+- On any non-default branch, use child worktrees and merge their branches back into the current shipyard branch.
 - Run `final_check` only after all other children are merged or verified complete.
 
 ### 🛠️ Pull Request to Mergeable
@@ -130,12 +145,12 @@ This table is the canonical skill inventory: category, purpose, install command,
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-03 14:39 |
 | Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-03 14:39 |
-| Execution | `shipyard` | Advance a parent issue by running ready children through PRs. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-03 14:39 |
-| Execution | `issue-workbench` | Implement one GitHub issue on a clean branch and open a reviewed PR. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-03 14:48 |
+| Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 05:06 |
+| Execution | `issue-workbench` | Implement one GitHub issue for a reviewed PR or shipyard integration branch. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 04:46 |
 | Review gate | `review-checkpoint` | Run Greptile on the current branch and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-03 14:39 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-03 14:48 |
-| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-03 14:39 |
-| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-03 14:39 |
+| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-03 16:34 |
+| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-03 16:34 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-01 20:11 |
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-05-10 12:32 |
 

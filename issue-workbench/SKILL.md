@@ -1,6 +1,6 @@
 ---
 name: issue-workbench
-description: Use this skill when asked to implement a GitHub issue into a clean feature branch. It reads the issue, creates an issue branch, applies a minimal implementation, runs Greptile review loops, commits the result, and hands off to pr-launchpad after Greptile returns no actionable findings.
+description: Use this skill when asked to implement one GitHub issue into a clean feature branch. It reads the issue, creates an issue branch in the current worktree by default, applies a minimal implementation, runs review-checkpoint, commits the result, and either hands off to pr-launchpad or returns a branch to shipyard integration mode.
 ---
 
 # issue-workbench
@@ -8,8 +8,8 @@ description: Use this skill when asked to implement a GitHub issue into a clean 
 ## Goal
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
-Run Greptile review loops on that branch and fix actionable findings before returning.
-After the latest completed Greptile review returns no actionable findings, hand off to pr-launchpad on the current branch.
+Run `$review-checkpoint` on that branch and fix actionable findings before returning.
+After the latest completed review-checkpoint run returns no actionable findings, hand off to pr-launchpad on the current branch unless `handoff_mode=integration_branch`.
 
 ## Bundled resources
 
@@ -22,24 +22,27 @@ After the latest completed Greptile review returns no actionable findings, hand 
 - `issue_number` is required.
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
-- `max_iterations` is optional and defaults to `5`.
-- `poll_interval_seconds` is optional and defaults to `300`.
+- `max_iterations` is optional and passes through to `$review-checkpoint`.
+- `poll_interval_seconds` is optional and passes through to `$review-checkpoint`.
+- `worktree_path` is optional. When set, create the issue branch in that new Git worktree instead of the caller worktree.
+- `handoff_mode` is optional and defaults to `pull_request`. The only other supported value is `integration_branch`.
+- `integration_branch` is required when `handoff_mode=integration_branch` and is the local branch that the issue branch will be merged back into by `$shipyard`.
 
 ## Scope and boundaries
 
 - Only modify files required by the issue.
-- Greptile review sessions are the only review signal.
-- Fix only actionable Greptile findings in the branch diff.
+- `$review-checkpoint` is the only review signal.
+- Fix only actionable review-checkpoint findings in the branch diff.
 - Do not perform unrelated refactors.
-- Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or Greptile directly identifies a deterministic issue in that file.
-- Do not modify `.context/` except local uncommitted Greptile review IDs in `.context/progress.md`.
+- Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or review-checkpoint directly identifies a deterministic issue in that file.
+- Do not modify `.context/` except local uncommitted review-checkpoint notes in `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
-- Return only the PR URL on success.
+- Return only the PR URL on success unless `handoff_mode=integration_branch`.
 
 Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
-A Greptile finding is actionable only when it refers to code visible in the branch diff, the fix is deterministic, the fix does not require a product decision, the fix does not expand issue scope, and the fix can be made in the referenced file or a directly necessary adjacent file.
+A review-checkpoint finding is actionable only when it refers to code visible in the branch diff, the fix is deterministic, the fix does not require a product decision, the fix does not expand issue scope, and the fix can be made in the referenced file or a directly necessary adjacent file.
 
 Ignore findings that request clarification, broad cleanup, optional improvements, or behavior beyond the issue. Stop when a real risk requires a product decision or when a finding repeats after a reasonable targeted fix.
 
@@ -71,7 +74,11 @@ Extract explicit requirements, acceptance criteria, constraints, named files, na
 
 ### 3. Prepare the branch
 
-Use the provided `base_branch` input. If it is omitted, resolve the repository default branch:
+Use the current worktree by default. Use `worktree_path` only when `$shipyard` passes it for integration work.
+
+If `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`.
+
+Use the provided `base_branch` input for normal PR mode. If it is omitted, resolve the repository default branch:
 
 ```bash
 base_branch=${base_branch:-$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)}
@@ -85,8 +92,24 @@ git fetch origin
 
 ```bash
 branch_name=$(python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug])
+```
+
+Stop before implementation if the branch already exists locally or on `origin`.
+
+In normal PR mode, run:
+
+```bash
 git checkout -b "$branch_name" "origin/$base_branch"
 ```
+
+In integration mode, stop if `worktree_path` already exists, then run:
+
+```bash
+git worktree add -b "$branch_name" "$worktree_path" "$integration_branch"
+cd "$worktree_path"
+```
+
+Do not switch branches in the caller worktree when `worktree_path` is set.
 
 ### 4. Inspect the repository before editing
 
@@ -129,50 +152,19 @@ Commit one logical unit at a time with Conventional Commits:
 git commit -m "feat(auth): add token refresh handling"
 ```
 
-### 9. Greptile review and fix loop
+### 9. Review gate
 
-Repeat up to `max_iterations`.
+Run `$review-checkpoint` with the selected `max_iterations` and `poll_interval_seconds`.
 
-Start one Greptile review session:
-
-```bash
-greptile review --agent
-```
-
-Record the review ID returned by Greptile. Stop if no review ID is returned.
-
-Save each review ID locally in `.context/progress.md`. Keep `.context/progress.md` uncommitted; if it appears in `git status`, do not stage it.
-
-Retrieve or resume that review session with:
+If review-checkpoint changes files, rerun the path guard before handoff:
 
 ```bash
-greptile review show <review_id> --agent
-```
-
-Greptile reviews are slow. If the review is still running, wait `poll_interval_seconds` seconds and run `greptile review show <review_id> --agent` again. Repeat until the review completes. Do not start another review just to poll or re-read results.
-
-Classify findings from the full `greptile review show <review_id> --agent` output.
-
-If no actionable findings remain, exit the loop.
-
-Apply the smallest deterministic fixes for actionable findings, then run:
-
-```bash
-git status --short
-git diff --stat
-git diff
 python3 <skill_dir>/scripts/diff_guard.py --allow .context/progress.md
 ```
 
-If Greptile directly identifies a deterministic issue in a blocked path, verify that finding, then rerun the guard with `--allow .context/progress.md --allow <path>`.
+If review-checkpoint directly identifies a deterministic issue in a blocked path, verify that finding, then rerun the guard with `--allow .context/progress.md --allow <path>`.
 
-Run the smallest relevant validation command discoverable from nearby tests, `package.json`, `pyproject.toml`, `tox.ini`, `noxfile.py`, `pytest.ini`, or `Makefile`. If no command is obvious, continue without inventing tooling.
-
-Stage explicit inspected paths only and commit review fixes with Conventional Commits. Use `fix` unless another type is clearly more accurate.
-
-Each iteration must resolve at least one actionable finding or reduce the actionable finding set. After committing review fixes, start a new Greptile review session for the changed branch diff.
-
-Use the latest completed Greptile review session as the final gate only when no commit happened after it. Stop if actionable findings remain after the iteration budget.
+Continue only after review-checkpoint reports no actionable findings from the latest completed review with no later commit.
 
 ### 10. Final handoff
 
@@ -184,13 +176,22 @@ git log --oneline -5
 git branch --show-current
 ```
 
-No staged or tracked code changes should remain before pr-launchpad runs. `.context/progress.md` may remain local and uncommitted for review IDs.
+No staged or tracked code changes should remain before pr-launchpad runs. `.context/progress.md` may remain local and uncommitted for review-checkpoint notes.
 
-Then run `pr-launchpad` on the current branch and return only the PR URL.
+If `handoff_mode=pull_request`, run `pr-launchpad` on the current branch and return only the PR URL.
+
+If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return exactly:
+
+```text
+branch=<branch_name>
+worktree=<worktree_path>
+```
 
 ## Output
 
-Return only the PR URL.
+In normal PR mode, return only the PR URL.
+
+In integration mode, return only the branch and worktree lines described above.
 
 Do not include explanations.
 
