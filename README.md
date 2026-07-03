@@ -14,7 +14,6 @@ Repository of custom skills.
 | `issue-graph-runner` | Executes dependency-aware tracker child issues through `issue-to-code`, then routes PR CI and review cleanup to the right skills. | `npx skills install HenryQW/skills issue-graph-runner -a codex -y` | 2026-07-03 10:18 |
 | `issue-to-code` | Implements a GitHub issue into a clean feature branch, runs Greptile review loops, commits, and hands off to `gh-pr-creation` after a clean pass. | `npx skills install HenryQW/skills issue-to-code -a codex -y` | 2026-07-03 01:44 |
 | `review-repo` | Reviews a repository for evidence-backed maintainability, DRY, SOLID, testing, and architecture improvements without editing code. | `npx skills install HenryQW/skills review-repo -a codex -y` | 2026-07-02 17:51 |
-| `triangulate` | Runs structured multi-agent evaluation workflows that generate, challenge, and adjudicate evidence-backed findings. | `npx skills install HenryQW/skills triangulate -a codex -y` | 2026-04-03 12:40 |
 
 ## How the Skills Fit Together
 
@@ -23,7 +22,7 @@ These skills form a small harness stack:
 - Planning skills turn ambiguous work into issue graphs.
 - Execution skills implement one issue at a time.
 - PR hygiene skills clean up CI failures and review comments.
-- Support skills provide memory, audits, website agent access, or structured evaluation.
+- Support skills provide memory, audits, or website agent access.
 
 ```mermaid
 flowchart TD
@@ -62,7 +61,6 @@ flowchart TD
 | `gh-address-comments` | Reads unresolved PR review threads, fixes actionable comments, and replies or resolves only when explicitly requested. | Back to PR verification. |
 | `agent-memory` | Maintains durable project memory and distills progress notes into future-use context. | Any long-running project workflow. |
 | `agent-aeo` | Adds or audits public website affordances for AI crawlers and markdown-friendly access. | Website implementation or review work. |
-| `triangulate` | Uses multiple review perspectives to consolidate evidence-backed conclusions. | Planning, review, and decision points. |
 
 ## Typical Harness Workflows
 
