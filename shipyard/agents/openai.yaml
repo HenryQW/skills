@@ -1,4 +1,4 @@
 interface:
   display_name: "Shipyard"
   short_description: "Coordinate parent issues by branch context"
-  default_prompt: "Use $shipyard to execute parent issue #123; choose child PR mode on the default branch and integration mode on other branches."
+  default_prompt: "Use $shipyard with a parent issue number or URL; choose child PR mode on the default branch and integration mode on other branches."

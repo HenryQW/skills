@@ -46,7 +46,7 @@ Do not leave README updates for a later commit.
 ## Context and precedence
 
 - Before project work, read:
-  - `${AGENT_MEMORY_ROOT}/projects/Skills/Agent/Memory/index.md`
+  - `${AGENT_MEMORY_ROOT}/projects/Skills/Agent/Memory/Memory Router.md`
 
 ## Execution
 

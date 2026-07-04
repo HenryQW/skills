@@ -73,6 +73,7 @@ Include:
 - short site context
 - canonical URL
 - locale when relevant
+- source links and dates when they are meaningful
 - body content rendered as readable plain text
 
 Recommended shape:

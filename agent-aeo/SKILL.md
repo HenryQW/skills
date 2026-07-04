@@ -20,50 +20,20 @@ Read these references when you need format-level detail:
 - `references/agent-json.md`: structure and response rules for
   `/.well-known/agent.json`
 
-## Target Surfaces
+## Surfaces and formats
 
-Implement these surfaces when they fit the site:
+Add only the surfaces that fit the site:
 
-- `/.well-known/agent.json`: discovery metadata for agent clients.
-- `/llms.txt`: compact root plain-text entry point with site summary and links.
-- `/llms-full.txt`: fuller root plain-text corpus or route catalog.
-- `/<path>/index.md`: markdown representation of the page content.
-- `/<path>/llms.txt`: plain-text representation of the same page content.
-- `?mode=agent`: alternate markdown view for the canonical page URL.
-- `Accept: text/markdown`: content negotiation for supported page URLs.
+- discovery metadata: `/.well-known/agent.json`; use `references/agent-json.md`
+- root text entry points: `/llms.txt` and `/llms-full.txt`; use `references/llms-txt.md`
+- page content: `/<path>/index.md`, `/<path>/llms.txt`, `?mode=agent`, and
+  `Accept: text/markdown`; use `references/index-md.md` and
+  `references/llms-txt.md`
 
-Do not create a separate visual agent page when the site can return the same
-markdown through `index.md`, `?mode=agent`, and `Accept: text/markdown`.
-
-## Content Contract
-
-Every page-level agent response must include enough standalone context for a
-direct deep link:
-
-- page title as the first heading
-- concise site or organization context near the top
-- canonical URL
-- locale, if the site is localized
-- the actual page body content, not only metadata
-- source links and dates when they are meaningful
-
-For subpages, prepend a consistent site context block before page-specific
-content. Example shape:
-
-```md
-# Page Title
-
-Site: Example Website
-Context: Example Website is a leading provider of widgets and widget-related services.
-Canonical URL: https://example.com/en-US/services/widget-management
-```
-
-For article or publication pages, include the actual body from the source
-Markdown, MDX, CMS export, or other canonical source after frontmatter or
-metadata removal. Do not stop at summary, tags, or excerpt.
-
-For exact formatting expectations, read the matching reference file instead of
-inventing a new shape.
+Every page-level response must include real body content plus enough site
+context for a deep link. Do not create a separate visual agent page when the
+same markdown can be returned through `index.md`, `?mode=agent`, or
+`Accept: text/markdown`.
 
 ## Recommended Architecture
 

@@ -20,6 +20,7 @@ Include these elements near the top:
 - site or organization context
 - canonical URL
 - locale when relevant
+- source links and dates when they are meaningful
 
 Then include the actual page body content.
 
@@ -55,6 +56,7 @@ For articles, insights, research, or publications:
 - keep real headings and paragraphs
 - keep pull quotes, lists, and section structure in Markdown form
 - include publication date when it is part of the page contract
+- include source links when they help agents cite or verify the page
 - include tags only if they are additive, not a substitute for body content
 
 Do not stop at excerpt, hero summary, or metadata.

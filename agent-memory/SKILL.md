@@ -38,7 +38,7 @@ Canonical `AGENTS.md` snippets: `references/agents.md`.
 Use distill mode when the user invokes `$agent-memory` for distillation or asks to distill progress.
 
 1. Read `.context/progress.md`.
-2. Read the project `Agent/Memory/index.md`.
+2. Read the project `Agent/Memory/Memory Router.md`.
 3. Follow `references/distill.md`.
 
 Reference: `references/distill.md`.

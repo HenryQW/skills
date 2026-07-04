@@ -11,6 +11,7 @@ Create a PR from the current branch.
 
 - `base_branch` is optional and defaults to the repository default branch.
 - `issue_number` is optional and can be derived from the branch name or PR title.
+- `issue_numbers` is optional when one PR resolves multiple issues.
 
 ## Procedure
 
@@ -49,6 +50,6 @@ Always use this PR body template:
 - Closes #<issue_number>
 ```
 
-Use `Closes #<issue_number>` only when the PR clearly resolves the issue; otherwise omit it.
+Use one `Closes #...` bullet for each issue the PR clearly resolves; otherwise omit the section.
 
 Finish by replying with only the PR URL.
