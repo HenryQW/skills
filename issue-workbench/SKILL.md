@@ -1,6 +1,6 @@
 ---
 name: issue-workbench
-description: Use this skill when asked to implement one GitHub issue into a clean feature branch. It reads the issue, creates an issue branch in the current worktree by default, applies a minimal implementation, runs review-checkpoint, commits the result, and either hands off to pr-launchpad or returns a branch to shipyard integration mode.
+description: Use this skill when asked to implement one GitHub issue into a clean feature branch. It reads the issue, creates an issue branch in the current worktree by default, applies a minimal implementation, runs review-checkpoint or adversarial review fallback, commits the result, and either hands off to pr-launchpad or returns a branch to shipyard integration mode.
 ---
 
 # issue-workbench
@@ -8,8 +8,8 @@ description: Use this skill when asked to implement one GitHub issue into a clea
 ## Goal
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
-Run `$review-checkpoint` on that branch and fix actionable findings before returning.
-After the latest completed review-checkpoint run returns no actionable findings, hand off to pr-launchpad on the current branch unless `handoff_mode=integration_branch`.
+Run `$review-checkpoint` or its fallback review gate on that branch and fix actionable findings before returning.
+After the latest completed review gate returns no actionable findings, hand off to pr-launchpad on the current branch unless `handoff_mode=integration_branch`.
 
 ## Bundled resources
 
@@ -17,6 +17,8 @@ After the latest completed review-checkpoint run returns no actionable findings,
 - `scripts/branch_name.py`: deterministic branch names.
 - `scripts/start_issue_branch.py`: branch and shipyard worktree setup.
 - `scripts/diff_guard.py`: forbidden-path guard.
+
+Use `<issue_workbench_dir>` as the absolute path to this skill directory when running `diff_guard.py`.
 
 ## Inputs
 
@@ -32,9 +34,10 @@ After the latest completed review-checkpoint run returns no actionable findings,
 ## Scope and boundaries
 
 - Only modify files required by the issue.
-- `$review-checkpoint` is the only review signal and owns review-actionability rules.
+- `$review-checkpoint` is the preferred review signal and owns review-actionability rules.
+- If `$review-checkpoint` itself cannot run, use the adversarial review fallback in step 9.
 - Do not perform unrelated refactors.
-- Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or review-checkpoint directly identifies a deterministic issue in that file.
+- Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
 - Do not modify `.context/` except local uncommitted review-checkpoint notes in `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
@@ -90,6 +93,8 @@ python3 <skill_dir>/scripts/start_issue_branch.py <issue_number> --worktree-path
 
 After integration setup succeeds, `cd` into the returned worktree. Do not switch branches in the caller worktree when `worktree_path` is set.
 
+Use `<review_base>=<integration_branch>` in integration mode. Otherwise use `<review_base>=origin/<base_branch>`.
+
 ### 4. Inspect the repository before editing
 
 Identify the smallest relevant files or modules with `rg` or `rg --files`. Prefer existing patterns, tests, helpers, and conventions. Avoid new dependencies unless the issue requires them.
@@ -106,10 +111,10 @@ Run:
 git status --short
 git diff --stat
 git diff
-python3 <skill_dir>/scripts/diff_guard.py
+python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
 
-If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--allow <path>`.
+If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`.
 
 Every changed file and line must trace to the issue. Stop if the diff contains unrelated changes.
 
@@ -135,15 +140,23 @@ git commit -m "feat(auth): add token refresh handling"
 
 Run `$review-checkpoint` with the selected `max_iterations` and `poll_interval_seconds`.
 
-If review-checkpoint changes files, rerun the path guard before handoff:
+After any review-gate fix changes or commits files, rerun the path guard before handoff:
 
 ```bash
-python3 <skill_dir>/scripts/diff_guard.py --allow .context/progress.md
+python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
 
-If review-checkpoint directly identifies a deterministic issue in a blocked path, verify that finding, then rerun the guard with `--allow .context/progress.md --allow <path>`.
+If that fails because `.context/progress.md` is local scratch, first confirm `git diff --name-only <review_base>...HEAD -- .context/progress.md` is empty before adding `--allow .context/progress.md`.
 
-Continue only after review-checkpoint reports no actionable findings from the latest completed review with no later commit.
+If the review gate directly identifies a deterministic issue in a blocked path, verify that finding before adding `--allow <path>`.
+
+Rerun `python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>` with only the verified `--allow` values accumulated above.
+
+If `$review-checkpoint` tooling is unavailable, spawn one read-only adversarial reviewer instead. Give it the issue scope, review base, changed files, `git diff --stat <review_base>...HEAD`, `git diff <review_base>...HEAD`, and verification commands/results. Tell it not to edit files, commit, push, or review broad cleanup. Classify its findings with `$review-checkpoint` actionability rules.
+
+If the fallback reviewer finds an actionable issue, fix and commit it, then run `$review-checkpoint` again; if it is still unavailable, run another fallback reviewer.
+
+Continue only after the latest completed review gate reports no actionable findings with no later commit.
 
 ### 10. Final handoff
 
@@ -153,9 +166,11 @@ Run:
 git status --short
 git log --oneline -5
 git branch --show-current
+git rev-parse HEAD
+git diff --stat <review_base>...HEAD
 ```
 
-No staged or tracked code changes should remain before pr-launchpad runs. `.context/progress.md` may remain local and uncommitted for review-checkpoint notes.
+No staged or tracked code changes should remain before pr-launchpad runs or before integration-mode return. `.context/progress.md` may remain local and uncommitted for review-checkpoint notes.
 
 If `handoff_mode=pull_request`, run `pr-launchpad` on the current branch and return only the PR URL.
 
@@ -164,18 +179,19 @@ If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return exactly:
 ```text
 branch=<branch_name>
 worktree=<worktree_path>
+commit=<commit_sha>
+diff_stat=<git diff --stat <review_base>...HEAD output with newlines replaced by " | ">
+verification=<pass|skip>:<commands run or skip reason>
 ```
 
 ## Output
 
 In normal PR mode, return only the PR URL.
 
-In integration mode, return only the branch and worktree lines described above.
+In integration mode, return only the branch, worktree, commit, diff_stat, and verification lines described above.
 
 Do not include explanations.
 
-Do not include summaries.
-
-Do not include test notes.
+Do not include extra summaries or test notes beyond the exact required return lines.
 
 Do not include markdown.

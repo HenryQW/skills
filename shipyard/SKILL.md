@@ -59,7 +59,10 @@ Infer everything else:
    - For each runnable non-final child allowed by the dependency graph, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
    - Stop if any child worktree path already exists.
    - Launch `$issue-workbench <child_issue>` with `worktree_path=<path>`, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
-   - Each child issue-workbench returns `branch=<child_branch>` and `worktree=<child_worktree>` only after its latest review-checkpoint run has no actionable findings.
+   - Each child issue-workbench returns `branch=`, `worktree=`, `commit=`, `diff_stat=`, and `verification=` only after its latest review gate has no actionable findings.
+   - Record those returned fields in `.context/progress.md`; do not commit `.context/`.
+   - Stop if any return field is missing, `verification=` does not start with `pass:` or `skip:`, or `git rev-parse <child_branch>` does not match the returned `commit=`.
+   - Spot-check returned `diff_stat`. Inspect the full child diff before merge only when the diff touches high-risk paths or is not obviously tiny.
    - In the shipyard worktree, merge only returned child branches into the current branch.
    - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
    - After each merge, run the smallest relevant validation command discoverable in the repo.
@@ -68,6 +71,7 @@ Infer everything else:
 5. Finish integration mode.
    - After every non-final child is merged into the current branch, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
+   - Apply the same returned-field recording, missing-field stop, verification-prefix stop, commit-match check, and `diff_stat` spot-check before merging `final_check`.
    - Merge the returned `final_check` branch into the shipyard branch.
    - Run `$review-checkpoint` on the shipyard branch as the final review gate.
    - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`.
@@ -120,6 +124,7 @@ When executing, return:
 - Child issue executed, or child issues merged in integration mode.
 - PR URL, using the final shipyard PR in integration mode.
 - Integration branch and child worktree paths when integration mode ran.
+- Child handoff evidence: issue, branch, commit, diff_stat, and verification.
 - CI/review routing performed.
 - Verification commands actually run.
 - Current stop reason and next runnable issue, if any.

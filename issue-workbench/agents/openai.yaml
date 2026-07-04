@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Workbench"
-  short_description: "Implement one issue for a PR or shipyard branch"
-  default_prompt: "Use $issue-workbench to implement the selected GitHub issue on a clean branch, run $review-checkpoint, and hand off to $pr-launchpad unless shipyard integration mode is requested."
+  short_description: "Implement one issue with a review gate"
+  default_prompt: "Use $issue-workbench to implement the selected GitHub issue on a clean branch, run the review gate, and hand off to $pr-launchpad unless shipyard integration mode is requested."
