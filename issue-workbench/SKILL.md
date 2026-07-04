@@ -15,6 +15,7 @@ After the latest completed review-checkpoint run returns no actionable findings,
 
 - `scripts/issue_snapshot.py`: compact issue text and comments.
 - `scripts/branch_name.py`: deterministic branch names.
+- `scripts/start_issue_branch.py`: branch and shipyard worktree setup.
 - `scripts/diff_guard.py`: forbidden-path guard.
 
 ## Inputs
@@ -31,8 +32,7 @@ After the latest completed review-checkpoint run returns no actionable findings,
 ## Scope and boundaries
 
 - Only modify files required by the issue.
-- `$review-checkpoint` is the only review signal.
-- Fix only actionable review-checkpoint findings in the branch diff.
+- `$review-checkpoint` is the only review signal and owns review-actionability rules.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or review-checkpoint directly identifies a deterministic issue in that file.
 - Do not modify `.context/` except local uncommitted review-checkpoint notes in `.context/progress.md`.
@@ -42,9 +42,7 @@ After the latest completed review-checkpoint run returns no actionable findings,
 
 Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
-A review-checkpoint finding is actionable only when it refers to code visible in the branch diff, the fix is deterministic, the fix does not require a product decision, the fix does not expand issue scope, and the fix can be made in the referenced file or a directly necessary adjacent file.
-
-Ignore findings that request clarification, broad cleanup, optional improvements, or behavior beyond the issue. Stop when a real risk requires a product decision or when a finding repeats after a reasonable targeted fix.
+Ignore review findings that `$review-checkpoint` classifies as non-actionable. Stop when a real risk requires a product decision or when a finding repeats after a reasonable targeted fix.
 
 ## Procedure
 
@@ -78,38 +76,19 @@ Use the current worktree by default. Use `worktree_path` only when `$shipyard` p
 
 If `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`.
 
-Use the provided `base_branch` input for normal PR mode. If it is omitted, resolve the repository default branch:
+Use the helper for normal PR mode:
 
 ```bash
-base_branch=${base_branch:-$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)}
+python3 <skill_dir>/scripts/start_issue_branch.py <issue_number> [--base-branch <base_branch>] [--branch-slug <branch_slug>]
 ```
 
-Run:
+For `$shipyard` integration mode:
 
 ```bash
-git fetch origin
+python3 <skill_dir>/scripts/start_issue_branch.py <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
 ```
 
-```bash
-branch_name=$(python3 <skill_dir>/scripts/branch_name.py <issue_number> [branch_slug])
-```
-
-Stop before implementation if the branch already exists locally or on `origin`.
-
-In normal PR mode, run:
-
-```bash
-git checkout -b "$branch_name" "origin/$base_branch"
-```
-
-In integration mode, stop if `worktree_path` already exists, then run:
-
-```bash
-git worktree add -b "$branch_name" "$worktree_path" "$integration_branch"
-cd "$worktree_path"
-```
-
-Do not switch branches in the caller worktree when `worktree_path` is set.
+After integration setup succeeds, `cd` into the returned worktree. Do not switch branches in the caller worktree when `worktree_path` is set.
 
 ### 4. Inspect the repository before editing
 

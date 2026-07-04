@@ -12,6 +12,7 @@ CHECKS = (
     ("issue blueprint publish", ["python3", "issue-blueprint/scripts/publish_issue_plan.py", "--self-test"]),
     ("review repairbay comments", ["python3", "review-repairbay/scripts/fetch_comments.py", "--self-test"]),
     ("issue branch name", ["python3", "issue-workbench/scripts/branch_name.py", "123", "Add Thing!!"]),
+    ("issue branch start", ["python3", "issue-workbench/scripts/start_issue_branch.py", "--self-test"]),
     ("diff guard", ["python3", "issue-workbench/scripts/diff_guard.py"]),
     ("ci repairbay help", ["python3", "ci-repairbay/scripts/inspect_pr_checks.py", "--help"]),
     ("shipyard parent inspection", ["python3", "shipyard/scripts/inspect_parent_issue.py", "--self-test"]),

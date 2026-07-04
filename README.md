@@ -146,7 +146,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 | Planning | `repo-surveyor` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-03 14:39 |
 | Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-03 14:39 |
 | Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 05:24 |
-| Execution | `issue-workbench` | Implement one GitHub issue for a reviewed PR or shipyard integration branch. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 04:46 |
+| Execution | `issue-workbench` | Implement one GitHub issue for a reviewed PR or shipyard integration branch. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 05:35 |
 | Review gate | `review-checkpoint` | Run Greptile on the current branch and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-03 14:39 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-03 14:48 |
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-03 16:34 |
