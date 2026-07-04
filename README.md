@@ -135,6 +135,7 @@ flowchart LR
 
 - Use `ci-repairbay` for failing GitHub Actions checks.
 - Use `review-repairbay` for unresolved review threads or requested changes.
+- If the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, record `Pending external unavailable check: <check>` instead of invoking repair skills.
 - Re-check the PR after each cleanup pass.
 
 ## 📦 Skill Reference
@@ -148,7 +149,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 | Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 13:51 |
 | Execution | `issue-workbench` | Implement one issue with guarded diffs and a review fallback. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 13:38 |
 | Review gate | `review-checkpoint` | Run Greptile, or fallback adversarial review, and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-04 13:01 |
-| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 06:13 |
+| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 13:57 |
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-04 05:48 |
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-04 06:05 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-04 05:53 |
