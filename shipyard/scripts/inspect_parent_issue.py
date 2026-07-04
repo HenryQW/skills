@@ -23,6 +23,10 @@ def gh_json(args: list[str]) -> dict[str, Any]:
     return json.loads(run(["gh", *args]))
 
 
+def repo_view_args(repo: str | None) -> list[str]:
+    return ["repo", "view", *([repo] if repo else []), "--json", "defaultBranchRef"]
+
+
 def issue_number(value: str) -> str:
     if re.fullmatch(r"[1-9][0-9]*", value):
         return value
@@ -187,7 +191,7 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
         )
         for number in child_numbers
     ]
-    default_branch = gh_json(["repo", "view", *repo_args, "--json", "defaultBranchRef"])["defaultBranchRef"]["name"]
+    default_branch = gh_json(repo_view_args(repo))["defaultBranchRef"]["name"]
     current_branch = run(["git", "branch", "--show-current"])
     if not current_branch:
         raise SystemExit("detached HEAD is not supported")
@@ -263,6 +267,8 @@ def self_test() -> None:
     assert local_done_numbers(classified, "integration", "integration", lambda number, branch: number == "11") == {"11"}
     assert classify([child_c], "main")[0]["status"] == "pending-pr"
     assert graph_errors(classified) == []
+    assert repo_view_args("OWNER/REPO") == ["repo", "view", "OWNER/REPO", "--json", "defaultBranchRef"]
+    assert repo_view_args(None) == ["repo", "view", "--json", "defaultBranchRef"]
 
 
 def main() -> int:

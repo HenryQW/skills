@@ -40,10 +40,27 @@ If the `greptile` command is missing, cannot start or show a review because of a
 
 When Greptile is unavailable, delegate one adversarial review to a subagent:
 
-- Ask the subagent to inspect the current branch diff only.
+- Use a prompt that includes `working_directory=<absolute path>` as the first field.
+- Collect and pass the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
+- Ask the subagent to inspect that branch diff only.
 - Tell it to report deterministic, in-scope findings with file/line evidence.
 - Tell it not to edit files, commit, push, or review broad cleanup.
 - Classify its output with the same actionable-finding rules as Greptile.
+- Close the completed subagent after collecting its result.
+
+Prompt template:
+
+```text
+working_directory=<absolute path>
+review_base=<base ref or unknown>
+branch=<branch>
+changed_files=<files>
+diff_stat=<captured stat>
+diff=<captured diff or path to diff artifact>
+verification=<commands and results>
+
+Review only this diff. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope findings with file/line evidence, or PASS.
+```
 
 Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run another subagent review for the next iteration.
 

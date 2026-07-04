@@ -74,6 +74,9 @@ def validate(plan: dict) -> None:
         seen.update(items)
     if plan.get("waves") and seen != known:
         raise SystemExit(f"waves omit issues: {sorted(known - seen)}")
+    for index, item in enumerate(plan.get("dropped_findings", []), 1):
+        if not item.get("finding") or not item.get("reason"):
+            raise SystemExit(f"dropped_findings[{index}] requires finding and reason")
 
 
 def ordered_issues(plan: dict) -> list[dict]:
@@ -151,6 +154,16 @@ def tracker_body(plan: dict, numbers: dict[str, str]) -> str:
             lines.append(f"- {wave['notes']}")
         lines.append("")
     lines += [
+        "## Dropped findings",
+        "",
+    ]
+    dropped = plan.get("dropped_findings", [])
+    if dropped:
+        lines += [f"- {item['finding']} - {item['reason']}" for item in dropped]
+    else:
+        lines.append("- None.")
+    lines += [
+        "",
         "## Non-goals",
         "",
         *[f"- {item}" for item in tracker.get("non_goals", [])],
@@ -180,6 +193,7 @@ def render(plan_path: Path, out: Path, numbers_path: Path | None, tracker_issue:
 def self_test() -> None:
     plan = {
         "tracker": {"title": "x", "goal": "g", "constraints": ["c"], "non_goals": ["n"], "definition_of_done": ["d"]},
+        "dropped_findings": [{"finding": "duplicate cleanup", "reason": "duplicate of #1"}],
         "issues": [
             {"id": "b", "title": "B", "role": "final_check", "purpose": "B work.", "acceptance": ["b ok"], "blocked_by": ["a"], "blocks": []},
             {"id": "a", "title": "A", "purpose": "A work.", "acceptance": ["a ok"], "blocked_by": [], "blocks": ["b"]},
@@ -199,6 +213,7 @@ def self_test() -> None:
         render(plan_path, out, nums, "#9")
         assert "#9" in (out / "01-a.md").read_text()
         assert "#1" in (out / "00-tracker.md").read_text()
+        assert "duplicate cleanup" in (out / "00-tracker.md").read_text()
         assert "a\tA\t" in (out / "create-order.tsv").read_text()
 
 

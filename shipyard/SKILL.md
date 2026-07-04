@@ -17,6 +17,7 @@ Mode selection is automatic:
 ## Inputs
 
 - `parent_issue` is required: the GitHub issue number or URL for the parent issue.
+- Treat `shipyard run <parent_issue> --integration-worktree <absolute_path>` as an explicit request to execute integration mode from that worktree. The path must be absolute.
 
 Infer everything else:
 
@@ -30,10 +31,26 @@ Infer everything else:
 - `scripts/inspect_parent_issue.py`: resolves branch mode, parent issue, child issue dependencies, `final_check`, and runnable children.
 - `<issue_workbench_dir>/scripts/integration_child.py`: optional merge helper; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
+## Runnable CLI Flow
+
+Use these commands as the deterministic spine; the agent still owns child implementation, review gates, and PR creation.
+
+```bash
+gh auth status
+python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
+python3 <issue_workbench_dir>/scripts/integration_child.py start <child_issue> --worktree-path <absolute_child_worktree> --integration-branch <integration_branch>
+# run $issue-workbench in the child worktree
+python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <integration_branch>
+python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
+```
+
+After all non-final children are merged, run `final_check` the same way. For a verification-only `final_check`, no empty commit is required; `diff_stat=` plus `commit=` equal to the shipyard branch HEAD is the expected no-op result.
+
 ## Workflow
 
 1. Inspect repository and issue graph.
    - Confirm `gh auth status`.
+   - If the user passed `--integration-worktree`, `cd` there before inspecting and stop if it is not an absolute path.
    - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
    - Stop if the script cannot resolve a parent issue, current branch, dependency graph, or runnable state.
    - If child issues name explicit files and acceptance criteria, read only matching active handoff/index sections and issue-linked docs. Use broad repository or vault searches only when scoped reads are insufficient.
@@ -59,6 +76,7 @@ Infer everything else:
    - Use this path only when the current branch is not the default branch.
    - Ensure the caller worktree is clean.
    - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
+   - Let Shipyard own child worktree creation; do not manually create scratch files or child branches outside this flow.
    - Use the latest inspection output as the wave source.
    - The wave includes only non-final children whose current status is `runnable`; skip `blocked`, `blocked-missing`, `blocked-final-check`, `pending-pr`, `done`, and `done-local`.
    - Do not create child worktrees for blocked children in anticipation of unblocking.
@@ -68,6 +86,7 @@ Infer everything else:
 
 ```text
 Use $issue-workbench <child_issue>
+working_directory=<absolute_child_worktree>
 worktree_path=<path>
 handoff_mode=integration_branch
 integration_branch=<current_branch>
@@ -83,6 +102,13 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
    - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
    - After each merge, run the smallest relevant validation command discoverable in the repo.
    - Do not delete child worktrees automatically.
+   - Once multiple worktrees exist, use absolute paths in all `apply_patch` edits and shell commands that create or mutate files.
+
+   Keep this compact state object in `.context/progress.md` after every child return or merge:
+
+```json
+{"tracker":"#<parent>","mode":"integration","integration_branch":"<branch>","children":[{"issue":"#<n>","worktree":"<path>","branch":"<branch>","commit":"<sha>","verification":"pass:<cmds>","status":"returned|merged"}],"checks":["<command>"],"current_step":"<next action>"}
+```
 
 5. Finish integration mode.
    - After each wave is merged, rerun `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
@@ -90,6 +116,7 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
    - If non-final children remain blocked, pending, or missing, stop and report the blockers instead of running `final_check`.
    - After every non-final child is merged into the current branch or otherwise done, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
+   - If `final_check` is verification-only, instruct the child not to create an empty commit; it should run checks and return the no-op completion signal.
    - Apply the same returned-field recording, missing-field stop, verification-prefix stop, commit-match check, and `diff_stat` spot-check before merging `final_check`.
    - If `final_check` returns an empty `diff_stat` and its returned `commit=` already equals the shipyard branch HEAD, record `final_check` as no-op complete and skip merge.
    - Otherwise merge the returned `final_check` branch into the shipyard branch.

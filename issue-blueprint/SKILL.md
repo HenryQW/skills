@@ -13,9 +13,9 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 2. Require `$grill-with-docs`. If unavailable, stop and tell the user this skill requires `$grill-with-docs`.
 3. Run the spec loop:
    - Main agent is the reviewer and scope owner.
-   - Subagent A runs `$grill-with-docs` and returns at most 5 findings per loop.
+   - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 findings per loop.
    - Main agent debates Subagent A until they produce a final spec with explicit assumptions, non-goals, acceptance criteria, open questions, and glossary/domain updates.
-   - Subagent B reviews that final spec and returns at most 5 findings per loop.
+   - Subagent B reviews that final spec with the Reviewer B template below and returns at most 5 findings per loop.
    - Main agent decides whether Subagent B's findings are worth addressing. Address findings that change correctness, constraints, acceptance criteria, dependencies, implementation risk, or user-stated scope. Reject speculative or overbuilt findings with a short rationale.
    - If any finding is worth addressing, loop back to the Main-agent/Subagent-A debate.
    - Stop when Subagent B raises no new issue worth addressing, or after 5 total spec-review loops. If the loop limit is reached, stop and ask the human to intervene.
@@ -23,7 +23,7 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
    - implementation handoff spec,
    - glossary/domain model update only when terminology changed.
 5. Stop and ask if findings conflict with user-stated scope or require a product decision the agents cannot make.
-6. Draft an issue plan JSON using `references/issue-plan.md`.
+6. Draft an issue plan JSON using `references/issue-plan.md`. Before publish, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
 7. Render issue markdown:
 
 ```bash
@@ -31,6 +31,37 @@ python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .c
 ```
 
 8. Create child issues first, then the implementation tracker issue, then re-render children with real numbers and update them.
+
+## Reviewer Templates
+
+Use these prompts as templates so reviewers inspect the current artifact, not stale drafts.
+
+Reviewer A:
+
+```text
+Use $grill-with-docs on this exact draft/spec path: <absolute_path>.
+Working directory: <absolute_repo_path>.
+Return at most 5 findings in this shape only:
+BLOCKERS:
+- severity | issue | exact change
+
+ACCEPTED:
+- change
+
+REJECTED:
+- reason
+```
+
+Reviewer B:
+
+```text
+Review this final spec and issue-plan draft only:
+- spec: <absolute_path>
+- plan_json: <absolute_path>
+- working_directory: <absolute_repo_path>
+Do not review old drafts or unrelated repo cleanup.
+Return at most 5 deterministic blockers: severity | issue | exact change.
+```
 
 ## Token Discipline
 
@@ -69,8 +100,11 @@ python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py \
   plan.json \
   --repo OWNER/REPO \
   --label enhancement \
-  --label ready-for-agent
+  --label ready-for-agent \
+  --verify
 ```
+
+`--verify` is the single-command path: it runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, prints the Shipyard execution block, and verifies every published issue with `gh issue view`.
 
 3. Verify the returned issue graph with `gh issue view`.
 
@@ -87,6 +121,7 @@ execution:
 parent_issue=#125
 child_issues=#123 #124 #126
 final_check_issue=#126
+numbers_json=/absolute/repo/path/.context/issues/numbers.json
 shipyard_worktree=/absolute/repo/path
 shipyard_command=Use $shipyard #125
 repo=OWNER/REPO
@@ -99,6 +134,7 @@ repo=OWNER/REPO
 - Every child issue must include `Tracker`, `What to build`, `Acceptance criteria`, `Blocked by`, `Blocks`, and `Parallelism`.
 - Exactly one child issue must have `"role": "final_check"`. It blocks nothing and is blocked by every other child issue.
 - The implementation tracker issue must include the full issue graph and explicit waves for parallel execution.
+- If findings were dropped before publish, record them in `dropped_findings`; the tracker will include a dropped-findings section.
 - Publish blockers before blocked work so the final graph can use real issue numbers. The renderer topologically sorts `create-order.tsv` from `blocked_by`.
 - Keep non-goals visible. They prevent compatibility paths and speculative scaffolding from sneaking back in.
 
@@ -112,4 +148,10 @@ python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py --self-test
 python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/issue-blueprint  # if available
 ```
 
-After publishing, verify with `gh issue view` or the GitHub connector and report the publisher's execution block.
+For live publishing, prefer:
+
+```bash
+python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
+```
+
+Report the publisher's execution block.

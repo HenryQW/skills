@@ -11,6 +11,9 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
     "non_goals": ["Scope explicitly skipped."],
     "definition_of_done": ["Final verifiable condition."]
   },
+  "dropped_findings": [
+    {"finding": "Existing route/session cleanup draft.", "reason": "Duplicate of #123; excluded before publish."}
+  ],
   "issues": [
     {
       "id": "foundation",
@@ -45,6 +48,7 @@ Rules:
 - `id` is stable and lowercase. It becomes the filename slug and numbers-map key.
 - `blocked_by` and `blocks` use issue IDs, not GitHub numbers.
 - `tracker` creates the implementation tracker issue. Do not create a child issue for the implementation tracker.
+- `dropped_findings` is optional, but required when repo-surveyor or review findings were excluded before publish. Record the reason so the parent graph explains why duplicates were not sliced.
 - Exactly one issue must use `"role": "final_check"`; it must be blocked by every non-final child and block nothing.
 - Keep bodies short enough to scan, but include enough context for an AFK agent.
 - The renderer rejects invalid IDs, unknown dependencies, cycles, wave-order errors, and mismatched `blocks` / `blocked_by`.

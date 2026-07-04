@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -18,8 +19,26 @@ def emit(lines: list[str]) -> None:
         print(line)
 
 
+def repo_requires_progress(root: Path) -> bool:
+    instructions = root / "AGENTS.md"
+    return instructions.exists() and ".context/progress.md" in instructions.read_text(encoding="utf-8")
+
+
+def ensure_progress_file(source_root: Path, child_root: Path) -> None:
+    if not repo_requires_progress(source_root):
+        return
+    target = child_root / ".context" / "progress.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source = source_root / ".context" / "progress.md"
+    if source.exists():
+        shutil.copyfile(source, target)
+    else:
+        target.write_text("# Progress\n\n- [ ] Continue issue-workbench integration child.\n", encoding="utf-8")
+
+
 def start_child(issue_number: str, worktree_path: str, integration_branch: str, branch_slug: str | None) -> list[str]:
-    return [
+    source_root = Path.cwd()
+    lines = [
         *create_issue_branch(
             issue_number,
             branch_slug=branch_slug,
@@ -28,6 +47,8 @@ def start_child(issue_number: str, worktree_path: str, integration_branch: str, 
         ),
         f"review_base={integration_branch}",
     ]
+    ensure_progress_file(source_root, Path(worktree_path))
+    return lines
 
 
 def changed_code_status() -> list[str]:
@@ -121,6 +142,12 @@ def self_test() -> int:
             Path("dirty.txt").unlink()
             merge_child("issue-123", "integration")
             assert "child" in Path("README.md").read_text(encoding="utf-8")
+            (repo / "AGENTS.md").write_text("Use .context/progress.md\n", encoding="utf-8")
+            (repo / ".context").mkdir()
+            (repo / ".context" / "progress.md").write_text("# Progress\n\nseed\n", encoding="utf-8")
+            second = tmp / "child-2"
+            start_child("125", os.fspath(second), "integration", None)
+            assert (second / ".context" / "progress.md").read_text(encoding="utf-8") == "# Progress\n\nseed\n"
         finally:
             os.chdir(old_cwd)
     return 0

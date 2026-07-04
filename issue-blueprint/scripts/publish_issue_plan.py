@@ -12,6 +12,7 @@ from pathlib import Path
 
 from render_issue_plan import render
 from render_issue_plan import ordered_issues
+from render_issue_plan import self_test as render_self_test
 
 
 def run(cmd: list[str]) -> str:
@@ -49,7 +50,7 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path) -> dict[st
     return numbers
 
 
-def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path) -> str:
+def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path, numbers_path: Path) -> str:
     plan = json.loads(plan_path.read_text())
     children = [numbers[issue["id"]] for issue in ordered_issues(plan)]
     final_check = next(numbers[issue["id"]] for issue in plan["issues"] if issue.get("role") == "final_check")
@@ -60,11 +61,17 @@ def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktre
             f"parent_issue={parent}",
             f"child_issues={' '.join(children)}",
             f"final_check_issue={final_check}",
+            f"numbers_json={numbers_path.resolve()}",
             f"shipyard_worktree={worktree}",
             f"shipyard_command=Use $shipyard {parent}",
             f"repo={repo}",
         ]
     )
+
+
+def verify_published(numbers: dict[str, str], repo: str) -> None:
+    for issue in numbers.values():
+        run(["gh", "issue", "view", issue.lstrip("#"), "--repo", repo, "--json", "number,state,title"])
 
 
 def self_test() -> None:
@@ -97,10 +104,11 @@ def self_test() -> None:
             numbers = publish(plan_path, "o/r", ["enhancement"], root / "out")
             assert numbers == {"a": "#1", "b": "#2", "tracker": "#3"}
             assert "#3" in (root / "out" / "01-a.md").read_text()
-            block = execution_block(plan_path, numbers, "o/r", root)
+            block = execution_block(plan_path, numbers, "o/r", root, root / "out" / "numbers.json")
             assert "parent_issue=#3" in block
             assert "child_issues=#1 #2" in block
             assert "final_check_issue=#2" in block
+            assert f"numbers_json={(root / 'out' / 'numbers.json').resolve()}" in block
             assert f"shipyard_worktree={root}" in block
             assert "shipyard_command=Use $shipyard #3" in block
         finally:
@@ -118,15 +126,22 @@ def main() -> None:
     parser.add_argument("--label", action="append", default=[])
     parser.add_argument("--out", default=".context/issues")
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--verify", action="store_true", help="Run self-tests before publish and gh issue view after publish")
     args = parser.parse_args()
     if args.self_test:
         self_test()
         return
     if not args.plan or not args.repo:
         raise SystemExit("plan and --repo are required")
+    if args.verify:
+        render_self_test()
+        self_test()
     plan_path = Path(args.plan)
-    numbers = publish(plan_path, args.repo, args.label, Path(args.out))
-    print(execution_block(plan_path, numbers, args.repo, Path.cwd()))
+    out = Path(args.out)
+    numbers = publish(plan_path, args.repo, args.label, out)
+    if args.verify:
+        verify_published(numbers, args.repo)
+    print(execution_block(plan_path, numbers, args.repo, Path.cwd(), out / "numbers.json"))
 
 
 if __name__ == "__main__":

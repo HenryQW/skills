@@ -96,6 +96,8 @@ After integration setup succeeds, `cd` into the returned worktree. Do not switch
 
 Use `<review_base>=<integration_branch>` in integration mode. Otherwise use `<review_base>=origin/<base_branch>`.
 
+If repository instructions require `.context/progress.md`, `integration_child.py start` copies the caller worktree's progress file into the child worktree or initializes one. Keep it uncommitted.
+
 ### 4. Inspect the repository before editing
 
 Identify the smallest relevant files or modules with `rg` or `rg --files`. Prefer existing patterns, tests, helpers, and conventions. Avoid new dependencies unless the issue requires them.
@@ -114,6 +116,8 @@ git diff --stat
 git diff
 python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
+
+`diff_guard.py` includes untracked files. If a new file should appear in `git diff --stat` before staging, run `git add -N <path>` and rerun the diff/stat commands.
 
 If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`.
 
@@ -190,6 +194,8 @@ Prefer generating those lines with:
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification <pass|skip>:<commands run or skip reason>
 ```
+
+For a verification-only `final_check` child, do not create an empty commit. Run the required checks, then use `integration_child.py finish`; an empty `diff_stat=` with `commit=` equal to the integration branch HEAD is the no-op completion signal for `$shipyard`.
 
 ## Output
 
