@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from render_issue_plan import render
+from render_issue_plan import ordered_issues
 
 
 def run(cmd: list[str]) -> str:
@@ -48,6 +49,24 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path) -> dict[st
     return numbers
 
 
+def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path) -> str:
+    plan = json.loads(plan_path.read_text())
+    children = [numbers[issue["id"]] for issue in ordered_issues(plan)]
+    final_check = next(numbers[issue["id"]] for issue in plan["issues"] if issue.get("role") == "final_check")
+    parent = numbers["tracker"]
+    return "\n".join(
+        [
+            "execution:",
+            f"parent_issue={parent}",
+            f"child_issues={' '.join(children)}",
+            f"final_check_issue={final_check}",
+            f"shipyard_worktree={worktree}",
+            f"shipyard_command=Use $shipyard {parent}",
+            f"repo={repo}",
+        ]
+    )
+
+
 def self_test() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -78,6 +97,12 @@ def self_test() -> None:
             numbers = publish(plan_path, "o/r", ["enhancement"], root / "out")
             assert numbers == {"a": "#1", "b": "#2", "tracker": "#3"}
             assert "#3" in (root / "out" / "01-a.md").read_text()
+            block = execution_block(plan_path, numbers, "o/r", root)
+            assert "parent_issue=#3" in block
+            assert "child_issues=#1 #2" in block
+            assert "final_check_issue=#2" in block
+            assert f"shipyard_worktree={root}" in block
+            assert "shipyard_command=Use $shipyard #3" in block
         finally:
             os.environ["PATH"] = old_path
             if old_tmpdir:
@@ -99,8 +124,9 @@ def main() -> None:
         return
     if not args.plan or not args.repo:
         raise SystemExit("plan and --repo are required")
-    numbers = publish(Path(args.plan), args.repo, args.label, Path(args.out))
-    print(json.dumps(numbers, indent=2))
+    plan_path = Path(args.plan)
+    numbers = publish(plan_path, args.repo, args.label, Path(args.out))
+    print(execution_block(plan_path, numbers, args.repo, Path.cwd()))
 
 
 if __name__ == "__main__":

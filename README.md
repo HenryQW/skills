@@ -145,7 +145,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-03 14:39 |
-| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-03 14:39 |
+| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-04 14:13 |
 | Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 13:51 |
 | Execution | `issue-workbench` | Implement one issue with guarded diffs and a review fallback. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 13:38 |
 | Review gate | `review-checkpoint` | Run Greptile, or fallback adversarial review, and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-04 13:01 |

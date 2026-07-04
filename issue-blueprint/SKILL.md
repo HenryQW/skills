@@ -80,6 +80,18 @@ The publisher writes `.context/issues/numbers.json`:
 {"foundation":"#123","writer-boundary":"#124"}
 ```
 
+It also prints the execution block to hand to Shipyard:
+
+```text
+execution:
+parent_issue=#125
+child_issues=#123 #124 #126
+final_check_issue=#126
+shipyard_worktree=/absolute/repo/path
+shipyard_command=Use $shipyard #125
+repo=OWNER/REPO
+```
+
 ## Slicing Rules
 
 - Prefer vertical tracer-bullet issues over layer-only work.
@@ -100,4 +112,4 @@ python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py --self-test
 python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/issue-blueprint  # if available
 ```
 
-After publishing, verify with `gh issue view` or the GitHub connector and report the implementation tracker issue plus child issue list.
+After publishing, verify with `gh issue view` or the GitHub connector and report the publisher's execution block.
