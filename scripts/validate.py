@@ -14,6 +14,7 @@ CHECKS = (
     ("issue branch name", ["python3", "issue-workbench/scripts/branch_name.py", "123", "Add Thing!!"]),
     ("diff guard", ["python3", "issue-workbench/scripts/diff_guard.py"]),
     ("ci repairbay help", ["python3", "ci-repairbay/scripts/inspect_pr_checks.py", "--help"]),
+    ("shipyard parent inspection", ["python3", "shipyard/scripts/inspect_parent_issue.py", "--self-test"]),
 )
 
 

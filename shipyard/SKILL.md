@@ -25,25 +25,18 @@ Infer everything else:
 - Mode: current branch equals default branch means child PR mode; any other branch means integration mode.
 - Behavior: inspect and report ready work unless the user explicitly asks to execute/run the parent issue.
 
+## Bundled Resources
+
+- `scripts/inspect_parent_issue.py`: resolves branch mode, parent issue, child issue dependencies, `final_check`, and runnable children.
+
 ## Workflow
 
-1. Read repository and parent issue state.
+1. Inspect repository and issue graph.
    - Confirm `gh auth status`.
-   - Resolve the target repo from the current directory.
-   - Resolve the repository default branch and current branch.
-   - Stop if the current checkout is detached.
-   - Read the parent issue body and child issues with `gh issue view`.
-   - Extract child issue numbers, `Blocked by`, `Blocks`, `Parallelism`, and any `final_check` child.
-   - Stop if the parent issue does not describe a dependency graph clearly enough to choose runnable work.
+   - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
+   - Stop if the script cannot resolve a parent issue, current branch, dependency graph, or runnable state.
 
-2. Classify child issues.
-   - Runnable: every blocker is closed and merged into the base branch, or in integration mode already merged into the current shipyard branch during this run.
-   - Blocked: at least one blocker is open, unmerged, or missing.
-   - Pending PR: the child has an open PR that is not merged.
-   - Done: the child issue is closed and its PR is merged. In integration mode, complete for the current run means the child branch is merged into the shipyard branch.
-   - Final check: the child whose body or parent issue role says `final_check`.
-
-3. Respect execution boundaries.
+2. Respect execution boundaries.
    - Do not run blocked children.
    - In child PR mode, do not create stacked PRs; wait for blockers to merge into the base branch.
    - In child PR mode, never merge child PRs itself.
@@ -52,14 +45,14 @@ Infer everything else:
    - In child PR mode, run one child at a time.
    - In integration mode, run all dependency-ready non-final children the graph allows; parallel children may run in separate worktrees.
 
-4. Execute the next runnable child in normal PR mode.
+3. Execute the next runnable child in normal PR mode.
    - Use this path only when the current branch is the default branch.
    - Ensure the worktree is clean, then switch to and fast-forward the base branch.
    - Run `$issue-workbench <child_issue>` from the base branch.
    - Treat the returned PR URL as the child implementation PR.
    - Record the child issue, branch, and PR URL in `.context/progress.md`; do not commit `.context/`.
 
-5. Execute children in integration mode.
+4. Execute children in integration mode.
    - Use this path only when the current branch is not the default branch.
    - Ensure the caller worktree is clean.
    - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
@@ -72,7 +65,7 @@ Infer everything else:
    - After each merge, run the smallest relevant validation command discoverable in the repo.
    - Do not delete child worktrees automatically.
 
-6. Finish integration mode.
+5. Finish integration mode.
    - After every non-final child is merged into the current branch, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
    - Merge the returned `final_check` branch into the shipyard branch.
@@ -80,7 +73,7 @@ Infer everything else:
    - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch.
    - Treat that returned PR URL as the shipyard implementation PR.
 
-7. Route PR health by signal type.
+6. Route PR health by signal type.
    - Pass the PR URL returned by `$issue-workbench` to cleanup skills.
    - In integration mode, pass the final shipyard PR URL to cleanup skills.
    - Failing GitHub Actions checks: use `$ci-repairbay` on that PR URL.
@@ -89,7 +82,7 @@ Infer everything else:
    - Pending checks or pending reviews: stop and report the pending state unless the user asked to wait.
    - Clean PR with no unresolved review threads and passing checks: report that it is ready for merge.
 
-8. Loop conservatively.
+7. Loop conservatively.
    - Re-read parent issue, child issue, and PR state before choosing the next child.
    - Continue only while a child is runnable and the previous child is not pending review, CI, or merge.
    - In integration mode, continue only until the final shipyard PR is created and routed once.
