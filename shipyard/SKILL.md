@@ -35,6 +35,7 @@ Infer everything else:
    - Confirm `gh auth status`.
    - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
    - Stop if the script cannot resolve a parent issue, current branch, dependency graph, or runnable state.
+   - If child issues name explicit files and acceptance criteria, read only matching active handoff/index sections and issue-linked docs. Use broad repository or vault searches only when scoped reads are insufficient.
 
 2. Respect execution boundaries.
    - Do not run blocked children.
@@ -58,7 +59,17 @@ Infer everything else:
    - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
    - For each runnable non-final child allowed by the dependency graph, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
    - Stop if any child worktree path already exists.
-   - Launch `$issue-workbench <child_issue>` with `worktree_path=<path>`, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
+   - Launch child workers with this template:
+
+```text
+Use $issue-workbench <child_issue>
+worktree_path=<path>
+handoff_mode=integration_branch
+integration_branch=<current_branch>
+Do not commit .context/.
+Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
+```
+
    - Each child issue-workbench returns `branch=`, `worktree=`, `commit=`, `diff_stat=`, and `verification=` only after its latest review gate has no actionable findings.
    - Record those returned fields in `.context/progress.md`; do not commit `.context/`.
    - Stop if any return field is missing, `verification=` does not start with `pass:` or `skip:`, or `git rev-parse <child_branch>` does not match the returned `commit=`.
@@ -72,9 +83,11 @@ Infer everything else:
    - After every non-final child is merged into the current branch, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
    - Apply the same returned-field recording, missing-field stop, verification-prefix stop, commit-match check, and `diff_stat` spot-check before merging `final_check`.
-   - Merge the returned `final_check` branch into the shipyard branch.
+   - If `final_check` returns an empty `diff_stat` and its returned `commit=` already equals the shipyard branch HEAD, record `final_check` as no-op complete and skip merge.
+   - Otherwise merge the returned `final_check` branch into the shipyard branch.
    - Run `$review-checkpoint` on the shipyard branch as the final review gate.
-   - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`.
+   - If Greptile fails because of provider/tooling availability and review-checkpoint substitutes adversarial subagent review, stop retrying Greptile. Record the substitution, error summary, reviewer identity if available, final actionable-finding result, and PR-body testing/review note in `.context/progress.md`.
+   - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`. If the final review gate used a Greptile-unavailable substitution, include the prepared testing/review note in the PR body.
    - Treat that returned PR URL as the shipyard implementation PR.
 
 6. Route PR health using Health Router below.
