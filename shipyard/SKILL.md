@@ -28,6 +28,7 @@ Infer everything else:
 ## Bundled Resources
 
 - `scripts/inspect_parent_issue.py`: resolves branch mode, parent issue, child issue dependencies, `final_check`, and runnable children.
+- `<issue_workbench_dir>/scripts/integration_child.py`: optional merge helper; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
 ## Workflow
 
@@ -74,7 +75,7 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
    - Record those returned fields in `.context/progress.md`; do not commit `.context/`.
    - Stop if any return field is missing, `verification=` does not start with `pass:` or `skip:`, or `git rev-parse <child_branch>` does not match the returned `commit=`.
    - Spot-check returned `diff_stat`. Inspect the full child diff before merge only when the diff touches high-risk paths or is not obviously tiny.
-   - In the shipyard worktree, merge only returned child branches into the current branch.
+   - In the shipyard worktree, merge only returned child branches into the current branch, preferably with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch>`.
    - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
    - After each merge, run the smallest relevant validation command discoverable in the repo.
    - Do not delete child worktrees automatically.

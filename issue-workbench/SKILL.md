@@ -16,6 +16,7 @@ After the latest completed review gate returns no actionable findings, hand off 
 - `scripts/issue_snapshot.py`: compact issue text and comments.
 - `scripts/branch_name.py`: deterministic branch names.
 - `scripts/start_issue_branch.py`: branch and shipyard worktree setup.
+- `scripts/integration_child.py`: integration-mode start, finish, and merge glue.
 - `scripts/diff_guard.py`: forbidden-path guard.
 
 Use `<issue_workbench_dir>` as the absolute path to this skill directory when running `diff_guard.py`.
@@ -88,7 +89,7 @@ python3 <skill_dir>/scripts/start_issue_branch.py <issue_number> [--base-branch 
 For `$shipyard` integration mode:
 
 ```bash
-python3 <skill_dir>/scripts/start_issue_branch.py <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
+python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
 ```
 
 After integration setup succeeds, `cd` into the returned worktree. Do not switch branches in the caller worktree when `worktree_path` is set.
@@ -182,6 +183,12 @@ worktree=<worktree_path>
 commit=<commit_sha>
 diff_stat=<git diff --stat <review_base>...HEAD output with newlines replaced by " | ">
 verification=<pass|skip>:<commands run or skip reason>
+```
+
+Prefer generating those lines with:
+
+```bash
+python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification <pass|skip>:<commands run or skip reason>
 ```
 
 ## Output
