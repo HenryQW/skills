@@ -111,6 +111,10 @@ def local_done_numbers(
     return {child["number"] for child in children if merged(child["number"], current_branch)}
 
 
+def branch_mode(current_branch: str, default_branch: str) -> str:
+    return "default_branch_blocked" if current_branch == default_branch else "integration"
+
+
 def mark_final_check(children: list[dict[str, Any]]) -> None:
     child_numbers = {child["number"] for child in children}
     for child in children:
@@ -195,9 +199,9 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
     current_branch = run(["git", "branch", "--show-current"])
     if not current_branch:
         raise SystemExit("detached HEAD is not supported")
-    mode = "child_pr" if current_branch == default_branch else "integration"
+    mode = branch_mode(current_branch, default_branch)
     local_done = local_done_numbers(children, current_branch, mode)
-    return {
+    plan = {
         "parent": {
             "number": str(parent["number"]),
             "title": parent.get("title", ""),
@@ -209,6 +213,9 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
         "mode": mode,
         "children": classify(children, default_branch, local_done),
     }
+    if mode == "default_branch_blocked":
+        plan["blocked_reason"] = "shipyard requires a non-default integration branch"
+    return plan
 
 
 def print_text(plan: dict[str, Any]) -> None:
@@ -216,6 +223,8 @@ def print_text(plan: dict[str, Any]) -> None:
     print(f"Parent: #{parent['number']} {parent['title']}")
     print(f"URL: {parent['url']}")
     print(f"Mode: {plan['mode']} ({plan['current_branch']} vs {plan['default_branch']})")
+    if plan.get("blocked_reason"):
+        print(f"Blocked: {plan['blocked_reason']}")
     print("\nChildren:")
     for child in plan["children"]:
         blockers = ", ".join(f"#{number}" for number in child["blocked_by"]) or "-"
@@ -263,7 +272,9 @@ def self_test() -> None:
     classified[0]["state"] = "OPEN"
     assert classify(classified, "main", {"11"})[0]["status"] == "done-local"
     assert classify(classified, "main", {"11"})[1]["status"] == "runnable"
-    assert local_done_numbers(classified, "main", "child_pr", lambda number, branch: True) == set()
+    assert branch_mode("main", "main") == "default_branch_blocked"
+    assert branch_mode("feature", "main") == "integration"
+    assert local_done_numbers(classified, "main", "default_branch_blocked", lambda number, branch: True) == set()
     assert local_done_numbers(classified, "integration", "integration", lambda number, branch: number == "11") == {"11"}
     assert classify([child_c], "main")[0]["status"] == "pending-pr"
     assert graph_errors(classified) == []

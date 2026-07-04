@@ -1,6 +1,6 @@
 ---
 name: shipyard
-description: Execute a dependency-aware GitHub parent issue by running unblocked child issues through issue-workbench, choosing child PR mode on the default branch and integration worktree mode on any other branch. Use when a parent issue from issue-blueprint should be advanced across child issues, parallel worktrees, checks, reviews, and the final_check child.
+description: Execute a dependency-aware GitHub parent issue from a non-default integration branch by running unblocked child issues through issue-workbench, merging child worktrees into the current branch, and opening one final PR. Use when a parent issue from issue-blueprint should be advanced across child issues, parallel worktrees, checks, reviews, and the final_check child; stop when the current branch is the repository default branch.
 ---
 
 # Shipyard
@@ -8,28 +8,31 @@ description: Execute a dependency-aware GitHub parent issue by running unblocked
 ## Overview
 
 Advance one dependency-aware parent issue without copying the child skills' work.
-This skill decides what runs next; `$issue-workbench`, `$ci-repairbay`, and `$review-repairbay` do the implementation, CI, and review-comment work.
-Mode selection is automatic:
+This skill decides what runs next; `$issue-workbench`, `$ci-repairbay`, `$review-repairbay`, `$review-checkpoint`, and `$pr-launchpad` do the implementation, CI, review-comment, review-gate, and PR work.
 
-- If the current branch is the repository default branch, run child PR mode. Do not merge child PRs itself.
-- If the current branch is not the default branch, treat the current branch as the shipyard integration branch. Run child worktrees and auto-merge returned child branches into it.
+Shipyard has one execution mode:
+
+- `$shipyard #123` or `shipyard #123` means execute parent issue `#123`.
+- The current branch is the shipyard integration branch.
+- If the current branch is the repository default branch, stop before creating child worktrees, branches, commits, merges, or PRs.
+- Inspect-only behavior is allowed only when the user explicitly asks to inspect, plan, dry-run, or report without executing.
 
 ## Inputs
 
 - `parent_issue` is required: the GitHub issue number or URL for the parent issue.
-- Treat `shipyard run <parent_issue> --integration-worktree <absolute_path>` as an explicit request to execute integration mode from that worktree. The path must be absolute.
+- If the user passes `--integration-worktree <absolute_path>`, `cd` there before inspecting. The path must be absolute.
 
 Infer everything else:
 
 - Repository: current directory's GitHub remote.
 - Base branch: repository default branch.
-- Mode: current branch equals default branch means child PR mode; any other branch means integration mode.
-- Behavior: inspect and report ready work unless the user explicitly asks to execute/run the parent issue.
+- Integration branch: current non-default branch.
+- Behavior: execute unless the user explicitly asks for inspect-only output.
 
 ## Bundled Resources
 
-- `scripts/inspect_parent_issue.py`: resolves branch mode, parent issue, child issue dependencies, `final_check`, and runnable children.
-- `<issue_workbench_dir>/scripts/integration_child.py`: optional merge helper; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
+- `scripts/inspect_parent_issue.py`: resolves branch policy, parent issue, child issue dependencies, `final_check`, local merged children, and runnable children.
+- `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
 ## Runnable CLI Flow
 
@@ -38,6 +41,7 @@ Use these commands as the deterministic spine; the agent still owns child implem
 ```bash
 gh auth status
 python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
+# stop here if mode is default_branch_blocked
 python3 <issue_workbench_dir>/scripts/integration_child.py start <child_issue> --worktree-path <absolute_child_worktree> --integration-branch <integration_branch>
 # run $issue-workbench in the child worktree
 python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <integration_branch>
@@ -50,30 +54,20 @@ After all non-final children are merged, run `final_check` the same way. For a v
 
 1. Inspect repository and issue graph.
    - Confirm `gh auth status`.
-   - If the user passed `--integration-worktree`, `cd` there before inspecting and stop if it is not an absolute path.
-   - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
+   - If the user passed `--integration-worktree`, stop unless it is absolute, then `cd` there before inspecting.
+   - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
    - Stop if the script cannot resolve a parent issue, current branch, dependency graph, or runnable state.
+   - If `mode` is `default_branch_blocked`, report the default branch, current branch, and instruction to create or switch to a non-default integration branch.
    - If child issues name explicit files and acceptance criteria, read only matching active handoff/index sections and issue-linked docs. Use broad repository or vault searches only when scoped reads are insufficient.
 
 2. Respect execution boundaries.
    - Do not run blocked children.
-   - In child PR mode, do not create stacked PRs; wait for blockers to merge into the base branch.
-   - In child PR mode, never merge child PRs itself.
-   - In integration mode, use the current branch as the shipyard integration branch and merge child branches into it.
+   - Use the current branch as the shipyard integration branch and merge child branches into it.
    - Do not run the `final_check` child until every non-final child is done.
-   - In child PR mode, run one child at a time.
-   - In integration mode, run only the currently dependency-ready non-final children as one wave; parallel children may run in separate worktrees.
+   - Run only the currently dependency-ready non-final children as one wave; parallel children may run in separate worktrees.
    - After each integration wave is merged, re-inspect the graph before creating worktrees for newly unblocked children.
 
-3. Execute the next runnable child in normal PR mode.
-   - Use this path only when the current branch is the default branch.
-   - Ensure the worktree is clean, then switch to and fast-forward the base branch.
-   - Run `$issue-workbench <child_issue>` from the base branch.
-   - Treat the returned PR URL as the child implementation PR.
-   - Record the child issue, branch, and PR URL in `.context/progress.md`; do not commit `.context/`.
-
-4. Execute one integration wave.
-   - Use this path only when the current branch is not the default branch.
+3. Execute one integration wave.
    - Ensure the caller worktree is clean.
    - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
    - Let Shipyard own child worktree creation; do not manually create scratch files or child branches outside this flow.
@@ -110,9 +104,9 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
 {"tracker":"#<parent>","mode":"integration","integration_branch":"<branch>","children":[{"issue":"#<n>","worktree":"<path>","branch":"<branch>","commit":"<sha>","verification":"pass:<cmds>","status":"returned|merged"}],"checks":["<command>"],"current_step":"<next action>"}
 ```
 
-5. Finish integration mode.
-   - After each wave is merged, rerun `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
-   - If newly runnable non-final children exist, repeat Step 4 before `final_check`.
+4. Finish integration.
+   - After each wave is merged, rerun `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
+   - If newly runnable non-final children exist, repeat Step 3 before `final_check`.
    - If non-final children remain blocked, pending, or missing, stop and report the blockers instead of running `final_check`.
    - After every non-final child is merged into the current branch or otherwise done, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
@@ -122,17 +116,22 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
    - Otherwise merge the returned `final_check` branch into the shipyard branch.
    - Run `$review-checkpoint` on the shipyard branch as the final review gate.
    - If Greptile fails because of provider/tooling availability and review-checkpoint substitutes adversarial subagent review, stop retrying Greptile. Record the substitution, error summary, reviewer identity if available, final actionable-finding result, and PR-body testing/review note in `.context/progress.md`.
-   - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`. If the final review gate used a Greptile-unavailable substitution, include the prepared testing/review note in the PR body.
+   - Run `$pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`. If the final review gate used a Greptile-unavailable substitution, include the prepared testing/review note in the PR body.
    - Treat that returned PR URL as the shipyard implementation PR.
 
-6. Route PR health using Health Router below.
-   - In child PR mode, route the PR URL returned by `$issue-workbench`.
-   - In integration mode, route the final shipyard PR URL.
+5. Route PR health.
+   - Read checks with `gh pr checks`.
+   - If a failing check is a GitHub Actions run, invoke `$ci-repairbay`.
+   - If review state shows requested changes, unresolved threads, or inline comments, invoke `$review-repairbay` on the PR URL.
+   - When the user asked to execute Shipyard, treat that as approval to let `$review-repairbay` fix, reply, resolve, and re-fetch actionable review threads unless the user restricted GitHub writes.
+   - When the user asked only to inspect or plan, report review state without writes.
+   - If only resolved, outdated, informational, approval, or top-level summary comments exist, do not run a cleanup skill.
+   - If the PR is blocked by human approval, merge permissions, or an external provider, stop and report the blocker.
 
-7. Loop conservatively.
-   - Re-read parent issue, child issue, and PR state before choosing the next child.
-   - Continue only while a child is runnable and the previous child is not pending review, CI, or merge.
-   - In integration mode, continue only until the final shipyard PR is created and routed once.
+6. Loop conservatively.
+   - Re-read parent issue, child issue, and PR state before choosing the next wave.
+   - Continue only while a child is runnable and the previous wave is not pending review, CI, or merge.
+   - Continue only until the final shipyard PR is created and routed once.
    - Stop when no runnable work remains.
 
 ## State Rules
@@ -140,29 +139,17 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
 - The GitHub parent issue is the durable source of truth.
 - Child issue bodies define dependencies; PR state defines implementation progress.
 - `.context/progress.md` is scratch state for the current agent only.
-- A child issue is not done because a PR exists; it is done only when the PR is merged or the issue is otherwise explicitly closed.
-- In child PR mode, a blocker is not cleared because its PR passes; it is cleared only when merged into the base branch.
-- In integration mode, a blocker can clear for the current run after the blocker child branch is merged into the current shipyard branch.
-- In integration mode, a child is complete for the current shipyard run only after its branch is merged into the shipyard branch. The durable completion signal is still the final shipyard PR merging or the issue being explicitly closed.
-- In integration mode, `done-local` means `issue-<number>` is already merged into the current shipyard branch; do not run that child again even if the GitHub issue is still open.
-
-## Health Router
-
-Use this order after every sequential `$issue-workbench` PR or final integration PR:
-
-1. Read checks with `gh pr checks`.
-2. If a failing check is a GitHub Actions run, invoke `$ci-repairbay`.
-3. If review state shows requested changes, unresolved threads, or inline comments, invoke `$review-repairbay` on the PR URL.
-4. When the user asked to execute/run the parent issue, treat that as approval to let `$review-repairbay` fix, reply, resolve, and re-fetch actionable review threads unless the user restricted GitHub writes.
-5. When the user asked only to inspect or plan, report review state without writes.
-6. If only resolved, outdated, informational, approval, or top-level summary comments exist, do not run a cleanup skill.
-7. If the PR is blocked by human approval, merge permissions, or an external provider, stop and report the blocker.
+- A child issue is not done because a PR exists; it is done only when the PR is merged, the issue is explicitly closed, or its branch is merged into the current shipyard branch for this run.
+- A blocker can clear for the current run after the blocker child branch is merged into the current shipyard branch.
+- A child is complete for the current shipyard run only after its branch is merged into the shipyard branch. The durable completion signal is still the final shipyard PR merging or the issue being explicitly closed.
+- `done-local` means `issue-<number>` is already merged into the current shipyard branch; do not run that child again even if the GitHub issue is still open.
 
 ## Output
 
 When inspecting only, return:
 
 - Parent issue URL.
+- Branch policy result: current branch, default branch, and whether execution is blocked.
 - Child issue table: issue, state, blockers, PR, next action.
 - Runnable set.
 - Stop reason.
@@ -170,9 +157,9 @@ When inspecting only, return:
 When executing, return:
 
 - Parent issue URL.
-- Child issue executed, or child issues merged in integration mode.
-- PR URL, using the final shipyard PR in integration mode.
-- Integration branch and child worktree paths when integration mode ran.
+- Child issues merged.
+- Final shipyard PR URL.
+- Integration branch and child worktree paths.
 - Child handoff evidence: issue, branch, commit, diff_stat, and verification.
 - CI/review routing performed.
 - Verification commands actually run.
