@@ -83,7 +83,7 @@ flowchart LR
   children --> final["final_check"]
 ```
 
-- Run `issue-blueprint`.
+- Run `issue-blueprint` with `$grill-with-docs` available.
 - Produce the spec, dependency-aware child issues, parent issue, and one `final_check` child.
 
 ### 🚢 Issue Graph to Pull Requests
