@@ -29,9 +29,11 @@ flowchart TD
   ready -->|Yes| mode{"Current branch is default?"}
   mode -->|Yes| workbench["issue-workbench"]
   workbench --> child_pr["Child pull request"]
-  mode -->|No| worktrees["Child worktrees"]
+  mode -->|No| worktrees["Ready-wave child worktrees"]
   worktrees --> integrate["Current shipyard branch"]
-  integrate --> final_branch["final_check worktree"]
+  integrate --> recheck{"Newly unblocked child?"}
+  recheck -->|Yes| worktrees
+  recheck -->|No| final_branch["final_check worktree"]
   final_branch --> final_merge["Merge or skip final_check"]
   final_merge --> final_pr["Final shipyard pull request"]
   child_pr --> health{"PR clean?"}
@@ -98,9 +100,11 @@ flowchart TD
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| workbench["issue-workbench"]
   workbench --> child_pr["Child pull request"]
-  mode -->|No| worktrees["Child worktrees"]
+  mode -->|No| worktrees["Ready-wave child worktrees"]
   worktrees --> integrate["Merge into current branch"]
-  integrate --> final_branch["final_check worktree"]
+  integrate --> recheck{"Newly unblocked child?"}
+  recheck -->|Yes| worktrees
+  recheck -->|No| final_branch["final_check worktree"]
   final_branch --> final_merge["Merge or skip final_check"]
   final_merge --> final_pr["Final shipyard pull request"]
   child_pr --> cleanup{"Needs cleanup?"}
@@ -115,7 +119,7 @@ flowchart TD
 - Run `shipyard`.
 - Let it choose the next unblocked child and route implementation through `issue-workbench`.
 - On the default branch, use child PRs and do not merge child PRs itself.
-- On any non-default branch, use child worktrees and merge returned review-clean branches back into the current shipyard branch.
+- On any non-default branch, create worktrees only for the current ready dependency wave, merge review-clean branches back into the shipyard branch, then re-inspect for newly unblocked children.
 - Run `final_check` only after all other children are merged or verified complete.
 
 ### 🛠️ Pull Request to Mergeable
@@ -146,7 +150,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-03 14:39 |
 | Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-04 14:13 |
-| Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 14:22 |
+| Execution | `shipyard` | Advance a parent issue through child PRs on the default branch or dependency-wave integration worktrees on another branch. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-04 14:37 |
 | Execution | `issue-workbench` | Implement one issue with guarded diffs and a review fallback. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-04 14:22 |
 | Review gate | `review-checkpoint` | Run Greptile, or fallback adversarial review, and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-04 13:01 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 13:57 |

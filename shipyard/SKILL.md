@@ -45,7 +45,8 @@ Infer everything else:
    - In integration mode, use the current branch as the shipyard integration branch and merge child branches into it.
    - Do not run the `final_check` child until every non-final child is done.
    - In child PR mode, run one child at a time.
-   - In integration mode, run all dependency-ready non-final children the graph allows; parallel children may run in separate worktrees.
+   - In integration mode, run only the currently dependency-ready non-final children as one wave; parallel children may run in separate worktrees.
+   - After each integration wave is merged, re-inspect the graph before creating worktrees for newly unblocked children.
 
 3. Execute the next runnable child in normal PR mode.
    - Use this path only when the current branch is the default branch.
@@ -54,11 +55,14 @@ Infer everything else:
    - Treat the returned PR URL as the child implementation PR.
    - Record the child issue, branch, and PR URL in `.context/progress.md`; do not commit `.context/`.
 
-4. Execute children in integration mode.
+4. Execute one integration wave.
    - Use this path only when the current branch is not the default branch.
    - Ensure the caller worktree is clean.
    - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
-   - For each runnable non-final child allowed by the dependency graph, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
+   - Use the latest inspection output as the wave source.
+   - The wave includes only non-final children whose current status is `runnable`; skip `blocked`, `blocked-missing`, `blocked-final-check`, `pending-pr`, `done`, and `done-local`.
+   - Do not create child worktrees for blocked children in anticipation of unblocking.
+   - For each child in the current wave, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
    - Stop if any child worktree path already exists.
    - Launch child workers with this template:
 
@@ -81,7 +85,10 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
    - Do not delete child worktrees automatically.
 
 5. Finish integration mode.
-   - After every non-final child is merged into the current branch, stop if the parent issue has no `final_check` child.
+   - After each wave is merged, rerun `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue>`.
+   - If newly runnable non-final children exist, repeat Step 4 before `final_check`.
+   - If non-final children remain blocked, pending, or missing, stop and report the blockers instead of running `final_check`.
+   - After every non-final child is merged into the current branch or otherwise done, stop if the parent issue has no `final_check` child.
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
    - Apply the same returned-field recording, missing-field stop, verification-prefix stop, commit-match check, and `diff_stat` spot-check before merging `final_check`.
    - If `final_check` returns an empty `diff_stat` and its returned `commit=` already equals the shipyard branch HEAD, record `final_check` as no-op complete and skip merge.
