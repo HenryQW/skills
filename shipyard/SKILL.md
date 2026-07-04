@@ -109,6 +109,7 @@ Return only branch=, worktree=, commit=, diff_stat=, and verification= lines.
 - In child PR mode, a blocker is not cleared because its PR passes; it is cleared only when merged into the base branch.
 - In integration mode, a blocker can clear for the current run after the blocker child branch is merged into the current shipyard branch.
 - In integration mode, a child is complete for the current shipyard run only after its branch is merged into the shipyard branch. The durable completion signal is still the final shipyard PR merging or the issue being explicitly closed.
+- In integration mode, `done-local` means `issue-<number>` is already merged into the current shipyard branch; do not run that child again even if the GitHub issue is still open.
 
 ## Health Router
 

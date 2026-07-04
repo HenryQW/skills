@@ -8,7 +8,7 @@ import json
 import re
 import subprocess
 import sys
-from typing import Any
+from typing import Any, Callable
 
 
 SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -89,6 +89,24 @@ def has_pending_pr(child: dict[str, Any], default_branch: str) -> bool:
     return any(not pr_is_merged_to_base(pr, default_branch) for pr in child["closing_prs"])
 
 
+def local_branch_merged(child_number: str, current_branch: str) -> bool:
+    branch = f"refs/heads/issue-{child_number}"
+    if subprocess.run(["git", "show-ref", "--verify", "--quiet", branch]).returncode != 0:
+        return False
+    return subprocess.run(["git", "merge-base", "--is-ancestor", branch, current_branch]).returncode == 0
+
+
+def local_done_numbers(
+    children: list[dict[str, Any]],
+    current_branch: str,
+    mode: str,
+    merged: Callable[[str, str], bool] = local_branch_merged,
+) -> set[str]:
+    if mode != "integration":
+        return set()
+    return {child["number"] for child in children if merged(child["number"], current_branch)}
+
+
 def mark_final_check(children: list[dict[str, Any]]) -> None:
     child_numbers = {child["number"] for child in children}
     for child in children:
@@ -110,15 +128,22 @@ def child_is_done(child: dict[str, Any], default_branch: str) -> bool:
     return child["state"] == "CLOSED" and not has_pending_pr(child, default_branch)
 
 
-def classify(children: list[dict[str, Any]], default_branch: str) -> list[dict[str, Any]]:
+def classify(children: list[dict[str, Any]], default_branch: str, local_done: set[str] | None = None) -> list[dict[str, Any]]:
+    local_done = local_done or set()
     mark_final_check(children)
     by_number = {child["number"]: child for child in children}
     for child in children:
         blockers = [by_number.get(number) for number in child["blocked_by"]]
         missing = [number for number, blocker in zip(child["blocked_by"], blockers) if blocker is None]
-        open_blockers = [blocker["number"] for blocker in blockers if blocker and not child_is_done(blocker, default_branch)]
+        open_blockers = [
+            blocker["number"]
+            for blocker in blockers
+            if blocker and blocker["number"] not in local_done and not child_is_done(blocker, default_branch)
+        ]
         pending_pr = has_pending_pr(child, default_branch)
-        if child_is_done(child, default_branch):
+        if child["number"] in local_done:
+            status = "done-local"
+        elif child_is_done(child, default_branch):
             status = "done"
         elif pending_pr:
             status = "pending-pr"
@@ -127,7 +152,10 @@ def classify(children: list[dict[str, Any]], default_branch: str) -> list[dict[s
         elif open_blockers:
             status = "blocked"
         elif child["final_check"] and any(
-            other["number"] != child["number"] and not child_is_done(other, default_branch) for other in children
+            other["number"] != child["number"]
+            and other["number"] not in local_done
+            and not child_is_done(other, default_branch)
+            for other in children
         ):
             status = "blocked-final-check"
         else:
@@ -163,6 +191,8 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
     current_branch = run(["git", "branch", "--show-current"])
     if not current_branch:
         raise SystemExit("detached HEAD is not supported")
+    mode = "child_pr" if current_branch == default_branch else "integration"
+    local_done = local_done_numbers(children, current_branch, mode)
     return {
         "parent": {
             "number": str(parent["number"]),
@@ -172,8 +202,8 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
         },
         "default_branch": default_branch,
         "current_branch": current_branch,
-        "mode": "child_pr" if current_branch == default_branch else "integration",
-        "children": classify(children, default_branch),
+        "mode": mode,
+        "children": classify(children, default_branch, local_done),
     }
 
 
@@ -226,6 +256,11 @@ def self_test() -> None:
     assert classified[1]["final_check"]
     classified[0]["state"] = "CLOSED"
     assert classify(classified, "main")[1]["status"] == "runnable"
+    classified[0]["state"] = "OPEN"
+    assert classify(classified, "main", {"11"})[0]["status"] == "done-local"
+    assert classify(classified, "main", {"11"})[1]["status"] == "runnable"
+    assert local_done_numbers(classified, "main", "child_pr", lambda number, branch: True) == set()
+    assert local_done_numbers(classified, "integration", "integration", lambda number, branch: number == "11") == {"11"}
     assert classify([child_c], "main")[0]["status"] == "pending-pr"
     assert graph_errors(classified) == []
 
