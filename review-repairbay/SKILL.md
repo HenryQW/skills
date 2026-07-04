@@ -7,7 +7,7 @@ description: Address actionable GitHub pull request review feedback. Use when th
 
 Use this skill when the user wants to work through requested changes on a GitHub pull request. Treat thread-aware review data as a `gh api graphql` problem because flat comment surfaces do not preserve full review-thread state.
 
-Run all `gh` commands with elevated network access. If CLI auth is required, confirm `gh auth status` first and ask the user to authenticate with `gh auth login` if it fails.
+Confirm `gh auth status` before GitHub reads or writes. If CLI auth is missing, ask the user to authenticate with `gh auth login`.
 
 ## Workflow
 
