@@ -16,6 +16,7 @@ CHECKS = (
     ("diff guard", ["python3", "issue-workbench/scripts/diff_guard.py"]),
     ("ci repairbay help", ["python3", "ci-repairbay/scripts/inspect_pr_checks.py", "--help"]),
     ("shipyard parent inspection", ["python3", "shipyard/scripts/inspect_parent_issue.py", "--self-test"]),
+    ("agent memory setup", ["python3", "agent-memory/scripts/setup_agent_memory.py", "--self-test"]),
 )
 
 

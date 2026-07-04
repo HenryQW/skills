@@ -5,7 +5,7 @@ Setup mode uses these exact snippets. Keep placeholders intact; the setup script
 ## Context and precedence item
 
 ```md
-  - `{memory_index_ref}`
+  - `{memory_router_ref}`
 ```
 
 ## Execution item

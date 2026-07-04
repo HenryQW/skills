@@ -15,7 +15,7 @@ Ask for the markdown memory path if it cannot be inferred.
 - `.context/progress.md` exists with a short progress template.
 - `.gitignore` contains `.context/progress.md`.
 - `AGENTS.md` has `## Context and precedence`.
-- `AGENTS.md` points agents to the project `Agent/Memory/index.md`.
+- `AGENTS.md` points agents to the project `Agent/Memory/Memory Router.md`.
 - `AGENTS.md` explains that `$agent-memory` distills progress into real memory notes only when durable context exists.
 
 Use `references/agents.md` as the canonical source for deterministic `AGENTS.md` snippets. The setup script should render those snippets instead of retyping them.
