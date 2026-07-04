@@ -59,8 +59,8 @@ Infer everything else:
    - For each runnable non-final child allowed by the dependency graph, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
    - Stop if any child worktree path already exists.
    - Launch `$issue-workbench <child_issue>` with `worktree_path=<path>`, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
-   - Each child issue-workbench returns `branch=<child_branch>` and `worktree=<child_worktree>` instead of a PR URL.
-   - In the shipyard worktree, merge each returned child branch into the current branch.
+   - Each child issue-workbench returns `branch=<child_branch>` and `worktree=<child_worktree>` only after its latest review-checkpoint run has no actionable findings.
+   - In the shipyard worktree, merge only returned child branches into the current branch.
    - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
    - After each merge, run the smallest relevant validation command discoverable in the repo.
    - Do not delete child worktrees automatically.
@@ -70,17 +70,12 @@ Infer everything else:
    - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
    - Merge the returned `final_check` branch into the shipyard branch.
    - Run `$review-checkpoint` on the shipyard branch as the final review gate.
-   - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch.
+   - Run `pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`.
    - Treat that returned PR URL as the shipyard implementation PR.
 
-6. Route PR health by signal type.
-   - Pass the PR URL returned by `$issue-workbench` to cleanup skills.
-   - In integration mode, pass the final shipyard PR URL to cleanup skills.
-   - Failing GitHub Actions checks: use `$ci-repairbay` on that PR URL.
-   - Unresolved review threads, requested changes, or inline comments: use `$review-repairbay` on that PR URL for all unresolved actionable threads.
-   - External failed checks without GitHub Actions logs: report the check URL and stop.
-   - Pending checks or pending reviews: stop and report the pending state unless the user asked to wait.
-   - Clean PR with no unresolved review threads and passing checks: report that it is ready for merge.
+6. Route PR health using Health Router below.
+   - In child PR mode, route the PR URL returned by `$issue-workbench`.
+   - In integration mode, route the final shipyard PR URL.
 
 7. Loop conservatively.
    - Re-read parent issue, child issue, and PR state before choosing the next child.
