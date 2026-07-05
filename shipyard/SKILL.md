@@ -1,6 +1,6 @@
 ---
 name: shipyard
-description: Orchestrate a dependency-aware parent issue from a non-default integration branch into one final PR. Use for issue-blueprint parent issues that need child worktrees, merges, final_check, checks, reviews, and PR routing.
+description: Orchestrate a dependency-aware parent issue from its deterministic integration branch into one final PR. Use for issue-blueprint parent issues that need child worktrees, merges, final_check, checks, reviews, and PR routing.
 ---
 
 # Shipyard
@@ -14,8 +14,7 @@ Shipyard is orchestration only: inspect the graph, launch child worktrees, merge
 Shipyard has one execution mode:
 
 - `$shipyard #123` or `shipyard #123` means execute parent issue `#123`.
-- The current branch must be the parent-derived shipyard integration branch.
-- If the current branch is the repository default branch, stop before creating child worktrees, branches, commits, merges, or PRs.
+- Reconcile to the parent-derived shipyard integration branch before creating child worktrees, branches, commits, merges, or PRs.
 - Inspect-only behavior is allowed only when the user explicitly asks to inspect, plan, dry-run, or report without executing.
 
 ## Inputs
@@ -27,7 +26,7 @@ Infer everything else:
 
 - Repository: current directory's GitHub remote.
 - Base branch: repository default branch.
-- Integration branch: current non-default branch, which must match the parent-derived name from `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
+- Integration branch: parent-derived name from `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
 - Behavior: execute unless the user explicitly asks for inspect-only output.
 
 ## Bundled Resources
@@ -41,9 +40,10 @@ Use these commands as the deterministic spine:
 
 ```bash
 gh auth status
-python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
 python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>
-# stop here if mode is default_branch_blocked
+gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
+# reconcile to that branch, then inspect
+python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
 python3 <issue_workbench_dir>/scripts/integration_child.py start <child_issue> --worktree-path <absolute_child_worktree> --integration-branch <integration_branch>
 # run $issue-workbench in the child worktree
 python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <integration_branch>
@@ -58,11 +58,20 @@ After all non-final children are merged, run `final_check` the same way. For a v
 
 - Confirm `gh auth status`.
 - If `--integration-worktree` is present, require an absolute path and `cd` there.
-- Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
-- Stop if the script cannot resolve the parent, current branch, dependency graph, or runnable state.
-- Stop on `mode=default_branch_blocked`; report the default branch, current branch, and instruction to switch to a non-default integration branch.
 - Compute the expected branch with `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
-- Stop if the current branch differs from the expected integration branch. Do not rename automatically; report the rename and push commands.
+- Resolve the default branch with `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`.
+- Ensure `git status --porcelain` is empty before changing branches; stop with dirty paths if not.
+- Run `git fetch --all --prune`.
+- If the current branch differs from the expected branch:
+  - If the expected branch exists locally, run `git switch <expected_branch>`.
+  - Else if `origin/<expected_branch>` exists, run `git switch --track -c <expected_branch> origin/<expected_branch>`.
+  - Else if the current branch is not `<default_branch>` and `git rev-parse --abbrev-ref --symbolic-full-name @{u}` fails, run `git branch -m <expected_branch>`.
+  - Else if `origin/<default_branch>` exists, run `git switch -c <expected_branch> origin/<default_branch>`.
+  - Else run `git switch -c <expected_branch> <default_branch>`.
+- Never rename the default branch.
+- Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json` after branch reconciliation.
+- Stop if the script cannot resolve the parent, current branch, dependency graph, or runnable state.
+- Stop on `mode=default_branch_blocked`; report the default branch, current branch, and failed branch-reconciliation command.
 - Read only issue-linked docs or named files needed to understand runnable children.
 
 ### 2. Run one wave

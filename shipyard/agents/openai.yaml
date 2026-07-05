@@ -1,4 +1,4 @@
 interface:
   display_name: "Shipyard"
-  short_description: "Orchestrate parent issues from a named integration branch"
-  default_prompt: "Use $shipyard with a parent issue number or URL from the parent-derived non-default integration branch; stop on the default branch and run dependency-wave integration worktrees otherwise."
+  short_description: "Orchestrate parent issues from the deterministic integration branch"
+  default_prompt: "Use $shipyard with a parent issue number or URL; reconcile to the parent-derived integration branch, then run dependency-wave integration worktrees."

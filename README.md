@@ -24,9 +24,8 @@ flowchart TD
   blueprint --> parent["Parent issue"]
   parent --> children["Dependency-aware child issues"]
   children --> shipyard["shipyard"]
-  shipyard --> default_branch{"Current branch is default?"}
-  default_branch -->|Yes| default_stop["Stop: switch to integration branch"]
-  default_branch -->|No| ready{"Unblocked child?"}
+  shipyard --> branch["Reconcile integration branch"]
+  branch --> ready{"Unblocked child?"}
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| worktrees["Ready-wave child worktrees"]
   worktrees --> integrate["Current shipyard branch"]
@@ -82,14 +81,13 @@ flowchart LR
 
 ### 🚢 Issue Graph to Pull Requests
 
-Use this after a parent issue exists and implementation should proceed through the current non-default integration branch.
+Use this after a parent issue exists and implementation should proceed through the deterministic integration branch.
 
 ```mermaid
 flowchart TD
   parent["Parent issue"] --> shipyard["shipyard"]
-  shipyard --> mode{"Current branch is default?"}
-  mode -->|Yes| default_stop["Stop: switch to integration branch"]
-  mode -->|No| ready{"Unblocked child?"}
+  shipyard --> branch["Reconcile integration branch"]
+  branch --> ready{"Unblocked child?"}
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| worktrees["Ready-wave child worktrees"]
   worktrees --> integrate["Merge into current branch"]
@@ -107,7 +105,7 @@ flowchart TD
 ```
 
 - Run `shipyard #<parent>`.
-- Stop on the default branch; switch to a non-default integration branch before execution.
+- Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
 - Create worktrees only for the current ready dependency wave, merge review-clean branches back into the shipyard branch, then re-inspect for newly unblocked children.
 - Run `final_check` only after all other children are merged or verified complete.
 
@@ -139,7 +137,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:22 |
 | Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-05 14:22 |
-| Execution | `shipyard` | Orchestrate a parent issue through child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-05 15:24 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-05 16:22 |
 | Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-05 15:24 |
 | Review gate | `review-checkpoint` | Run Greptile, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-05 15:24 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 13:57 |
