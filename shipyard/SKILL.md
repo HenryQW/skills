@@ -79,13 +79,18 @@ working_directory=<absolute_child_worktree>
 worktree_path=<path>
 handoff_mode=integration_branch
 integration_branch=<current_branch>
+review_base=<current_branch>
+wait_mode=defer
 Do not commit .context/.
-Return only the JSON object from integration_child.py finish.
+Return only the child handoff JSON object.
 ```
 
-- Require one `integration_child.py finish` JSON object per child with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow `needs_child_fix`.
-- Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, `review` is not `PASS` without `needs_child_fix`, or `git rev-parse <branch>` differs from `commit`.
+- Require one child handoff JSON object with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow `needs_child_fix`.
+- Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
+- Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
+- Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, the review value is not accepted, or `git rev-parse <branch>` differs from `commit`.
 - If `needs_child_fix` is present, mark `needs_fix`, stop shipyard edits, and rerun or reuse `$issue-workbench` in that child worktree.
+- If `review` is `PENDING_REVIEW`, mark `pending_review`, record the evidence, do not merge the branch, and continue other runnable independent children when available.
 - Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
 - Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch>`.
 - On conflict, stop and report child issue, branch, worktree, and conflicted files.
@@ -96,28 +101,30 @@ Return only the JSON object from integration_child.py finish.
 Keep this compact state object in `.context/progress.md` after every child return or merge:
 
 ```json
-{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix"}],"checks":["<command>"],"current_step":"<next action>"}
+{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix|pending_review","pending_review":{}}],"checks":["<command>"],"current_step":"<next action>"}
 ```
 
 ### 3. Finish integration
 
 - Re-inspect after every wave.
 - If new non-final children are runnable, repeat Step 2.
-- If non-final children remain blocked, pending, or missing, stop and report blockers before `final_check`.
+- If non-final children have `pending_review`, resume those child worktrees at or after `poll_after_utc` and merge only after they return `review:"PASS"`.
+- If non-final children remain blocked, pending, or missing and no independent child is runnable, stop and report blockers before `final_check`.
 - Stop if the parent issue has no `final_check` child.
 - Run `final_check` through `$issue-workbench` only after every non-final child is merged or otherwise done.
 - Verification-only `final_check` children must not create empty commits; empty `diff_stat` plus `commit` equal to shipyard HEAD is the no-op completion signal.
 - `final_check` may fix only final-check-owned docs/tests. Code defects must return `needs_child_fix:"#<issue>"`.
-- Validate `final_check` with the same finish JSON checks as any child. Skip merge for the no-op completion signal; otherwise merge its returned branch.
+- Validate `final_check` with the same handoff JSON checks as any child. If it returns `PENDING_REVIEW`, record it and resume later; do not merge or enter final review. Skip merge for the no-op completion signal; otherwise merge its returned branch.
 
 ### 4. Final review and PR
 
-- Run `$review-checkpoint` on the shipyard branch.
+- Run `$review-checkpoint` on the shipyard branch with `wait_mode=defer`.
 - Classify each finding as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
 - Route `child:<issue>` and `final_check` findings back to their recorded `$issue-workbench` worktrees, then merge the returned branch and rerun relevant checks.
 - Fix only `integration` findings in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
 - Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. If Greptile fails once, accept `$review-checkpoint` fallback and do not retry Greptile.
-- Run `$pr-launchpad` from the shipyard branch with close keywords for every child issue, including `final_check`. If `$review-checkpoint` used a Greptile-unavailable fallback, include its testing/review note in the PR body.
+- If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
+- Run `$pr-launchpad` only after a completed final review gate returns `PASS`. Include close keywords for every child issue, including `final_check`. If `$review-checkpoint` used a Greptile-unavailable fallback, include its testing/review note in the PR body.
 
 ### 5. Route PR health
 

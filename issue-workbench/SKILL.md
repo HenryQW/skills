@@ -28,6 +28,8 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
 - `max_iterations` is optional and passes through to `$review-checkpoint`.
+- `review_base` is optional and passes through to `$review-checkpoint`; default is the branch base selected in Step 3.
+- `wait_mode` is optional and passes through to `$review-checkpoint`.
 - `poll_interval_seconds` is optional and passes through to `$review-checkpoint`.
 - `worktree_path` is optional. When set, create the issue branch in that new Git worktree instead of the caller worktree.
 - `handoff_mode` is optional and defaults to `pull_request`. The only other supported value is `integration_branch`.
@@ -84,7 +86,7 @@ python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree
 
 The child branch must start from `integration_branch`, not the repository default branch. After setup, `cd` into the returned worktree and keep the caller worktree branch unchanged.
 
-Use `<review_base>=<integration_branch>` in integration mode, otherwise `<review_base>=origin/<base_branch>`. If repo instructions require `.context/progress.md`, `integration_child.py start` copies or initializes it; keep it uncommitted.
+Resolve `<review_base>` from the `review_base` input when provided; otherwise use `<integration_branch>` in integration mode and `origin/<base_branch>` in PR mode. If repo instructions require `.context/progress.md`, `integration_child.py start` copies or initializes it; keep it uncommitted.
 
 ### 4. Inspect the repository before editing
 
@@ -125,7 +127,9 @@ git commit -m "feat(auth): add token refresh handling"
 
 ### 9. Review gate
 
-Run `$review-checkpoint` with the selected `max_iterations` and `poll_interval_seconds`.
+Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`.
+
+If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in Step 10.
 
 If it reports actionable findings, fix only in-scope files, commit the inspected changes, and rerun `$review-checkpoint`. Continue only after the latest completed review gate passes with no later commit.
 
@@ -151,15 +155,17 @@ git diff --stat <review_base>...HEAD
 
 No staged or tracked code changes should remain before pr-launchpad runs or before integration-mode return. `.context/progress.md` may remain local and uncommitted for review-checkpoint notes.
 
-If `handoff_mode=pull_request`, run `pr-launchpad` on the current branch and return only the PR URL.
+If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
 
-If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
+If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
+The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, and `pending_review` copied from `.context/progress.md`. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 
@@ -171,4 +177,4 @@ An empty `diff_stat` with `commit` equal to the integration branch HEAD is the n
 
 ## Output
 
-Return only the PR URL in normal mode or the finish JSON in integration mode. Do not include markdown or extra summaries.
+Return only the PR URL in normal mode, `PENDING_REVIEW` with its pending state when normal mode is deferred, or the handoff JSON in integration mode. Do not include markdown or extra summaries.

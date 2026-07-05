@@ -12,7 +12,9 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 ## Inputs
 
 - `max_iterations` is optional and defaults to `5`.
-- `poll_interval_seconds` is optional and defaults to `300`.
+- `review_base` is optional; use the caller-provided base ref when known.
+- `wait_mode` is optional and defaults to `defer`; supported values are `defer` and `block`.
+- `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
 
 ## Rules
 
@@ -20,7 +22,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - A finding is actionable only when it is in the branch diff, deterministic, in scope, and fixable without a product decision.
 - Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
-- Keep `.context/progress.md` local and uncommitted if used for review IDs.
+- Keep `.context/progress.md` local and uncommitted if used for pending review state.
 - Each fix iteration must resolve or reduce the actionable finding set.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
 - Mark contradictory repeat findings as `non_actionable: contradictory semantics`; record the reason and do not keep fixing.
@@ -44,6 +46,8 @@ git rev-parse @{upstream}
 ```
 
 If no upstream exists, run `git push --set-upstream origin HEAD`. If `HEAD` differs from `@{upstream}`, run `git push`. Re-run the three commands above and start Greptile only when `git rev-parse HEAD` equals `git rev-parse @{upstream}`.
+
+On resume, if `.context/progress.md` contains a pending Greptile review, run `git fetch --all --prune`, then compare its branch, local HEAD SHA, upstream SHA, and known base SHA with current `git branch --show-current`, `git rev-parse HEAD`, `git rev-parse @{upstream}`, and `git rev-parse <review_base>`. Poll that review ID only when recorded values match and current UTC is at or after its poll-after time. If the poll-after time has not arrived, return `PENDING_REVIEW`. If any value differs, or if `base_ref` or `base_sha` is unknown, mark the pending review `stale` with the reason and start a new review after resolving the base.
 
 If the `greptile` command is missing, cannot start or show a review because of auth/service/plan availability, or returns no review ID, do not install or repair Greptile unless the user asked. Record the error and run the fallback.
 
@@ -89,7 +93,21 @@ Record the review ID. If none is returned, use the fallback.
 greptile review show <review_id> --agent
 ```
 
-If still running, wait the configured `poll_interval_seconds` exactly and run the same `show` command again until complete. Do not poll at a hardcoded 30-second interval unless the caller configured `poll_interval_seconds=30`.
+If still running and `wait_mode=defer`, write pending state to `.context/progress.md` and return `PENDING_REVIEW` instead of sleeping. Include at least:
+
+```text
+review_id=<review id>
+branch=<branch>
+local_head_sha=<git rev-parse HEAD>
+upstream_sha=<git rev-parse @{upstream}>
+base_ref=<review_base or unknown>
+base_sha=<git rev-parse <review_base> or unknown>
+poll_after_utc=<YYYY-MM-DDTHH:MM:SSZ>
+```
+
+Set `poll_after_utc` from a Greptile retry time when provided; otherwise use current UTC plus `poll_interval_seconds`.
+
+If still running and `wait_mode=block`, wait the configured `poll_interval_seconds` exactly and run the same `show` command again until complete. Do not poll at a hardcoded 30-second interval unless the caller configured `poll_interval_seconds=30`.
 
 If `show` fails because Greptile is unavailable, use the fallback.
 
@@ -120,4 +138,4 @@ Start a new Greptile review, or fallback subagent review when Greptile is still 
 
 ## Output
 
-Report review IDs or fallback reviews, checks run, final status, and unresolved actionable findings if any.
+Report review IDs or fallback reviews, checks run, final status, and unresolved actionable findings if any. For deferred reviews, return `PENDING_REVIEW` with the pending review state location.
