@@ -1,6 +1,6 @@
 ---
 name: repo-surveyor
-description: Perform a full-repository maintainability review without editing code. Use when asked to scan a repo and propose evidence-backed improvements for readability, maintainability, DRY, SOLID design, tests, configs, build scripts, docs, or architecture.
+description: Review a repository without editing code and return evidence-backed maintainability findings. Use for repo scans covering readability, DRY, SOLID, tests, configs, scripts, docs, or architecture.
 ---
 
 # repo-surveyor
@@ -33,7 +33,9 @@ Inspect source, tests, config, build scripts, docs, and architecture-relevant fi
 
 ## Output
 
-Return:
+Default to the compact output unless the user asks for a full maintainability report.
+
+Compact output:
 
 1. Executive summary with the top 3 improvement themes.
 2. Current vs solved classification:
@@ -62,12 +64,11 @@ Place Medium-scored rows in the closest matching group and keep `Medium` in the 
 5. Issue-blueprint handoff JSON for the remaining new work, using the closest valid shape from `issue-blueprint/references/issue-plan.md`. Include only findings whose duplicate-matrix decision is `new` or `overlaps #N` and whose current-vs-solved classification is `Current`.
 6. Dropped findings list with reason, including duplicate, solved, unclear, and cleanup-only items.
 7. Top 5 priorities in implementation order.
-8. DRY opportunities.
-9. SOLID observations.
-10. Test strategy improvements.
-11. Phased roadmap:
-   - Phase 1: quick wins.
-   - Phase 2: structural improvements.
-   - Phase 3: larger architecture changes.
+8. Brief DRY opportunities.
+9. Brief SOLID observations.
+10. Brief test strategy improvements.
+11. Brief phased roadmap: quick wins, structural improvements, larger architecture changes.
+
+For a full maintainability report, expand items 8-11 with supporting evidence and phase details.
 
 Every recommendation must name specific paths, modules, classes, functions, or repeated patterns.

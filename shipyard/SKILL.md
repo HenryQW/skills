@@ -1,6 +1,6 @@
 ---
 name: shipyard
-description: Orchestrate a dependency-aware GitHub parent issue from a parent-derived non-default integration branch by running unblocked child issues through issue-workbench, merging child worktrees into the current branch, and opening one final PR. Use when a parent issue from issue-blueprint should be advanced across child issues, parallel worktrees, checks, reviews, and the final_check child; stop when the current branch is the repository default branch.
+description: Orchestrate a dependency-aware parent issue from a non-default integration branch into one final PR. Use for issue-blueprint parent issues that need child worktrees, merges, final_check, checks, reviews, and PR routing.
 ---
 
 # Shipyard
@@ -35,9 +35,9 @@ Infer everything else:
 - `scripts/inspect_parent_issue.py`: resolves branch policy, parent issue, child issue dependencies, `final_check`, local merged children, and runnable children.
 - `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
-## Runnable CLI Flow
+## CLI Spine
 
-Use these commands as the deterministic spine. Shipyard owns orchestration, integration checks, and PR creation; `$issue-workbench` owns child implementation and actionable review fixes.
+Use these commands as the deterministic spine:
 
 ```bash
 gh auth status
@@ -52,37 +52,26 @@ python3 <shipyard_dir>/scripts/inspect_parent_issue.py <parent_issue> --json
 
 After all non-final children are merged, run `final_check` the same way. For a verification-only `final_check`, no empty commit is required; empty `diff_stat` plus `commit` equal to the shipyard branch HEAD is the expected no-op result.
 
-## Workflow
+## State Machine
 
-1. Inspect repository and issue graph.
-   - Confirm `gh auth status`.
-   - If the user passed `--integration-worktree`, stop unless it is absolute, then `cd` there before inspecting.
-   - Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
-   - Stop if the script cannot resolve a parent issue, current branch, dependency graph, or runnable state.
-   - If `mode` is `default_branch_blocked`, report the default branch, current branch, and instruction to create or switch to a non-default integration branch.
-   - Run `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
-   - Stop if the current branch differs from the expected integration branch. Do not rename automatically; report `git branch -m <expected_branch>` and, if the branch was pushed, the needed push/upstream commands.
-   - If child issues name explicit files and acceptance criteria, read only matching active handoff/index sections and issue-linked docs. Use broad repository or vault searches only when scoped reads are insufficient.
+### 1. Preflight
 
-2. Respect execution boundaries.
-   - Do not run blocked children.
-   - Use the current branch as the shipyard integration branch and merge child branches into it.
-   - Do not apply patches for child issue code from the shipyard worktree or parent agent. Spawn or reuse `$issue-workbench` in that child worktree.
-   - Shipyard may fix only integration-only issues: merge conflicts, PR body, progress scratch, and final assembly mistakes.
-   - Do not run the `final_check` child until every non-final child is done.
-   - Run only the currently dependency-ready non-final children as one wave; parallel children may run in separate worktrees.
-   - After each integration wave is merged, re-inspect the graph before creating worktrees for newly unblocked children.
+- Confirm `gh auth status`.
+- If `--integration-worktree` is present, require an absolute path and `cd` there.
+- Run `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
+- Stop if the script cannot resolve the parent, current branch, dependency graph, or runnable state.
+- Stop on `mode=default_branch_blocked`; report the default branch, current branch, and instruction to switch to a non-default integration branch.
+- Compute the expected branch with `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
+- Stop if the current branch differs from the expected integration branch. Do not rename automatically; report the rename and push commands.
+- Read only issue-linked docs or named files needed to understand runnable children.
 
-3. Execute one integration wave.
-   - Ensure the caller worktree is clean.
-   - Treat the caller worktree and current branch as the shipyard worktree and integration branch.
-   - Let Shipyard own child worktree creation; do not manually create scratch files or child branches outside this flow.
-   - Use the latest inspection output as the wave source.
-   - The wave includes only non-final children whose current status is `runnable`; skip `blocked`, `blocked-missing`, `blocked-final-check`, `pending-pr`, `done`, and `done-local`.
-   - Do not create child worktrees for blocked children in anticipation of unblocking.
-   - For each child in the current wave, choose a deterministic sibling worktree path such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>`.
-   - Stop if any child worktree path already exists.
-   - Launch child workers with this template:
+### 2. Run one wave
+
+- Ensure the shipyard worktree is clean.
+- Use the current branch as the integration branch.
+- Run only current non-final children with status `runnable`; do not pre-create blocked children.
+- Choose deterministic sibling worktree paths such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>` and stop if a path already exists.
+- Launch children in parallel with this prompt:
 
 ```text
 Use $issue-workbench <child_issue>
@@ -94,65 +83,56 @@ Do not commit .context/.
 Return only the JSON object from integration_child.py finish.
 ```
 
-   - Each child issue-workbench returns one JSON object only after its latest review gate has no actionable findings.
-   - Require fields: `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow optional `needs_child_fix`.
-   - Record only `issue`, `worktree`, `branch`, `base`, `commit`, and `status` in `.context/progress.md`; do not commit `.context/`.
-   - Stop if any required field is missing, `verification` does not start with `pass:` or `skip:`, `review` is not `PASS` and no `needs_child_fix` is present, or `git rev-parse <branch>` does not match `commit`.
-   - If `needs_child_fix` is present, mark that child as `needs_fix`, stop Shipyard edits, and rerun or reuse `$issue-workbench` for that issue in its recorded child worktree.
-   - Spot-check returned `diff_stat`. Inspect the full child diff before merge only when the diff touches high-risk paths or is not obviously tiny.
-   - In the shipyard worktree, merge only returned child branches into the current branch, preferably with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch>`.
-   - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
-   - After each merge, run the smallest relevant validation command discoverable in the repo.
-   - Do not delete child worktrees automatically.
-   - Once multiple worktrees exist, use absolute paths in all `apply_patch` edits and shell commands that create or mutate files.
+- Require one `integration_child.py finish` JSON object per child with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow `needs_child_fix`.
+- Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, `review` is not `PASS` without `needs_child_fix`, or `git rev-parse <branch>` differs from `commit`.
+- If `needs_child_fix` is present, mark `needs_fix`, stop shipyard edits, and rerun or reuse `$issue-workbench` in that child worktree.
+- Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
+- Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch>`.
+- On conflict, stop and report child issue, branch, worktree, and conflicted files.
+- After each merge, run the smallest relevant validation command.
+- Do not delete child worktrees automatically.
+- Once multiple worktrees exist, use absolute paths for file-mutating commands.
 
-   Keep this compact state object in `.context/progress.md` after every child return or merge:
+Keep this compact state object in `.context/progress.md` after every child return or merge:
 
 ```json
 {"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix"}],"checks":["<command>"],"current_step":"<next action>"}
 ```
 
-4. Finish integration.
-   - After each wave is merged, rerun `python3 <skill_dir>/scripts/inspect_parent_issue.py <parent_issue> --json`.
-   - If newly runnable non-final children exist, repeat Step 3 before `final_check`.
-   - If non-final children remain blocked, pending, or missing, stop and report the blockers instead of running `final_check`.
-   - After every non-final child is merged into the current branch or otherwise done, stop if the parent issue has no `final_check` child.
-   - Run `final_check` through `$issue-workbench` with a new child worktree, `handoff_mode=integration_branch`, and `integration_branch=<current_branch>`.
-   - If `final_check` is verification-only, instruct the child not to create an empty commit; it should run checks and return the no-op completion signal.
-   - If `final_check` discovers code defects, it must fix only final-check-owned docs/tests in its child branch or return `needs_child_fix:"#<issue>"`.
-   - Apply the same returned-field recording, missing-field stop, verification-prefix stop, commit-match check, `needs_child_fix` routing, and `diff_stat` spot-check before merging `final_check`.
-   - If `final_check` returns an empty `diff_stat` and its returned `commit` already equals the shipyard branch HEAD, record `final_check` as no-op complete and skip merge.
-   - Otherwise merge the returned `final_check` branch into the shipyard branch.
-   - Run `$review-checkpoint` on the shipyard branch as the final review gate.
-   - Classify each final review finding as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
-   - For `child:<issue>`, stop Shipyard edits, reuse that child's recorded worktree with `$issue-workbench`, merge the child branch again, then rerun the relevant integration checks and final review classification before PR creation.
-   - For `final_check`, reuse the recorded `final_check` worktree with `$issue-workbench`, merge it again when it returns a branch, then rerun the relevant integration checks and final review classification before PR creation.
-   - Fix only `integration` findings in the shipyard worktree.
-   - For `stale`, `non_actionable`, or `tooling_unavailable` findings, record the classification and stop the fix loop for that finding.
-   - If Greptile fails because of provider/tooling availability and review-checkpoint substitutes adversarial subagent review, stop retrying Greptile. Record the `tooling_unavailable` classification, error summary, reviewer identity if available, final actionable-finding result, and PR-body testing/review note in `.context/progress.md`.
-   - Run `$pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`. If the final review gate used a Greptile-unavailable substitution, include the prepared testing/review note in the PR body.
-   - Treat that returned PR URL as the shipyard implementation PR.
+### 3. Finish integration
 
-5. Route PR health.
-   - Read checks with `gh pr checks`.
-   - If a failing check is a GitHub Actions run, invoke `$ci-repairbay`.
-   - If review state shows requested changes, unresolved threads, or inline comments, invoke `$review-repairbay` on the PR URL.
-   - When the user asked to execute Shipyard, treat that as approval to let `$review-repairbay` fix, reply, resolve, and re-fetch actionable review threads unless the user restricted GitHub writes.
-   - When the user asked only to inspect or plan, report review state without writes.
-   - If only resolved, outdated, informational, approval, or top-level summary comments exist, do not run a cleanup skill.
-   - If the PR is blocked by human approval, merge permissions, or an external provider, stop and report the blocker.
+- Re-inspect after every wave.
+- If new non-final children are runnable, repeat Step 2.
+- If non-final children remain blocked, pending, or missing, stop and report blockers before `final_check`.
+- Stop if the parent issue has no `final_check` child.
+- Run `final_check` through `$issue-workbench` only after every non-final child is merged or otherwise done.
+- Verification-only `final_check` children must not create empty commits; empty `diff_stat` plus `commit` equal to shipyard HEAD is the no-op completion signal.
+- `final_check` may fix only final-check-owned docs/tests. Code defects must return `needs_child_fix:"#<issue>"`.
+- Validate `final_check` with the same finish JSON checks as any child. Skip merge for the no-op completion signal; otherwise merge its returned branch.
 
-6. Loop conservatively.
-   - Re-read parent issue, child issue, and PR state before choosing the next wave.
-   - Continue only while a child is runnable and the previous wave is not pending review, CI, or merge.
-   - Continue only until the final shipyard PR is created and routed once.
-   - Stop when no runnable work remains.
+### 4. Final review and PR
+
+- Run `$review-checkpoint` on the shipyard branch.
+- Classify each finding as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
+- Route `child:<issue>` and `final_check` findings back to their recorded `$issue-workbench` worktrees, then merge the returned branch and rerun relevant checks.
+- Fix only `integration` findings in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
+- Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. If Greptile fails once, accept `$review-checkpoint` fallback and do not retry Greptile.
+- Run `$pr-launchpad` from the shipyard branch with close keywords for every child issue, including `final_check`. If `$review-checkpoint` used a Greptile-unavailable fallback, include its testing/review note in the PR body.
+
+### 5. Route PR health
+
+- Read checks with `gh pr checks`.
+- Invoke `$ci-repairbay` for failing GitHub Actions checks.
+- Invoke `$review-repairbay` for requested changes, unresolved threads, or inline comments. Execution mode is approval to fix/reply/resolve/re-fetch unless the user restricted GitHub writes.
+- Ignore resolved, outdated, informational, approval, top-level summary, or waived unavailable external review checks.
+- Stop on human approval, merge-permission, or external-provider blockers.
 
 ## Runtime Rules
 
 - Batch one runnable integration wave in parallel; re-inspect before the next wave.
 - Stop retrying Greptile after the first provider/tooling failure and run one fallback review.
 - Avoid broad final `pytest` when a known readiness hang exists. Run targeted suites and record known skips.
+- Do not apply patches for child-owned code from the shipyard worktree; route them to `$issue-workbench`.
 
 ## State Rules
 

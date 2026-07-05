@@ -137,10 +137,10 @@ This table is the canonical skill inventory: category, purpose, install command,
 
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
-| Planning | `repo-surveyor` | Audit a repo for maintainability problems without editing code. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-04 15:35 |
-| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-04 15:35 |
-| Execution | `shipyard` | Orchestrate a parent issue from a parent-derived integration branch into one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-05 14:05 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, review fallback, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-05 14:05 |
+| Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:22 |
+| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-05 14:22 |
+| Execution | `shipyard` | Orchestrate a parent issue from a parent-derived integration branch into one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-05 14:22 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, review fallback, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-05 14:22 |
 | Review gate | `review-checkpoint` | Run Greptile, or fallback adversarial review, and fix actionable findings. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-05 14:05 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 13:57 |
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-04 05:48 |

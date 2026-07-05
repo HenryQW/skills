@@ -1,6 +1,6 @@
 ---
 name: issue-workbench
-description: Use this skill when asked to implement one GitHub issue into a clean feature branch. It reads the issue, creates an issue branch in the current worktree by default, applies a minimal implementation, runs review-checkpoint or adversarial review fallback, commits the result, and either hands off to pr-launchpad or returns a branch to shipyard integration mode.
+description: Implement one GitHub issue in a guarded feature branch. Use when asked to build or fix one issue, run review-checkpoint, publish a PR, or return shipyard integration JSON.
 ---
 
 # issue-workbench
@@ -9,8 +9,8 @@ description: Use this skill when asked to implement one GitHub issue into a clea
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
 Child implementation and actionable review fixes belong here, not in `$shipyard`.
-Run `$review-checkpoint` or its fallback review gate on that branch and fix actionable findings before returning.
-After the latest completed review gate returns no actionable findings, hand off to pr-launchpad on the current branch unless `handoff_mode=integration_branch`.
+Run `$review-checkpoint`; it owns Greptile, fallback review, actionability rules, and contradictory-finding handling.
+After the latest completed review gate passes with no later commit, hand off to `pr-launchpad` unless `handoff_mode=integration_branch`.
 
 ## Bundled resources
 
@@ -36,32 +36,23 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 ## Scope and boundaries
 
 - Only modify files required by the issue.
-- `$review-checkpoint` is the preferred review signal and owns review-actionability rules.
-- If `$review-checkpoint` itself cannot run, use the adversarial review fallback in step 9.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
 - Do not modify `.context/` except local uncommitted review-checkpoint notes in `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the PR URL on success unless `handoff_mode=integration_branch`.
-
-Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
-
-Ignore review findings that `$review-checkpoint` classifies as non-actionable. Stop when a real risk requires a product decision or when a finding repeats after a reasonable targeted fix.
+- Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
 ## Procedure
 
 ### 1. Confirm clean working tree
 
-Run:
-
 ```bash
 git status --short
 ```
 
-If there are existing uncommitted changes, stop unless the user explicitly asked to continue with the existing worktree.
-
-Do not overwrite or discard user changes.
+Stop on existing uncommitted changes unless the user explicitly asked to continue with them. Do not overwrite or discard user changes.
 
 ### 2. Read the issue
 
@@ -77,9 +68,7 @@ Extract explicit requirements, acceptance criteria, constraints, named files, na
 
 ### 3. Prepare the branch
 
-Use the current worktree by default. Use `worktree_path` only when `$shipyard` passes it for integration work.
-
-If `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`.
+Use the current worktree by default. In `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`, then use the integration helper.
 
 Use the helper for normal PR mode:
 
@@ -93,13 +82,9 @@ For `$shipyard` integration mode:
 python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
 ```
 
-This must create the child branch from `integration_branch`, not from the repository default branch.
+The child branch must start from `integration_branch`, not the repository default branch. After setup, `cd` into the returned worktree and keep the caller worktree branch unchanged.
 
-After integration setup succeeds, `cd` into the returned worktree. Do not switch branches in the caller worktree when `worktree_path` is set.
-
-Use `<review_base>=<integration_branch>` in integration mode. Otherwise use `<review_base>=origin/<base_branch>`.
-
-If repository instructions require `.context/progress.md`, `integration_child.py start` copies the caller worktree's progress file into the child worktree or initializes one. Keep it uncommitted.
+Use `<review_base>=<integration_branch>` in integration mode, otherwise `<review_base>=origin/<base_branch>`. If repo instructions require `.context/progress.md`, `integration_child.py start` copies or initializes it; keep it uncommitted.
 
 ### 4. Inspect the repository before editing
 
@@ -111,8 +96,6 @@ Apply the smallest code change that satisfies the issue. Add or update tests onl
 
 ### 6. Inspect the diff
 
-Run:
-
 ```bash
 git status --short
 git diff --stat
@@ -122,9 +105,7 @@ python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 
 `diff_guard.py` includes untracked files. If a new file should appear in `git diff --stat` before staging, run `git add -N <path>` and rerun the diff/stat commands.
 
-If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`.
-
-Every changed file and line must trace to the issue. Stop if the diff contains unrelated changes.
+If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`. Stop if any changed file or line cannot trace to the issue.
 
 ### 7. Run relevant local validation
 
@@ -132,13 +113,11 @@ Run the smallest relevant validation command discoverable from nearby tests, `pa
 
 ### 8. Commit
 
-Stage explicit inspected paths only:
-
 ```bash
 git add <file1> <file2>
 ```
 
-Commit one logical unit at a time with Conventional Commits:
+Stage explicit inspected paths only. Commit one logical unit at a time:
 
 ```bash
 git commit -m "feat(auth): add token refresh handling"
@@ -148,23 +127,15 @@ git commit -m "feat(auth): add token refresh handling"
 
 Run `$review-checkpoint` with the selected `max_iterations` and `poll_interval_seconds`.
 
-After any review-gate fix changes or commits files, rerun the path guard before handoff:
+If it reports actionable findings, fix only in-scope files, commit the inspected changes, and rerun `$review-checkpoint`. Continue only after the latest completed review gate passes with no later commit.
+
+After any review-gate fix commit, rerun the path guard before handoff:
 
 ```bash
 python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
 
-If that fails because `.context/progress.md` is local scratch, first confirm `git diff --name-only <review_base>...HEAD -- .context/progress.md` is empty before adding `--allow .context/progress.md`.
-
-If the review gate directly identifies a deterministic issue in a blocked path, verify that finding before adding `--allow <path>`.
-
-Rerun `python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>` with only the verified `--allow` values accumulated above.
-
-If `$review-checkpoint` tooling is unavailable, spawn one read-only adversarial reviewer instead. Give it the issue scope, review base, changed files, `git diff --stat <review_base>...HEAD`, `git diff <review_base>...HEAD`, and verification commands/results. Tell it not to edit files, commit, push, or review broad cleanup. Classify its findings with `$review-checkpoint` actionability rules.
-
-If the fallback reviewer finds an actionable issue, fix and commit it, then run `$review-checkpoint` again; if it is still unavailable, run another fallback reviewer.
-
-Continue only after the latest completed review gate reports no actionable findings with no later commit.
+If that fails because `.context/progress.md` is local scratch, first confirm `git diff --name-only <review_base>...HEAD -- .context/progress.md` is empty before allowing it. If the review gate identifies a deterministic issue in a blocked path, verify that finding before allowing the path.
 
 ### 10. Final handoff
 
@@ -182,13 +153,13 @@ No staged or tracked code changes should remain before pr-launchpad runs or befo
 
 If `handoff_mode=pull_request`, run `pr-launchpad` on the current branch and return only the PR URL.
 
-If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return only the JSON object emitted by:
+If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`. `base` is the integration branch used as `review_base`; `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
+The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 
@@ -200,12 +171,4 @@ An empty `diff_stat` with `commit` equal to the integration branch HEAD is the n
 
 ## Output
 
-In normal PR mode, return only the PR URL.
-
-In integration mode, return only the finish JSON object described above.
-
-Do not include explanations.
-
-Do not include extra summaries or test notes beyond the exact required JSON object.
-
-Do not include markdown.
+Return only the PR URL in normal mode or the finish JSON in integration mode. Do not include markdown or extra summaries.

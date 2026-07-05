@@ -1,6 +1,6 @@
 ---
 name: issue-blueprint
-description: Turn a rough plan into a grilled spec, dependency graph, implementation tracker issue, final check issue, and GitHub child issue set. Requires grill-with-docs. Use when the user asks to use grill-with-docs plus subagents, create a spec/glossary, slice work into blocked/blocking GitHub issues, or publish a dependency-aware implementation issue graph.
+description: Turn a rough plan into a grilled spec and dependency-aware GitHub issue graph. Use when asked to create specs, glossary updates, child issues, a tracker issue, or one final_check issue; requires grill-with-docs.
 ---
 
 # Issue Blueprint
@@ -30,11 +30,11 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .context/issues
 ```
 
-8. Create child issues first, then the implementation tracker issue, then re-render children with real numbers and update them.
+8. Publish with `publish_issue_plan.py --verify`; it creates children first, then the tracker, then updates children with real numbers.
 
 ## Reviewer Templates
 
-Use these prompts as templates so reviewers inspect the current artifact, not stale drafts.
+Use these prompts so reviewers inspect current artifacts, not stale drafts.
 
 Reviewer A:
 
@@ -60,7 +60,7 @@ Review this final spec and issue-plan draft only:
 - plan_json: <absolute_path>
 - working_directory: <absolute_repo_path>
 Do not review old drafts or unrelated repo cleanup.
-Return at most 5 deterministic blockers: severity | issue | exact change.
+Return at most 5 deterministic blockers in the same shape.
 ```
 
 ## Token Discipline
@@ -68,20 +68,7 @@ Return at most 5 deterministic blockers: severity | issue | exact change.
 - Pass file paths, not pasted documents, whenever the receiver can read the file.
 - Subagents must not summarize the whole spec unless asked.
 - After the first loop, review only changed sections, unresolved findings, and newly introduced contradictions.
-- Subagent findings must be actionable and use this compact shape: severity, issue, exact change.
 - Main agent records only accepted/rejected findings and one-line rationale.
-- Review returns must use this compact shape:
-
-```md
-BLOCKERS:
-- severity | issue | exact change
-
-ACCEPTED:
-- change
-
-REJECTED:
-- reason
-```
 
 ## Issue Publishing
 
@@ -96,17 +83,10 @@ gh label list --repo OWNER/REPO --limit 100
 2. Publish children, then the implementation tracker, then updated child bodies:
 
 ```bash
-python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py \
-  plan.json \
-  --repo OWNER/REPO \
-  --label enhancement \
-  --label ready-for-agent \
-  --verify
+python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
 ```
 
-`--verify` is the single-command path: it runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, prints the Shipyard execution block, and verifies every published issue with `gh issue view`.
-
-3. Verify the returned issue graph with `gh issue view`.
+`--verify` runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, prints the Shipyard execution block, and verifies every published issue with `gh issue view`.
 
 The publisher writes `.context/issues/numbers.json`:
 
@@ -148,10 +128,4 @@ python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py --self-test
 python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/issue-blueprint  # if available
 ```
 
-For live publishing, prefer:
-
-```bash
-python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
-```
-
-Report the publisher's execution block.
+For live publishing, run the `publish_issue_plan.py --verify` command above and report its execution block.
