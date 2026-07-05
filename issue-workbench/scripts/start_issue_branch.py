@@ -64,7 +64,11 @@ def create_issue_branch(
         path = Path(worktree_path)
         if path.exists():
             raise RuntimeError(f"worktree path already exists: {path}")
+        base_commit = run(["git", "rev-parse", integration_branch])
         run(["git", "worktree", "add", "-b", name, os.fspath(path), integration_branch])
+        child_head = run(["git", "-C", os.fspath(path), "rev-parse", "HEAD"])
+        if child_head != base_commit:
+            raise RuntimeError(f"child branch was not created from {integration_branch}")
         return [f"branch={name}", f"worktree={path}"]
 
     if integration_branch:
@@ -111,6 +115,10 @@ def self_test() -> int:
             assert create_issue_branch("123", base_branch="main") == ["branch=issue-123"]
             assert run(["git", "branch", "--show-current"]) == "issue-123"
             run(["git", "checkout", "-B", "integration", "origin/main"])
+            Path("integration.txt").write_text("shipyard branch\n", encoding="utf-8")
+            run(["git", "add", "integration.txt"])
+            run(["git", "commit", "-m", "test: integration base"])
+            integration_head = run(["git", "rev-parse", "integration"])
             assert create_issue_branch(
                 "124",
                 branch_slug="Child Slice",
@@ -118,6 +126,8 @@ def self_test() -> int:
                 integration_branch="integration",
             ) == [f"branch=issue-124-child-slice", f"worktree={worktree}"]
             assert run(["git", "-C", os.fspath(worktree), "branch", "--show-current"]) == "issue-124-child-slice"
+            assert run(["git", "-C", os.fspath(worktree), "rev-parse", "HEAD"]) == integration_head
+            assert (worktree / "integration.txt").read_text(encoding="utf-8") == "shipyard branch\n"
         finally:
             os.chdir(old_cwd)
 

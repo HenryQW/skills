@@ -95,10 +95,10 @@ Return only the JSON object from integration_child.py finish.
 ```
 
    - Each child issue-workbench returns one JSON object only after its latest review gate has no actionable findings.
-   - Require fields: `branch`, `worktree`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow optional `needs_child_fix`.
-   - Record the returned object in `.context/progress.md`; do not commit `.context/`.
+   - Require fields: `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow optional `needs_child_fix`.
+   - Record only `issue`, `worktree`, `branch`, `base`, `commit`, and `status` in `.context/progress.md`; do not commit `.context/`.
    - Stop if any required field is missing, `verification` does not start with `pass:` or `skip:`, `review` is not `PASS` and no `needs_child_fix` is present, or `git rev-parse <branch>` does not match `commit`.
-   - If `needs_child_fix` is present, stop Shipyard edits and rerun or reuse `$issue-workbench` for that issue in its child worktree.
+   - If `needs_child_fix` is present, mark that child as `needs_fix`, stop Shipyard edits, and rerun or reuse `$issue-workbench` for that issue in its recorded child worktree.
    - Spot-check returned `diff_stat`. Inspect the full child diff before merge only when the diff touches high-risk paths or is not obviously tiny.
    - In the shipyard worktree, merge only returned child branches into the current branch, preferably with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch>`.
    - If a merge conflicts, stop and report the child issue, child branch, child worktree, and conflicted files.
@@ -109,7 +109,7 @@ Return only the JSON object from integration_child.py finish.
    Keep this compact state object in `.context/progress.md` after every child return or merge:
 
 ```json
-{"tracker":"#<parent>","mode":"integration","integration_branch":"<branch>","children":[{"issue":"#<n>","handoff":{"branch":"<branch>","worktree":"<path>","commit":"<sha>","diff_stat":"<stat>","verification":"pass:<summary>","review":"PASS","checks":[],"known_skips":[]},"status":"returned|merged"}],"checks":["<command>"],"current_step":"<next action>"}
+{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix"}],"checks":["<command>"],"current_step":"<next action>"}
 ```
 
 4. Finish integration.
@@ -124,10 +124,11 @@ Return only the JSON object from integration_child.py finish.
    - If `final_check` returns an empty `diff_stat` and its returned `commit` already equals the shipyard branch HEAD, record `final_check` as no-op complete and skip merge.
    - Otherwise merge the returned `final_check` branch into the shipyard branch.
    - Run `$review-checkpoint` on the shipyard branch as the final review gate.
-   - Classify each final review finding as `child:<issue>`, `final_check`, `integration`, `non_actionable`, or `tooling_unavailable`.
-   - For `child:<issue>`, stop Shipyard edits, rerun or reuse `$issue-workbench` in that child worktree, merge the child branch again, then rerun the relevant integration checks and final review classification before PR creation.
+   - Classify each final review finding as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
+   - For `child:<issue>`, stop Shipyard edits, reuse that child's recorded worktree with `$issue-workbench`, merge the child branch again, then rerun the relevant integration checks and final review classification before PR creation.
+   - For `final_check`, reuse the recorded `final_check` worktree with `$issue-workbench`, merge it again when it returns a branch, then rerun the relevant integration checks and final review classification before PR creation.
    - Fix only `integration` findings in the shipyard worktree.
-   - Ignore `non_actionable` findings after recording the classification.
+   - For `stale`, `non_actionable`, or `tooling_unavailable` findings, record the classification and stop the fix loop for that finding.
    - If Greptile fails because of provider/tooling availability and review-checkpoint substitutes adversarial subagent review, stop retrying Greptile. Record the `tooling_unavailable` classification, error summary, reviewer identity if available, final actionable-finding result, and PR-body testing/review note in `.context/progress.md`.
    - Run `$pr-launchpad` from the shipyard branch to open one PR into the base branch, with close keywords for every child issue, including `final_check`. If the final review gate used a Greptile-unavailable substitution, include the prepared testing/review note in the PR body.
    - Treat that returned PR URL as the shipyard implementation PR.
@@ -179,7 +180,7 @@ When executing, return:
 - Child issues merged.
 - Final shipyard PR URL.
 - Integration branch and child worktree paths.
-- Child handoff evidence: issue, branch, commit, diff_stat, and verification.
+- Child handoff evidence: issue, worktree, branch, base, commit, status, diff_stat, and verification.
 - CI/review routing performed.
 - Verification commands actually run.
 - Current stop reason and next runnable issue, if any.

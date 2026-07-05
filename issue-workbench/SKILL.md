@@ -93,6 +93,8 @@ For `$shipyard` integration mode:
 python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
 ```
 
+This must create the child branch from `integration_branch`, not from the repository default branch.
+
 After integration setup succeeds, `cd` into the returned worktree. Do not switch branches in the caller worktree when `worktree_path` is set.
 
 Use `<review_base>=<integration_branch>` in integration mode. Otherwise use `<review_base>=origin/<base_branch>`.
@@ -186,7 +188,7 @@ If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return only the
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `branch`, `worktree`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`. `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
+The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`. `base` is the integration branch used as `review_base`; `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 

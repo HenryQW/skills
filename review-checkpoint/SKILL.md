@@ -22,7 +22,8 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for review IDs.
 - Each fix iteration must resolve or reduce the actionable finding set.
-- Stop if the same finding repeats after a targeted fix or if the iteration budget is spent.
+- Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
+- Mark contradictory repeat findings as `non_actionable: contradictory semantics`; record the reason and do not keep fixing.
 
 ## Before review
 
@@ -33,6 +34,16 @@ git status --short
 ```
 
 Start Greptile only from a clean working tree. `.context/progress.md` may remain uncommitted.
+
+Before starting Greptile, ensure remote state matches local HEAD because Greptile reviews the pushed branch:
+
+```bash
+git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
+git rev-parse HEAD
+git rev-parse @{upstream}
+```
+
+If no upstream exists, run `git push --set-upstream origin HEAD`. If `HEAD` differs from `@{upstream}`, run `git push`. Re-run the three commands above and start Greptile only when `git rev-parse HEAD` equals `git rev-parse @{upstream}`.
 
 If the `greptile` command is missing, cannot start or show a review because of auth/service/plan availability, or returns no review ID, do not install or repair Greptile unless the user asked. Record the error and run the fallback.
 
@@ -78,13 +89,15 @@ Record the review ID. If none is returned, use the fallback.
 greptile review show <review_id> --agent
 ```
 
-If still running, wait `poll_interval_seconds` seconds and run the same `show` command again until complete.
+If still running, wait the configured `poll_interval_seconds` exactly and run the same `show` command again until complete. Do not poll at a hardcoded 30-second interval unless the caller configured `poll_interval_seconds=30`.
 
 If `show` fails because Greptile is unavailable, use the fallback.
 
 Classify findings from the full `show` output.
 
 If no actionable findings remain, stop.
+
+If a finding repeats after a targeted fix but now asks for the opposite behavior, classify it as `non_actionable: contradictory semantics`, record both review IDs, and stop fixing that finding.
 
 Fix the smallest set of files needed for actionable findings, then inspect and validate:
 

@@ -81,9 +81,11 @@ def finish_child(
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
+    run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
     result: dict[str, object] = {
         "branch": run(["git", "branch", "--show-current"]),
         "worktree": os.fspath(Path.cwd()),
+        "base": review_base,
         "commit": run(["git", "rev-parse", "HEAD"]),
         "diff_stat": run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | "),
         "verification": verification,
@@ -142,12 +144,18 @@ def self_test() -> int:
         try:
             os.chdir(repo)
             run(["git", "checkout", "-B", "integration", "origin/main"])
+            Path("integration.txt").write_text("shipyard branch\n", encoding="utf-8")
+            run(["git", "add", "integration.txt"])
+            run(["git", "commit", "-m", "test: integration base"])
+            integration_head = run(["git", "rev-parse", "integration"])
             assert start_child("123", os.fspath(worktree), "integration", None) == [
                 "branch=issue-123",
                 f"worktree={worktree}",
                 "review_base=integration",
             ]
             os.chdir(worktree)
+            assert run(["git", "rev-parse", "HEAD"]) == integration_head
+            assert Path("integration.txt").read_text(encoding="utf-8") == "shipyard branch\n"
             Path("README.md").write_text("seed\nchild\n", encoding="utf-8")
             run(["git", "add", "README.md"])
             run(["git", "commit", "-m", "fix(test): child change"])
@@ -163,6 +171,7 @@ def self_test() -> int:
             finish = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
             assert finish["branch"] == "issue-123"
             assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
+            assert finish["base"] == "integration"
             assert str(finish["diff_stat"])
             assert finish["review"] == "PASS"
             assert finish["checks"] == ["python -m test"]
