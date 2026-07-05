@@ -8,6 +8,7 @@ description: Use this skill when asked to implement one GitHub issue into a clea
 ## Goal
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
+Child implementation and actionable review fixes belong here, not in `$shipyard`.
 Run `$review-checkpoint` or its fallback review gate on that branch and fix actionable findings before returning.
 After the latest completed review gate returns no actionable findings, hand off to pr-launchpad on the current branch unless `handoff_mode=integration_branch`.
 
@@ -179,32 +180,30 @@ No staged or tracked code changes should remain before pr-launchpad runs or befo
 
 If `handoff_mode=pull_request`, run `pr-launchpad` on the current branch and return only the PR URL.
 
-If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return exactly:
-
-```text
-branch=<branch_name>
-worktree=<worktree_path>
-commit=<commit_sha>
-diff_stat=<git diff --stat <review_base>...HEAD output with newlines replaced by " | ">
-verification=<pass|skip>:<commands run or skip reason>
-```
-
-Prefer generating those lines with:
+If `handoff_mode=integration_branch`, do not run `pr-launchpad`. Return only the JSON object emitted by:
 
 ```bash
-python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification <pass|skip>:<commands run or skip reason>
+python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-For a verification-only `final_check` child, do not create an empty commit. Run the required checks, then use `integration_child.py finish`; an empty `diff_stat=` with `commit=` equal to the integration branch HEAD is the no-op completion signal for `$shipyard`.
+The JSON includes `branch`, `worktree`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`. `review` must be `PASS` unless `needs_child_fix:"#<issue>"` is present.
+
+For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
+
+```bash
+python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification skip:needs-child-fix --review FAIL --needs-child-fix '#123'
+```
+
+An empty `diff_stat` with `commit` equal to the integration branch HEAD is the no-op completion signal for `$shipyard`.
 
 ## Output
 
 In normal PR mode, return only the PR URL.
 
-In integration mode, return only the branch, worktree, commit, diff_stat, and verification lines described above.
+In integration mode, return only the finish JSON object described above.
 
 Do not include explanations.
 
-Do not include extra summaries or test notes beyond the exact required return lines.
+Do not include extra summaries or test notes beyond the exact required JSON object.
 
 Do not include markdown.

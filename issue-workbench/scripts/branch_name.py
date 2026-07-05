@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 
 
@@ -28,11 +29,48 @@ def branch_name(issue_number: str, branch_slug: str | None = None) -> str:
     return f"issue-{issue_number}-{slug}"
 
 
-def main() -> int:
+def integration_branch_name_from_title(title: str) -> str:
+    slug = normalize_slug(title)
+    if not slug:
+        raise ValueError("parent issue title must contain at least one letter or digit")
+    return f"feat/{slug}"
+
+
+def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
+    if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
+        raise ValueError("parent_issue must be a positive integer")
+    command = ["gh", "issue", "view", parent_issue, "--json", "title", "--jq", ".title"]
+    if repo:
+        command.extend(["--repo", repo])
+    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(detail or "gh issue view failed")
+    return integration_branch_name_from_title(result.stdout.strip())
+
+
+def self_test() -> int:
+    assert normalize_slug("V4 deterministic skill replacement MCP") == "v4-deterministic-skill-replacement-mcp"
+    assert branch_name("123") == "issue-123"
+    assert branch_name("123", "Add Thing!!") == "issue-123-add-thing"
+    assert integration_branch_name_from_title("V4 deterministic skill replacement MCP") == (
+        "feat/v4-deterministic-skill-replacement-mcp"
+    )
+    for call in (lambda: branch_name("0"), lambda: branch_name("123", "!!!"), lambda: integration_branch_name_from_title("!!!")):
+        try:
+            call()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid input accepted")
+    return 0
+
+
+def legacy_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Print an issue branch name.")
     parser.add_argument("issue_number", help="GitHub issue number")
     parser.add_argument("branch_slug", nargs="?", help="Optional branch slug")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         print(branch_name(args.issue_number, args.branch_slug))
@@ -40,6 +78,32 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
     return 0
+
+
+def integration_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Print a shipyard integration branch name.")
+    parser.add_argument("parent_issue", help="GitHub parent issue number")
+    parser.add_argument("--repo", help="OWNER/REPO for gh issue lookup")
+    args = parser.parse_args(argv)
+
+    try:
+        print(integration_branch_name(args.parent_issue, args.repo))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    if argv == ["--self-test"]:
+        return self_test()
+    if argv[:1] == ["integration"]:
+        return integration_main(argv[1:])
+    return legacy_main(argv)
 
 
 if __name__ == "__main__":

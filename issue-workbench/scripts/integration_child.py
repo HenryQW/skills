@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -17,6 +19,10 @@ from start_issue_branch import run
 def emit(lines: list[str]) -> None:
     for line in lines:
         print(line)
+
+
+def emit_json(value: dict[str, object]) -> None:
+    print(json.dumps(value, sort_keys=True))
 
 
 def repo_requires_progress(root: Path) -> bool:
@@ -56,20 +62,38 @@ def changed_code_status() -> list[str]:
     return [line for line in lines if not line[3:].startswith(".context/")]
 
 
-def finish_child(review_base: str, verification: str) -> list[str]:
+def finish_child(
+    review_base: str,
+    verification: str,
+    review: str,
+    checks: list[str] | None = None,
+    known_skips: list[str] | None = None,
+    needs_child_fix: str | None = None,
+) -> dict[str, object]:
     if not (verification.startswith("pass:") or verification.startswith("skip:")):
         raise RuntimeError("--verification must start with pass: or skip:")
+    if review not in {"PASS", "FAIL"}:
+        raise RuntimeError("--review must be PASS or FAIL")
+    if review == "FAIL" and not needs_child_fix:
+        raise RuntimeError("--review FAIL requires --needs-child-fix #123")
+    if needs_child_fix and not re.fullmatch(r"#[1-9][0-9]*", needs_child_fix):
+        raise RuntimeError("--needs-child-fix must look like #123")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
-    diff_stat = run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | ")
-    return [
-        f"branch={run(['git', 'branch', '--show-current'])}",
-        f"worktree={Path.cwd()}",
-        f"commit={run(['git', 'rev-parse', 'HEAD'])}",
-        f"diff_stat={diff_stat}",
-        f"verification={verification}",
-    ]
+    result: dict[str, object] = {
+        "branch": run(["git", "branch", "--show-current"]),
+        "worktree": os.fspath(Path.cwd()),
+        "commit": run(["git", "rev-parse", "HEAD"]),
+        "diff_stat": run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | "),
+        "verification": verification,
+        "review": review,
+        "checks": checks or [],
+        "known_skips": known_skips or [],
+    }
+    if needs_child_fix:
+        result["needs_child_fix"] = needs_child_fix
+    return result
 
 
 def merge_child(branch: str, integration_branch: str) -> None:
@@ -127,14 +151,24 @@ def self_test() -> int:
             Path("README.md").write_text("seed\nchild\n", encoding="utf-8")
             run(["git", "add", "README.md"])
             run(["git", "commit", "-m", "fix(test): child change"])
-            assert_raises("pass:", finish_child, "integration", "maybe")
+            assert_raises("pass:", finish_child, "integration", "maybe", "PASS")
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
-            assert_raises("uncommitted non-context", finish_child, "integration", "pass:demo")
+            assert_raises("uncommitted non-context", finish_child, "integration", "pass:demo", "PASS")
             Path("dirty.txt").unlink()
-            finish = finish_child("integration", "pass:demo")
-            assert finish[0] == "branch=issue-123"
-            assert Path(finish[1].split("=", 1)[1]).resolve() == worktree.resolve()
-            assert finish[3].startswith("diff_stat=")
+            assert_raises("PASS or FAIL", finish_child, "integration", "pass:demo", "MAYBE")
+            assert_raises("requires --needs-child-fix", finish_child, "integration", "skip:needs child fix", "FAIL")
+            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "123")
+            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#abc")
+            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#123 extra")
+            finish = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
+            assert finish["branch"] == "issue-123"
+            assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
+            assert str(finish["diff_stat"])
+            assert finish["review"] == "PASS"
+            assert finish["checks"] == ["python -m test"]
+            assert finish["known_skips"] == ["slow check"]
+            fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
+            assert fail["needs_child_fix"] == "#123"
             assert_raises("expected integration branch", merge_child, "issue-123", "integration")
             os.chdir(repo)
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
@@ -167,6 +201,10 @@ def main() -> int:
     finish = subparsers.add_parser("finish")
     finish.add_argument("--review-base", required=True)
     finish.add_argument("--verification", required=True)
+    finish.add_argument("--review", required=True, choices=["PASS", "FAIL"])
+    finish.add_argument("--check", action="append", default=[])
+    finish.add_argument("--known-skip", action="append", default=[])
+    finish.add_argument("--needs-child-fix")
 
     merge = subparsers.add_parser("merge")
     merge.add_argument("branch")
@@ -180,7 +218,16 @@ def main() -> int:
         if args.command == "start":
             emit(start_child(args.issue_number, args.worktree_path, args.integration_branch, args.branch_slug))
         elif args.command == "finish":
-            emit(finish_child(args.review_base, args.verification))
+            emit_json(
+                finish_child(
+                    args.review_base,
+                    args.verification,
+                    args.review,
+                    args.check,
+                    args.known_skip,
+                    args.needs_child_fix,
+                )
+            )
         elif args.command == "merge":
             merge_child(args.branch, args.integration_branch)
         else:
