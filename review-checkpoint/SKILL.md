@@ -1,6 +1,6 @@
 ---
 name: review-checkpoint
-description: Run blocker-only Greptile review loops on the current branch, with subagent adversarial review fallback when Greptile is unavailable. Use when Codex is asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
+description: Run blocker-only Greptile review loops on the current branch, with subagent adversarial review fallback when Greptile is unavailable. Use when asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
 ---
 
 # review-checkpoint
