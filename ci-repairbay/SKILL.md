@@ -45,7 +45,7 @@ Use this skill when the task is specifically about failing GitHub Actions checks
    - Apply the approved fix locally.
    - Run the most relevant local verification available.
 7. Recheck status and summarize residual risk.
-   - Suggest re-running the relevant tests and `gh pr checks`.
+   - Rerun the bundled inspection script or the specific failed local check; do not also run `gh pr checks` when the script already returned current PR check state.
    - Report what is still unverified, what may still be flaky, and whether any failing checks were external and therefore not actionable here.
 
 ## Bundled Resources

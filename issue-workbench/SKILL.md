@@ -143,17 +143,7 @@ If the guard fails, stop unless the issue explicitly allows that path or `$revie
 
 ### 10. Final handoff
 
-Run:
-
-```bash
-git status --short
-git log --oneline -5
-git branch --show-current
-git rev-parse HEAD
-git diff --stat <review_base>...HEAD
-```
-
-No staged or tracked code changes should remain before pr-launchpad runs or before integration-mode return. `.context/progress.md` may remain local and uncommitted for review-checkpoint notes.
+Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 
 If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
 

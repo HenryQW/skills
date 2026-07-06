@@ -128,13 +128,17 @@ def finish_child(
     return result
 
 
-def merge_child(branch: str, integration_branch: str) -> None:
+def merge_child(branch: str, integration_branch: str, expected_commit: str | None = None) -> None:
     current = run(["git", "branch", "--show-current"])
     if current != integration_branch:
         raise RuntimeError(f"expected integration branch {integration_branch}, got {current}")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
+    if expected_commit:
+        actual_commit = run(["git", "rev-parse", branch])
+        if actual_commit != expected_commit:
+            raise RuntimeError(f"expected {branch} at {expected_commit}, got {actual_commit}")
     run(["git", "merge", "--no-ff", "--no-edit", branch])
 
 
@@ -216,7 +220,8 @@ def self_test() -> int:
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
             assert_raises("uncommitted non-context", merge_child, "issue-123", "integration")
             Path("dirty.txt").unlink()
-            merge_child("issue-123", "integration")
+            assert_raises("expected issue-123", merge_child, "issue-123", "integration", "0" * 40)
+            merge_child("issue-123", "integration", str(finish["commit"]))
             assert "child" in Path("README.md").read_text(encoding="utf-8")
             (repo / "AGENTS.md").write_text("Use .context/progress.md\n", encoding="utf-8")
             (repo / ".context").mkdir()
@@ -251,6 +256,7 @@ def main() -> int:
     merge = subparsers.add_parser("merge")
     merge.add_argument("branch")
     merge.add_argument("--integration-branch", required=True)
+    merge.add_argument("--expected-commit")
 
     args = parser.parse_args()
 
@@ -271,7 +277,7 @@ def main() -> int:
                 )
             )
         elif args.command == "merge":
-            merge_child(args.branch, args.integration_branch)
+            merge_child(args.branch, args.integration_branch, args.expected_commit)
         else:
             parser.error("command is required unless --self-test is used")
         return 0
