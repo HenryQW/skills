@@ -23,6 +23,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
+- Write fallback review payloads and large diffs to `.context/` artifacts, record their paths in `.context/progress.md`, and pass paths instead of pasted content.
 - Each fix iteration must resolve or reduce the actionable finding set.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
 - Mark contradictory repeat findings as `non_actionable: contradictory semantics`; record the reason and do not keep fixing.
@@ -56,7 +57,8 @@ If the `greptile` command is missing, cannot start or show a review because of a
 When Greptile is unavailable, delegate one adversarial review to a subagent:
 
 - Use a prompt that includes `working_directory=<absolute path>` as the first field.
-- Collect and pass the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
+- Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
+- Save the full diff and payload under `.context/` and record those absolute paths in `.context/progress.md`.
 - Ask the subagent to inspect that branch diff only.
 - Tell it to report deterministic, in-scope findings with file/line evidence.
 - Tell it not to edit files, commit, push, or review broad cleanup.
@@ -70,11 +72,12 @@ working_directory=<absolute path>
 review_base=<base ref or unknown>
 branch=<branch>
 changed_files=<files>
-diff_stat=<captured stat>
-diff=<captured diff or path to diff artifact>
-verification=<commands and results>
+diff_stat=<short captured stat>
+diff_artifact=<absolute path>
+payload_artifact=<absolute path>
+verification_artifact=<absolute path or short commands/results>
 
-Review only this diff. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope findings with file/line evidence, or PASS.
+Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope findings with file/line evidence, or PASS.
 ```
 
 Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run another subagent review for the next iteration.
@@ -103,6 +106,7 @@ upstream_sha=<git rev-parse @{upstream}>
 base_ref=<review_base or unknown>
 base_sha=<git rev-parse <review_base> or unknown>
 poll_after_utc=<YYYY-MM-DDTHH:MM:SSZ>
+progress_path=<absolute path to .context/progress.md>
 ```
 
 Set `poll_after_utc` from a Greptile retry time when provided; otherwise use current UTC plus `poll_interval_seconds`.

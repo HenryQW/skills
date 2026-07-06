@@ -89,10 +89,11 @@ integration_branch=<current_branch>
 review_base=<current_branch>
 wait_mode=defer
 Do not commit .context/.
-Return only the child handoff JSON object.
+Write detailed artifacts to .context/progress.md in the child worktree.
+Return only the compact child handoff JSON object.
 ```
 
-- Require one child handoff JSON object with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; allow `needs_child_fix`.
+- Require one child handoff JSON object with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
 - Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
 - Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
 - Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, the review value is not accepted, or `git rev-parse <branch>` differs from `commit`.
@@ -105,10 +106,10 @@ Return only the child handoff JSON object.
 - Do not delete child worktrees automatically.
 - Once multiple worktrees exist, use absolute paths for file-mutating commands.
 
-Keep this compact state object in `.context/progress.md` after every child return or merge:
+Keep this compact state object in `.context/progress.md` after every child return or merge; store artifact paths, not pasted logs or full diffs:
 
 ```json
-{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix|pending_review","pending_review":{}}],"checks":["<command>"],"current_step":"<next action>"}
+{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix|pending_review","artifacts":{"progress_path":"/abs/path/.context/progress.md"},"pending_review":{}}],"checks":["<command>"],"current_step":"<next action>"}
 ```
 
 ### 3. Finish integration

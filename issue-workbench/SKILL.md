@@ -40,7 +40,7 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - Only modify files required by the issue.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
-- Do not modify `.context/` except local uncommitted review-checkpoint notes in `.context/progress.md`.
+- Do not modify `.context/` except local uncommitted progress, review, and handoff artifacts referenced from `.context/progress.md`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the PR URL on success unless `handoff_mode=integration_branch`.
@@ -157,15 +157,17 @@ No staged or tracked code changes should remain before pr-launchpad runs or befo
 
 If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
 
+Before returning in integration mode, keep detailed notes, validation output, review state, and resume hints in `.context/progress.md` or files it references. The response is only the routing envelope.
+
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, and `known_skips`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, and `pending_review` copied from `.context/progress.md`. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from `.context/progress.md`. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 
@@ -177,4 +179,4 @@ An empty `diff_stat` with `commit` equal to the integration branch HEAD is the n
 
 ## Output
 
-Return only the PR URL in normal mode, `PENDING_REVIEW` with its pending state when normal mode is deferred, or the handoff JSON in integration mode. Do not include markdown or extra summaries.
+Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the compact handoff JSON in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.

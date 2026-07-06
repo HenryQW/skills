@@ -62,6 +62,33 @@ def changed_code_status() -> list[str]:
     return [line for line in lines if not line[3:].startswith(".context/")]
 
 
+def ensure_local_progress_file() -> Path:
+    progress = Path.cwd() / ".context" / "progress.md"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    if not progress.exists():
+        progress.write_text("# Progress\n", encoding="utf-8")
+    return progress
+
+
+def append_handoff_record(progress: Path, result: dict[str, object]) -> None:
+    record = {
+        "branch": result["branch"],
+        "base": result["base"],
+        "commit": result["commit"],
+        "verification": result["verification"],
+        "review": result["review"],
+        "checks": result["checks"],
+        "known_skips": result["known_skips"],
+    }
+    if "needs_child_fix" in result:
+        record["needs_child_fix"] = result["needs_child_fix"]
+    with progress.open("a", encoding="utf-8") as f:
+        f.write("\n## Integration Handoff\n\n")
+        f.write("```json\n")
+        f.write(json.dumps(record, sort_keys=True))
+        f.write("\n```\n")
+
+
 def finish_child(
     review_base: str,
     verification: str,
@@ -82,6 +109,7 @@ def finish_child(
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
+    progress = ensure_local_progress_file()
     result: dict[str, object] = {
         "branch": run(["git", "branch", "--show-current"]),
         "worktree": os.fspath(Path.cwd()),
@@ -92,9 +120,11 @@ def finish_child(
         "review": review,
         "checks": checks or [],
         "known_skips": known_skips or [],
+        "artifacts": {"progress_path": os.fspath(progress)},
     }
     if needs_child_fix:
         result["needs_child_fix"] = needs_child_fix
+    append_handoff_record(progress, result)
     return result
 
 
@@ -176,6 +206,9 @@ def self_test() -> int:
             assert finish["review"] == "PASS"
             assert finish["checks"] == ["python -m test"]
             assert finish["known_skips"] == ["slow check"]
+            progress_path = Path(str(finish["artifacts"]["progress_path"]))
+            assert progress_path.resolve() == (worktree / ".context" / "progress.md").resolve()
+            assert '"commit"' in progress_path.read_text(encoding="utf-8")
             fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
             assert fail["needs_child_fix"] == "#123"
             assert_raises("expected integration branch", merge_child, "issue-123", "integration")

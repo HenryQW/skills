@@ -53,8 +53,9 @@ def git(args: list[str]) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def working_tree_files() -> tuple[set[str], set[str]]:
-    files = set(git(["diff", "--name-only"]) + git(["diff", "--cached", "--name-only"]))
+def working_tree_files() -> tuple[set[str], set[str], set[str]]:
+    staged_files = set(git(["diff", "--cached", "--name-only"]))
+    files = set(git(["diff", "--name-only"])) | staged_files
     untracked: set[str] = set()
     for line in git(["status", "--short", "--untracked-files=all"]):
         path = line[3:] if line.startswith("?? ") else line[3:].strip()
@@ -64,14 +65,16 @@ def working_tree_files() -> tuple[set[str], set[str]]:
             files.add(path)
             if line.startswith("?? "):
                 untracked.add(path)
-    return files, untracked
+    return files, untracked, staged_files
 
 
-def changed_files(base: str | None) -> tuple[list[str], set[str]]:
-    files, untracked = working_tree_files()
+def changed_files(base: str | None) -> tuple[list[str], set[str], set[str], set[str]]:
+    files, untracked, staged_files = working_tree_files()
+    branch_files: set[str] = set()
     if base:
-        files.update(git(["diff", "--name-only", f"{base}...HEAD"]))
-    return sorted(files), untracked
+        branch_files = set(git(["diff", "--name-only", f"{base}...HEAD"]))
+        files.update(branch_files)
+    return sorted(files), untracked, branch_files, staged_files
 
 
 def is_forbidden(path: str, allowed: set[str]) -> bool:
@@ -79,6 +82,21 @@ def is_forbidden(path: str, allowed: set[str]) -> bool:
     if normalized in allowed or any(normalized.startswith(f"{item.rstrip('/')}/") for item in allowed):
         return False
     return any(fnmatch.fnmatch(normalized, pattern) for pattern in FORBIDDEN_PATTERNS)
+
+
+def is_untracked_context_scratch(
+    path: str,
+    untracked: set[str],
+    branch_files: set[str],
+    staged_files: set[str],
+) -> bool:
+    normalized = path.replace("\\", "/")
+    return (
+        normalized in untracked
+        and normalized not in branch_files
+        and normalized not in staged_files
+        and normalized.startswith(".context/")
+    )
 
 
 def self_test() -> None:
@@ -89,22 +107,59 @@ def self_test() -> None:
             subprocess.run(["git", "init"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             Path(".context").mkdir()
             Path(".context/progress.md").write_text("scratch\n", encoding="utf-8")
-            files, untracked = changed_files(None)
+            Path(".context/review.diff").write_text("diff\n", encoding="utf-8")
+            files, untracked, branch_files, staged_files = changed_files(None)
             blocked = [
                 path
                 for path in files
-                if not (path == ".context/progress.md" and path in untracked) and is_forbidden(path, set())
+                if not is_untracked_context_scratch(path, untracked, branch_files, staged_files)
+                and is_forbidden(path, set())
             ]
             assert ".context/progress.md" in untracked
+            assert ".context/review.diff" in untracked
             assert blocked == []
             Path(".env").write_text("secret\n", encoding="utf-8")
-            files, untracked = changed_files(None)
+            files, untracked, branch_files, staged_files = changed_files(None)
             blocked = [
                 path
                 for path in files
-                if not (path == ".context/progress.md" and path in untracked) and is_forbidden(path, set())
+                if not is_untracked_context_scratch(path, untracked, branch_files, staged_files)
+                and is_forbidden(path, set())
             ]
             assert ".env" in blocked
+
+            Path(".env").unlink()
+            Path(".context/progress.md").unlink()
+            Path(".context/review.diff").unlink()
+            subprocess.run(["git", "config", "user.email", "agent@example.invalid"], check=True)
+            subprocess.run(["git", "config", "user.name", "Agent"], check=True)
+            Path("README.md").write_text("base\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], check=True)
+            subprocess.run(["git", "commit", "-m", "base"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            base = git(["rev-parse", "HEAD"])[0]
+            Path(".context/progress.md").write_text("tracked scratch\n", encoding="utf-8")
+            subprocess.run(["git", "add", ".context/progress.md"], check=True)
+            subprocess.run(["git", "commit", "-m", "add context"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["git", "rm", "--cached", ".context/progress.md"], check=True, stdout=subprocess.PIPE)
+            files, untracked, branch_files, staged_files = changed_files(None)
+            blocked = [
+                path
+                for path in files
+                if not is_untracked_context_scratch(path, untracked, branch_files, staged_files)
+                and is_forbidden(path, set())
+            ]
+            assert ".context/progress.md" in untracked
+            assert ".context/progress.md" in staged_files
+            assert ".context/progress.md" in blocked
+            files, untracked, branch_files, staged_files = changed_files(base)
+            blocked = [
+                path
+                for path in files
+                if not is_untracked_context_scratch(path, untracked, branch_files, staged_files)
+                and is_forbidden(path, set())
+            ]
+            assert ".context/progress.md" in branch_files
+            assert ".context/progress.md" in blocked
         finally:
             os.chdir(old_cwd)
 
@@ -123,7 +178,7 @@ def main() -> int:
         return 0
 
     try:
-        files, untracked = changed_files(args.base)
+        files, untracked, branch_files, staged_files = changed_files(args.base)
     except subprocess.CalledProcessError as exc:
         print(exc, file=sys.stderr)
         return exc.returncode
@@ -131,7 +186,8 @@ def main() -> int:
     blocked = [
         path
         for path in files
-        if not (path == ".context/progress.md" and path in untracked) and is_forbidden(path, set(args.allow))
+        if not is_untracked_context_scratch(path, untracked, branch_files, staged_files)
+        and is_forbidden(path, set(args.allow))
     ]
     if blocked:
         print("Forbidden changed paths:", file=sys.stderr)
