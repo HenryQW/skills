@@ -23,18 +23,27 @@ flowchart TD
   approved -->|No| stop["Stop"]
   blueprint --> parent["Parent issue"]
   parent --> children["Dependency-aware child issues"]
-  children --> shipyard["shipyard"]
+  parent --> shipyard["shipyard"]
   shipyard --> branch["Reconcile integration branch"]
-  branch --> ready{"Unblocked child?"}
+  branch --> ready{"Runnable non-final child?"}
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| worktrees["Ready-wave child worktrees"]
-  worktrees --> integrate["Current shipyard branch"]
+  worktrees --> workbench["issue-workbench"]
+  workbench --> child_review["review-checkpoint"]
+  child_review --> handoff["Child handoff JSON"]
+  handoff --> integrate["Merge into shipyard branch"]
   integrate --> recheck{"Newly unblocked child?"}
   recheck -->|Yes| worktrees
-  recheck -->|No| final_branch["final_check worktree"]
-  final_branch --> final_merge["Merge or skip final_check"]
-  final_merge --> final_pr["Final shipyard pull request"]
-  final_pr --> health
+  recheck -->|No| final_workbench["issue-workbench final_check"]
+  final_workbench --> final_review["review-checkpoint final_check"]
+  final_review --> final_merge["Merge or skip final_check"]
+  final_merge --> ship_review["review-checkpoint on shipyard branch"]
+  ship_review --> final_result{"Final review result?"}
+  final_result -->|Actionable findings| final_fix["Route to child/final_check worktree or integration fix"]
+  final_fix --> ship_review
+  final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
+  final_result -->|PASS| launch["pr-launchpad"]
+  launch --> health
   health -->|CI failing| ci_repair["ci-repairbay"]
   health -->|Review comments| review_repair["review-repairbay"]
   health -->|Yes| mergeable["Mergeable code"]
@@ -74,10 +83,11 @@ flowchart LR
   blueprint --> children["Child issues"]
   blueprint --> parent["Parent issue"]
   children --> final["final_check"]
+  parent --> command["Use shipyard #parent"]
 ```
 
 - Run `issue-blueprint` with `$grill-with-docs` available.
-- Produce the spec, dependency-aware child issues, parent issue, and one `final_check` child.
+- Produce the spec, dependency-aware child issues, parent issue, one `final_check` child, and the `shipyard` execution block.
 
 ### 🚢 Issue Graph to Pull Requests
 
@@ -87,16 +97,26 @@ Use this after a parent issue exists and implementation should proceed through t
 flowchart TD
   parent["Parent issue"] --> shipyard["shipyard"]
   shipyard --> branch["Reconcile integration branch"]
-  branch --> ready{"Unblocked child?"}
+  branch --> inspect["Inspect dependency graph"]
+  inspect --> ready{"Runnable non-final child?"}
   ready -->|No| blocked["Report blockers"]
   ready -->|Yes| worktrees["Ready-wave child worktrees"]
-  worktrees --> integrate["Merge into current branch"]
+  worktrees --> workbench["issue-workbench integration mode"]
+  workbench --> child_review["review-checkpoint"]
+  child_review --> handoff["Child handoff JSON"]
+  handoff --> integrate["Merge into shipyard branch"]
   integrate --> recheck{"Newly unblocked child?"}
   recheck -->|Yes| worktrees
-  recheck -->|No| final_branch["final_check worktree"]
-  final_branch --> final_merge["Merge or skip final_check"]
-  final_merge --> final_pr["Final shipyard pull request"]
-  final_pr --> cleanup
+  recheck -->|No| final_workbench["issue-workbench final_check"]
+  final_workbench --> final_review["review-checkpoint"]
+  final_review --> final_merge["Merge or skip final_check"]
+  final_merge --> ship_review["review-checkpoint on shipyard branch"]
+  ship_review --> final_result{"Final review result?"}
+  final_result -->|Actionable findings| final_fix["Route to child/final_check worktree or integration fix"]
+  final_fix --> ship_review
+  final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
+  final_result -->|PASS| launch["pr-launchpad"]
+  launch --> cleanup
   cleanup -->|CI| ci_repair["ci-repairbay"]
   cleanup -->|Review| review_repair["review-repairbay"]
   cleanup -->|No| done["Ready"]
@@ -106,8 +126,9 @@ flowchart TD
 
 - Run `shipyard #<parent>`.
 - Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
-- Create worktrees only for the current ready dependency wave, merge review-clean branches back into the shipyard branch, then re-inspect for newly unblocked children.
-- Run `final_check` only after all other children are merged or verified complete.
+- Create worktrees only for the current runnable dependency wave, run each child through `issue-workbench` in integration mode, merge review-clean handoffs back into the shipyard branch, then re-inspect for newly unblocked children.
+- Run `final_check` through `issue-workbench` only after all other children are merged or verified complete.
+- Run `review-checkpoint` on the shipyard branch, route actionable final findings back through the owning worktree or an integration fix, stop on `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
 
 ### 🛠️ Pull Request to Mergeable
 
