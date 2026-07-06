@@ -48,6 +48,18 @@ Use this skill when the task is specifically about failing GitHub Actions checks
    - Rerun the bundled inspection script or the specific failed local check; do not also run `gh pr checks` when the script already returned current PR check state.
    - Report what is still unverified, what may still be flaky, and whether any failing checks were external and therefore not actionable here.
 
+## Output
+
+End with one compact status line:
+
+```text
+status=PASS|BLOCKED|PENDING artifacts=<path-or-none> summary=<one line>
+```
+
+- `PASS`: GitHub Actions blockers are fixed, or only waived/external non-actionable checks remain.
+- `BLOCKED`: the fix needs user approval, missing credentials, missing logs, or a non-GitHub provider.
+- `PENDING`: a check rerun was triggered or is still running.
+
 ## Bundled Resources
 
 ### scripts/inspect_pr_checks.py

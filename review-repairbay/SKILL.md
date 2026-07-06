@@ -33,6 +33,18 @@ Use this skill when the user wants to work through requested changes on a GitHub
 6. Summarize the result.
    - List which threads were addressed, which were intentionally left open, and what tests or checks support the change.
 
+## Output
+
+End with one compact status line:
+
+```text
+status=PASS|BLOCKED|PENDING artifacts=<path-or-none> summary=<one line>
+```
+
+- `PASS`: selected actionable review threads are addressed, replied to, or resolved as requested.
+- `BLOCKED`: a thread is ambiguous, conflicting, requires a product decision, or GitHub access is unavailable.
+- `PENDING`: a requested review-thread write or re-fetch is still in progress.
+
 ## Write Safety
 
 - Do not reply on GitHub, resolve review threads, or submit a review unless the user explicitly asks for that write action.

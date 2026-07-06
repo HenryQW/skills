@@ -40,7 +40,7 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - Only modify files required by the issue.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
-- Do not modify `.context/` except local uncommitted progress, review, and handoff artifacts referenced from `.context/progress.md`.
+- Do not modify `.context/` except local uncommitted progress, review, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the PR URL on success unless `handoff_mode=integration_branch`.
@@ -86,7 +86,7 @@ python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree
 
 The child branch must start from `integration_branch`, not the repository default branch. After setup, `cd` into the returned worktree and keep the caller worktree branch unchanged.
 
-Resolve `<review_base>` from the `review_base` input when provided; otherwise use `<integration_branch>` in integration mode and `origin/<base_branch>` in PR mode. If repo instructions require `.context/progress.md`, `integration_child.py start` copies or initializes it; keep it uncommitted.
+Resolve `<review_base>` from the `review_base` input when provided; otherwise use `<integration_branch>` in integration mode and `origin/<base_branch>` in PR mode. If repo instructions require `.context/progress.md`, `integration_child.py start` initializes the five-field progress object and records any prior progress file under `artifacts.source_progress`; keep it uncommitted.
 
 ### 4. Inspect the repository before editing
 
@@ -147,7 +147,7 @@ Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode i
 
 If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
 
-Before returning in integration mode, keep detailed notes, validation output, review state, and resume hints in `.context/progress.md` or files it references. The response is only the routing envelope.
+Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints as artifact files referenced from `artifacts`. The response is only the routing envelope.
 
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
 
@@ -157,7 +157,7 @@ python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_ba
 
 The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from `.context/progress.md`. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 

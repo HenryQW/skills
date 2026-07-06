@@ -66,15 +66,6 @@ flowchart TD
 
 Use this when the starting point is "audit this repo" and the output should become approved issue work.
 
-```mermaid
-flowchart LR
-  audit["Audit request"] --> surveyor["repo-surveyor"]
-  surveyor --> reduce["Reduced findings"]
-  reduce --> approve{"Approved?"}
-  approve -->|Yes| blueprint["issue-blueprint"]
-  approve -->|No| stop["Stop"]
-```
-
 - Run `repo-surveyor`.
 - Merge findings by touched area and verification boundary.
 - Drop cleanup-only work or fold it into nearby valuable work.
@@ -84,53 +75,12 @@ flowchart LR
 
 Use this when the starting point is a rough plan that needs hard questioning before implementation.
 
-```mermaid
-flowchart LR
-  plan["Rough plan"] --> blueprint["issue-blueprint"]
-  blueprint --> spec["Spec"]
-  blueprint --> children["Child issues"]
-  blueprint --> parent["Parent issue"]
-  children --> final["final_check"]
-  parent --> command["Use shipyard #parent"]
-```
-
 - Run `issue-blueprint` with `$grill-with-docs` available.
 - Produce the spec, dependency-aware child issues, parent issue, one `final_check` child, and the `shipyard` execution block.
 
 ### 🚢 Issue Graph to Pull Requests
 
 Use this after a parent issue exists and implementation should proceed through the deterministic integration branch.
-
-```mermaid
-flowchart TD
-  parent["Parent issue"] --> shipyard["shipyard"]
-  shipyard --> branch["Reconcile integration branch"]
-  branch --> inspect["Inspect dependency graph"]
-  inspect --> ready{"Runnable non-final child?"}
-  ready -->|No| blocked["Report blockers"]
-  ready -->|Yes| worktrees["Ready-wave child worktrees"]
-  worktrees --> workbench["issue-workbench integration mode"]
-  workbench --> child_review["review-checkpoint"]
-  child_review --> handoff["Child handoff JSON"]
-  handoff --> integrate["Merge into shipyard branch"]
-  integrate --> recheck{"Newly unblocked child?"}
-  recheck -->|Yes| worktrees
-  recheck -->|No| final_workbench["issue-workbench final_check"]
-  final_workbench --> final_review["review-checkpoint"]
-  final_review --> final_merge["Merge or skip final_check"]
-  final_merge --> ship_review["review-checkpoint on shipyard branch"]
-  ship_review --> final_result{"Final review result?"}
-  final_result -->|Blockers| final_fix["Route to child/final_check worktree or integration fix"]
-  final_fix --> ship_review
-  final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
-  final_result -->|PASS| launch["pr-launchpad"]
-  launch --> cleanup
-  cleanup -->|CI| ci_repair["ci-repairbay"]
-  cleanup -->|Review| review_repair["review-repairbay"]
-  cleanup -->|No| done["Ready"]
-  ci_repair --> cleanup
-  review_repair --> cleanup
-```
 
 - Run `shipyard #<parent>`.
 - Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
@@ -166,13 +116,13 @@ This table is the canonical skill inventory: category, purpose, install command,
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
-| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 15:41 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 15:41 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 15:41 |
-| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 15:41 |
+| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 16:38 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 16:38 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 16:38 |
+| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 16:38 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 14:01 |
-| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 15:31 |
-| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 14:59 |
+| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 16:38 |
+| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-04 06:23 |
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-04 06:23 |
 

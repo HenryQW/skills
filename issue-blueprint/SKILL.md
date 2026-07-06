@@ -15,11 +15,10 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 3. Run the spec loop:
    - Main agent is the reviewer and scope owner.
    - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 deterministic blockers per loop.
-   - Main agent debates Subagent A until they produce a final spec with explicit assumptions, non-goals, acceptance criteria, open questions, and glossary/domain updates. Batch obvious correctness axes in the first draft: field shapes, invariants, failure modes, domain semantics, dependencies, and side-effect boundaries.
-   - Subagent B reviews that final spec with the Reviewer B template below and returns at most 5 deterministic blockers per loop.
-   - Main agent addresses only blockers that would change correctness, constraints, acceptance criteria, dependencies, implementation risk, or user-stated scope. Reject speculative, cosmetic, cleanup-only, or overbuilt findings with a short rationale.
-   - If any blocker is accepted, patch once and loop back to the Main-agent/Subagent-A debate only for that blocker batch.
-   - Stop when Subagent B raises no new blockers, or after 3 total spec-review loops. If blockers remain at the loop limit, stop and ask the human to intervene.
+   - Main agent resolves blockers only from the user prompt, project instructions, live repo/issue/spec context, relevant memory, or reviewer evidence. Do not guess.
+   - Accept evidence-backed blockers, reject speculative/cosmetic/cleanup-only/out-of-scope blockers with a short rationale, and ask the user when resolution requires a product decision or cannot be inferred.
+   - Patch accepted blockers once. Re-run Subagent A only if accepted blockers materially changed the graph.
+   - Stop when no accepted blockers remain. Do not add a second reviewer by default.
 4. Write the minimum durable docs where the project stores specs. If no location is known, ask. Required outputs are:
    - implementation handoff spec,
    - glossary/domain model update only when terminology changed.
@@ -53,17 +52,6 @@ REJECTED:
 - reason
 ```
 
-Reviewer B:
-
-```text
-Review this final spec and issue-plan draft only:
-- spec: <absolute_path>
-- plan_json: <absolute_path>
-- working_directory: <absolute_repo_path>
-Do not review old drafts or unrelated repo cleanup.
-Return at most 5 deterministic blockers in the same shape.
-```
-
 ## Token Discipline
 
 - Pass file paths, not pasted documents, whenever the receiver can read the file.
@@ -86,7 +74,7 @@ gh label list --repo OWNER/REPO --limit 100
 python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
 ```
 
-`--verify` runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, prints the Shipyard execution block, and verifies every published issue with `gh issue view`. Do not run extra `gh issue view` checks after a successful `--verify`; use a single fallback check only if `--verify` reports an incomplete result.
+`--verify` runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, and prints the Shipyard execution block. Do not run extra `gh issue view` checks after a successful `--verify`; use a single fallback check only if `--verify` reports an incomplete result or `numbers.json` is missing or malformed.
 
 The publisher writes `.context/issues/numbers.json`:
 

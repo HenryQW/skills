@@ -69,11 +69,6 @@ def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktre
     )
 
 
-def verify_published(numbers: dict[str, str], repo: str) -> None:
-    for issue in numbers.values():
-        run(["gh", "issue", "view", issue.lstrip("#"), "--repo", repo, "--json", "number,state,title"])
-
-
 def self_test() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -126,7 +121,7 @@ def main() -> None:
     parser.add_argument("--label", action="append", default=[])
     parser.add_argument("--out", default=".context/issues")
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--verify", action="store_true", help="Run self-tests before publish and gh issue view after publish")
+    parser.add_argument("--verify", action="store_true", help="Run self-tests before publishing")
     args = parser.parse_args()
     if args.self_test:
         self_test()
@@ -139,8 +134,6 @@ def main() -> None:
     plan_path = Path(args.plan)
     out = Path(args.out)
     numbers = publish(plan_path, args.repo, args.label, out)
-    if args.verify:
-        verify_published(numbers, args.repo)
     print(execution_block(plan_path, numbers, args.repo, Path.cwd(), out / "numbers.json"))
 
 

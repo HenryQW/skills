@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -30,16 +29,43 @@ def repo_requires_progress(root: Path) -> bool:
     return instructions.exists() and ".context/progress.md" in instructions.read_text(encoding="utf-8")
 
 
-def ensure_progress_file(source_root: Path, child_root: Path) -> None:
+def progress_state(
+    goal: str,
+    current_step: str,
+    artifacts: dict[str, object] | None = None,
+    blockers: list[object] | None = None,
+    validation: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "goal": goal,
+        "current_step": current_step,
+        "artifacts": artifacts or {},
+        "blockers": blockers or [],
+        "validation": validation or [],
+    }
+
+
+def write_progress(
+    progress: Path,
+    goal: str,
+    current_step: str,
+    artifacts: dict[str, object] | None = None,
+    blockers: list[object] | None = None,
+    validation: list[str] | None = None,
+) -> None:
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    progress.write_text(json.dumps(progress_state(goal, current_step, artifacts, blockers, validation), indent=2) + "\n", encoding="utf-8")
+
+
+def ensure_progress_file(source_root: Path, child_root: Path, issue_number: str) -> None:
     if not repo_requires_progress(source_root):
         return
     target = child_root / ".context" / "progress.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
     source = source_root / ".context" / "progress.md"
+    artifacts: dict[str, object] = {}
     if source.exists():
-        shutil.copyfile(source, target)
-    else:
-        target.write_text("# Progress\n\n- [ ] Continue issue-workbench integration child.\n", encoding="utf-8")
+        artifacts["source_progress"] = os.fspath(source.resolve())
+    write_progress(target, f"issue-workbench #{issue_number}", "implement integration child", artifacts)
 
 
 def start_child(issue_number: str, worktree_path: str, integration_branch: str, branch_slug: str | None) -> list[str]:
@@ -53,7 +79,7 @@ def start_child(issue_number: str, worktree_path: str, integration_branch: str, 
         ),
         f"review_base={integration_branch}",
     ]
-    ensure_progress_file(source_root, Path(worktree_path))
+    ensure_progress_file(source_root, Path(worktree_path), issue_number)
     return lines
 
 
@@ -64,13 +90,12 @@ def changed_code_status() -> list[str]:
 
 def ensure_local_progress_file() -> Path:
     progress = Path.cwd() / ".context" / "progress.md"
-    progress.parent.mkdir(parents=True, exist_ok=True)
     if not progress.exists():
-        progress.write_text("# Progress\n", encoding="utf-8")
+        write_progress(progress, "issue-workbench integration child", "finish handoff")
     return progress
 
 
-def append_handoff_record(progress: Path, result: dict[str, object]) -> None:
+def write_handoff_record(progress: Path, result: dict[str, object]) -> None:
     record = {
         "branch": result["branch"],
         "base": result["base"],
@@ -82,11 +107,21 @@ def append_handoff_record(progress: Path, result: dict[str, object]) -> None:
     }
     if "needs_child_fix" in result:
         record["needs_child_fix"] = result["needs_child_fix"]
-    with progress.open("a", encoding="utf-8") as f:
-        f.write("\n## Integration Handoff\n\n")
-        f.write("```json\n")
-        f.write(json.dumps(record, sort_keys=True))
-        f.write("\n```\n")
+    handoff = progress.parent / "integration-handoff.json"
+    handoff.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    blockers = []
+    if "needs_child_fix" in record:
+        blockers.append({"needs_child_fix": record["needs_child_fix"]})
+    validation = [str(check) for check in record["checks"]]
+    validation.extend(f"known_skip:{skip}" for skip in record["known_skips"])
+    write_progress(
+        progress,
+        "issue-workbench integration child",
+        "handoff ready",
+        {"integration_handoff": os.fspath(handoff.resolve())},
+        blockers,
+        validation,
+    )
 
 
 def finish_child(
@@ -124,7 +159,7 @@ def finish_child(
     }
     if needs_child_fix:
         result["needs_child_fix"] = needs_child_fix
-    append_handoff_record(progress, result)
+    write_handoff_record(progress, result)
     return result
 
 
@@ -212,7 +247,10 @@ def self_test() -> int:
             assert finish["known_skips"] == ["slow check"]
             progress_path = Path(str(finish["artifacts"]["progress_path"]))
             assert progress_path.resolve() == (worktree / ".context" / "progress.md").resolve()
-            assert '"commit"' in progress_path.read_text(encoding="utf-8")
+            progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
+            assert set(progress_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
+            handoff_path = Path(progress_data["artifacts"]["integration_handoff"])
+            assert '"commit"' in handoff_path.read_text(encoding="utf-8")
             fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
             assert fail["needs_child_fix"] == "#123"
             assert_raises("expected integration branch", merge_child, "issue-123", "integration")
@@ -225,10 +263,12 @@ def self_test() -> int:
             assert "child" in Path("README.md").read_text(encoding="utf-8")
             (repo / "AGENTS.md").write_text("Use .context/progress.md\n", encoding="utf-8")
             (repo / ".context").mkdir()
-            (repo / ".context" / "progress.md").write_text("# Progress\n\nseed\n", encoding="utf-8")
+            write_progress(repo / ".context" / "progress.md", "shipyard #1", "launch child")
             second = tmp / "child-2"
             start_child("125", os.fspath(second), "integration", None)
-            assert (second / ".context" / "progress.md").read_text(encoding="utf-8") == "# Progress\n\nseed\n"
+            second_data = json.loads((second / ".context" / "progress.md").read_text(encoding="utf-8"))
+            assert set(second_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
+            assert second_data["artifacts"]["source_progress"] == os.fspath((repo / ".context" / "progress.md").resolve())
         finally:
             os.chdir(old_cwd)
     return 0

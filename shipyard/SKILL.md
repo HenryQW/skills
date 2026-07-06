@@ -89,7 +89,7 @@ integration_branch=<current_branch>
 review_base=<current_branch>
 wait_mode=defer
 Do not commit .context/.
-Write detailed artifacts to .context/progress.md in the child worktree.
+Keep .context/progress.md to goal, current_step, artifacts, blockers, and validation; write detailed artifacts to files referenced from artifacts.
 Return only the compact child handoff JSON object.
 ```
 
@@ -106,10 +106,10 @@ Return only the compact child handoff JSON object.
 - Do not delete child worktrees automatically.
 - Once multiple worktrees exist, use absolute paths for file-mutating commands.
 
-Keep this compact state object in `.context/progress.md` after every child return or merge; store artifact paths, not pasted logs or full diffs:
+Keep `.context/progress.md` to five fields after every child return or merge; store artifact paths, not pasted logs or full diffs:
 
 ```json
-{"tracker":"#<parent>","mode":"integration","children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix|pending_review","artifacts":{"progress_path":"/abs/path/.context/progress.md"},"pending_review":{}}],"checks":["<command>"],"current_step":"<next action>"}
+{"goal":"shipyard #<parent>","current_step":"<next action>","artifacts":{"children":[{"issue":"#<n>","worktree":"/abs/path","branch":"issue-<n>","base":"<integration_branch>","commit":"<sha>","status":"returned|merged|needs_fix|pending_review","progress_path":"/abs/path/.context/progress.md"}]},"blockers":[],"validation":["<command>"]}
 ```
 
 ### 3. Finish integration
@@ -139,7 +139,7 @@ Keep this compact state object in `.context/progress.md` after every child retur
 - Read checks with `gh pr checks` only to choose the first repair skill.
 - Invoke `$ci-repairbay` for failing GitHub Actions checks.
 - Invoke `$review-repairbay` for requested changes, unresolved threads, or inline comments. Execution mode is approval to fix/reply/resolve/re-fetch unless the user restricted GitHub writes.
-- After invoking a repair skill, trust its reported status; re-check only if the output is missing or inconsistent.
+- After invoking a repair skill, trust its `status=PASS|BLOCKED|PENDING` line; re-check only if the status is missing or inconsistent.
 - Ignore resolved, outdated, informational, approval, top-level summary, or waived unavailable external review checks.
 - Stop on human approval, merge-permission, or external-provider blockers.
 

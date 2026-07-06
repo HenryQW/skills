@@ -11,7 +11,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 
 ## Inputs
 
-- `max_iterations` is optional and defaults to `3`.
+- `max_iterations` is optional and defaults to `2`.
 - `review_base` is optional; use the caller-provided base ref when known.
 - `wait_mode` is optional and defaults to `defer`; supported values are `defer` and `block`.
 - `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
@@ -24,6 +24,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
 - Write fallback review payloads and large diffs to `.context/` artifacts, record their paths in `.context/progress.md`, and pass paths instead of pasted content.
+- Keep `.context/progress.md` to five fields: `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Each fix iteration must resolve or reduce the deterministic blocker set.
 - Do not start another review loop for optional, cosmetic, cleanup-only, speculative, stale, or non-blocking findings; record them as `non_actionable` and stop.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
@@ -59,7 +60,7 @@ When Greptile is unavailable, delegate one adversarial review to a subagent:
 
 - Use a prompt that includes `working_directory=<absolute path>` as the first field.
 - Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
-- Save the full diff and payload under `.context/` and record those absolute paths in `.context/progress.md`.
+- Save the full diff and payload under `.context/` and record those absolute paths under `.context/progress.md` `artifacts`.
 - Ask the subagent to inspect that branch diff only.
 - Tell it to report deterministic, in-scope blockers with file/line evidence.
 - Tell it not to edit files, commit, push, or review broad cleanup.
@@ -97,7 +98,7 @@ Record the review ID. If none is returned, use the fallback.
 greptile review show <review_id> --agent
 ```
 
-If still running and `wait_mode=defer`, write pending state to `.context/progress.md` and return `PENDING_REVIEW` instead of sleeping. Include at least:
+If still running and `wait_mode=defer`, write pending state to `.context/progress.md` and return `PENDING_REVIEW` instead of sleeping. Keep the five-field progress shape and put the pending review object under `artifacts.pending_review` with at least:
 
 ```text
 review_id=<review id>
