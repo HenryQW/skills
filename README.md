@@ -125,6 +125,7 @@ This table is the canonical skill inventory: category, purpose, install command,
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-04 06:23 |
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-04 06:23 |
+| Support | `skill-optimizer` | Optimize existing workflow skills by removing repeated decisions and tightening safety. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-06 22:20 |
 
 ## 📄 License
 
