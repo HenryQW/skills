@@ -127,12 +127,12 @@ Keep this compact state object in `.context/progress.md` after every child retur
 ### 4. Final review and PR
 
 - Run `$review-checkpoint` on the shipyard branch with `wait_mode=defer`.
-- Classify each finding as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
+- If it returns findings for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
 - Route `child:<issue>` and `final_check` findings back to their recorded `$issue-workbench` worktrees, then merge the returned branch and rerun relevant checks.
 - Fix only `integration` findings in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
-- Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. If Greptile fails once, accept `$review-checkpoint` fallback and do not retry Greptile.
+- Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them.
 - If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
-- Run `$pr-launchpad` only after a completed final review gate returns `PASS`. Include close keywords for every child issue, including `final_check`. If `$review-checkpoint` used a Greptile-unavailable fallback, include its testing/review note in the PR body.
+- Run `$pr-launchpad` only after a completed final review gate returns `PASS`. Pass every child issue, including `final_check`, as close targets.
 
 ### 5. Route PR health
 
@@ -145,7 +145,6 @@ Keep this compact state object in `.context/progress.md` after every child retur
 ## Runtime Rules
 
 - Batch one runnable integration wave in parallel; re-inspect before the next wave.
-- Stop retrying Greptile after the first provider/tooling failure and run one fallback review.
 - Avoid broad final `pytest` when a known readiness hang exists. Run targeted suites and record known skips.
 - Do not apply patches for child-owned code from the shipyard worktree; route them to `$issue-workbench`.
 

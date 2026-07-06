@@ -127,19 +127,19 @@ git commit -m "feat(auth): add token refresh handling"
 
 ### 9. Review gate
 
-Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`.
+Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, actionability rules, fix loops, and review-loop commits.
 
 If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in Step 10.
 
-If it reports actionable findings, fix only in-scope files, commit the inspected changes, and rerun `$review-checkpoint`. Continue only after the latest completed review gate passes with no later commit.
+If it returns anything other than `PASS` or `PENDING_REVIEW`, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
 
-After any review-gate fix commit, rerun the path guard before handoff:
+After a `PASS`, rerun the path guard before handoff:
 
 ```bash
 python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
 
-If that fails because `.context/progress.md` is local scratch, first confirm `git diff --name-only <review_base>...HEAD -- .context/progress.md` is empty before allowing it. If the review gate identifies a deterministic issue in a blocked path, verify that finding before allowing the path.
+If the guard fails, stop unless the issue explicitly allows that path or `$review-checkpoint` directly identified a deterministic issue in that blocked path; verify the finding before allowing the path.
 
 ### 10. Final handoff
 
