@@ -8,7 +8,7 @@ description: Orchestrate a dependency-aware parent issue from its deterministic 
 ## Overview
 
 Advance one dependency-aware parent issue without copying the child skills' work.
-Shipyard is orchestration only: inspect the graph, launch child worktrees, merge returned child branches, run integration checks, classify final review findings, and create the final PR.
+Shipyard is orchestration only: inspect the graph, launch child worktrees, merge returned child branches, run integration checks, classify final review blockers, and create the final PR.
 `$issue-workbench`, `$ci-repairbay`, `$review-repairbay`, `$review-checkpoint`, and `$pr-launchpad` own implementation, actionable review fixes, CI, review comments, review gates, and PR creation.
 
 Shipyard has one execution mode:
@@ -127,10 +127,10 @@ Keep this compact state object in `.context/progress.md` after every child retur
 ### 4. Final review and PR
 
 - Run `$review-checkpoint` on the shipyard branch with `wait_mode=defer`.
-- If it returns findings for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
-- Route `child:<issue>` and `final_check` findings back to their recorded `$issue-workbench` worktrees, then merge the returned branch with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>` and rerun relevant checks.
-- Fix only `integration` findings in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
-- Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them.
+- If it returns blockers for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
+- Route `child:<issue>` and `final_check` blockers back to their recorded `$issue-workbench` worktrees, then merge the returned branch with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>` and rerun relevant checks.
+- Fix only `integration` blockers in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
+- Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. Do not route another review loop for non-blocking findings.
 - If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
 - Run `$pr-launchpad` only after a completed final review gate returns `PASS`. Pass every child issue, including `final_check`, as close targets.
 

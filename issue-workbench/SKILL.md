@@ -9,7 +9,7 @@ description: Implement one GitHub issue in a guarded feature branch. Use when as
 
 Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
 Child implementation and actionable review fixes belong here, not in `$shipyard`.
-Run `$review-checkpoint`; it owns Greptile, fallback review, actionability rules, and contradictory-finding handling.
+Run `$review-checkpoint`; it owns Greptile, fallback review, blocker-only actionability rules, and contradictory-blocker handling.
 After the latest completed review gate passes with no later commit, hand off to `pr-launchpad` unless `handoff_mode=integration_branch`.
 
 ## Bundled resources
@@ -127,7 +127,7 @@ git commit -m "feat(auth): add token refresh handling"
 
 ### 9. Review gate
 
-Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, actionability rules, fix loops, and review-loop commits.
+Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, blocker-only actionability rules, fix loops, and review-loop commits.
 
 If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in Step 10.
 

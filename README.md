@@ -47,7 +47,7 @@ flowchart TD
   final_review --> final_merge["Merge or skip final_check"]
   final_merge --> ship_review["review-checkpoint on shipyard branch"]
   ship_review --> final_result{"Final review result?"}
-  final_result -->|Actionable findings| final_fix["Route to child/final_check worktree or integration fix"]
+  final_result -->|Blockers| final_fix["Route to child/final_check worktree or integration fix"]
   final_fix --> ship_review
   final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
   final_result -->|PASS| launch["pr-launchpad"]
@@ -120,7 +120,7 @@ flowchart TD
   final_review --> final_merge["Merge or skip final_check"]
   final_merge --> ship_review["review-checkpoint on shipyard branch"]
   ship_review --> final_result{"Final review result?"}
-  final_result -->|Actionable findings| final_fix["Route to child/final_check worktree or integration fix"]
+  final_result -->|Blockers| final_fix["Route to child/final_check worktree or integration fix"]
   final_fix --> ship_review
   final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
   final_result -->|PASS| launch["pr-launchpad"]
@@ -136,7 +136,7 @@ flowchart TD
 - Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
 - Create worktrees only for the current runnable dependency wave, run each child through `issue-workbench` in integration mode, merge review-clean handoffs back into the shipyard branch, then re-inspect for newly unblocked children.
 - Run `final_check` through `issue-workbench` only after all other children are merged or verified complete.
-- Run `review-checkpoint` on the shipyard branch, route actionable final findings back through the owning worktree or an integration fix, stop on `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
+- Run `review-checkpoint` on the shipyard branch, route blocker findings back through the owning worktree or an integration fix, stop on `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
 
 ### 🛠️ Pull Request to Mergeable
 
@@ -166,10 +166,10 @@ This table is the canonical skill inventory: category, purpose, install command,
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
-| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 14:59 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 15:31 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 15:31 |
-| Review gate | `review-checkpoint` | Run Greptile, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 15:06 |
+| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 15:41 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 15:41 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 15:41 |
+| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 15:41 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 14:01 |
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 15:31 |
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 14:59 |

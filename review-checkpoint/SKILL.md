@@ -1,17 +1,17 @@
 ---
 name: review-checkpoint
-description: Run Greptile review loops on the current branch and fix actionable findings, with subagent adversarial review fallback when Greptile is unavailable. Use when Codex is asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
+description: Run blocker-only Greptile review loops on the current branch, with subagent adversarial review fallback when Greptile is unavailable. Use when Codex is asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
 ---
 
 # review-checkpoint
 
 ## Goal
 
-Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use subagent adversarial review. Fix only deterministic, in-scope findings.
+Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use subagent adversarial review. Fix only deterministic, in-scope blockers.
 
 ## Inputs
 
-- `max_iterations` is optional and defaults to `5`.
+- `max_iterations` is optional and defaults to `3`.
 - `review_base` is optional; use the caller-provided base ref when known.
 - `wait_mode` is optional and defaults to `defer`; supported values are `defer` and `block`.
 - `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
@@ -19,12 +19,13 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 ## Rules
 
 - Do not start a new review just to poll. Poll the same review ID.
-- A finding is actionable only when it is in the branch diff, deterministic, in scope, and fixable without a product decision.
+- A finding is review-actionable only when it is a deterministic blocker in the branch diff, in scope, and fixable without a product decision.
 - Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
 - Write fallback review payloads and large diffs to `.context/` artifacts, record their paths in `.context/progress.md`, and pass paths instead of pasted content.
-- Each fix iteration must resolve or reduce the actionable finding set.
+- Each fix iteration must resolve or reduce the deterministic blocker set.
+- Do not start another review loop for optional, cosmetic, cleanup-only, speculative, stale, or non-blocking findings; record them as `non_actionable` and stop.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
 - Mark contradictory repeat findings as `non_actionable: contradictory semantics`; record the reason and do not keep fixing.
 
@@ -60,9 +61,9 @@ When Greptile is unavailable, delegate one adversarial review to a subagent:
 - Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
 - Save the full diff and payload under `.context/` and record those absolute paths in `.context/progress.md`.
 - Ask the subagent to inspect that branch diff only.
-- Tell it to report deterministic, in-scope findings with file/line evidence.
+- Tell it to report deterministic, in-scope blockers with file/line evidence.
 - Tell it not to edit files, commit, push, or review broad cleanup.
-- Classify its output with the same actionable-finding rules as Greptile.
+- Classify its output with the same review-actionable blocker rules as Greptile.
 - Close the completed subagent after collecting its result.
 
 Prompt template:
@@ -77,7 +78,7 @@ diff_artifact=<absolute path>
 payload_artifact=<absolute path>
 verification_artifact=<absolute path or short commands/results>
 
-Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope findings with file/line evidence, or PASS.
+Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope blockers with file/line evidence, or PASS.
 ```
 
 Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run another subagent review for the next iteration.
@@ -115,13 +116,13 @@ If still running and `wait_mode=block`, wait the configured `poll_interval_secon
 
 If `show` fails because Greptile is unavailable, use the fallback.
 
-Classify findings from the full `show` output.
+Classify blockers from the full `show` output.
 
-If no actionable findings remain, stop.
+If no review-actionable blockers remain, stop.
 
 If a finding repeats after a targeted fix but now asks for the opposite behavior, classify it as `non_actionable: contradictory semantics`, record both review IDs, and stop fixing that finding.
 
-Fix the smallest set of files needed for actionable findings, then inspect and validate:
+Fix the smallest set of files needed for review-actionable blockers, then inspect and validate:
 
 ```bash
 git status --short
@@ -138,8 +139,8 @@ git add <files>
 git commit -m "fix(scope): address greptile review"
 ```
 
-Start a new Greptile review, or fallback subagent review when Greptile is still unavailable, only after committing fixes. The final gate is the latest completed review with no later commit.
+Start a new Greptile review, or fallback subagent review when Greptile is still unavailable, only after committing fixes for review-actionable blockers. The final gate is the latest completed review with no later commit.
 
 ## Output
 
-Report review IDs or fallback reviews, checks run, final status, and unresolved actionable findings if any. For deferred reviews, return `PENDING_REVIEW` with the pending review state location.
+Report review IDs or fallback reviews, checks run, final status, and unresolved review-actionable blockers if any. For deferred reviews, return `PENDING_REVIEW` with the pending review state location.

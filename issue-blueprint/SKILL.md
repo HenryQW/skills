@@ -14,16 +14,16 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 2. Use `$grill-with-docs` for the spec loop.
 3. Run the spec loop:
    - Main agent is the reviewer and scope owner.
-   - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 findings per loop.
+   - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 deterministic blockers per loop.
    - Main agent debates Subagent A until they produce a final spec with explicit assumptions, non-goals, acceptance criteria, open questions, and glossary/domain updates. Batch obvious correctness axes in the first draft: field shapes, invariants, failure modes, domain semantics, dependencies, and side-effect boundaries.
-   - Subagent B reviews that final spec with the Reviewer B template below and returns at most 5 findings per loop.
-   - Main agent decides whether Subagent B's findings are worth addressing. Address findings that change correctness, constraints, acceptance criteria, dependencies, implementation risk, or user-stated scope. Reject speculative or overbuilt findings with a short rationale.
-   - If any finding is worth addressing, patch once and loop back to the Main-agent/Subagent-A debate only for deterministic blockers.
-   - Stop when Subagent B raises no new issue worth addressing, or after 5 total spec-review loops. If the loop limit is reached, stop and ask the human to intervene.
+   - Subagent B reviews that final spec with the Reviewer B template below and returns at most 5 deterministic blockers per loop.
+   - Main agent addresses only blockers that would change correctness, constraints, acceptance criteria, dependencies, implementation risk, or user-stated scope. Reject speculative, cosmetic, cleanup-only, or overbuilt findings with a short rationale.
+   - If any blocker is accepted, patch once and loop back to the Main-agent/Subagent-A debate only for that blocker batch.
+   - Stop when Subagent B raises no new blockers, or after 3 total spec-review loops. If blockers remain at the loop limit, stop and ask the human to intervene.
 4. Write the minimum durable docs where the project stores specs. If no location is known, ask. Required outputs are:
    - implementation handoff spec,
    - glossary/domain model update only when terminology changed.
-5. Stop and ask if findings conflict with user-stated scope or require a product decision the agents cannot make.
+5. Stop and ask if blockers conflict with user-stated scope or require a product decision the agents cannot make.
 6. Draft an issue plan JSON using `references/issue-plan.md`. Before publish, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
 7. Render issue markdown:
 
@@ -42,7 +42,7 @@ Reviewer A:
 ```text
 Use $grill-with-docs on this exact draft/spec path: <absolute_path>.
 Working directory: <absolute_repo_path>.
-Return at most 5 findings in this shape only:
+Return at most 5 deterministic blockers in this shape only:
 BLOCKERS:
 - severity | issue | exact change
 
@@ -68,8 +68,8 @@ Return at most 5 deterministic blockers in the same shape.
 
 - Pass file paths, not pasted documents, whenever the receiver can read the file.
 - Subagents must not summarize the whole spec unless asked.
-- After the first loop, review only changed sections, unresolved findings, and newly introduced contradictions.
-- Main agent records only accepted/rejected findings and one-line rationale.
+- After the first loop, review only changed sections, unresolved blockers, and newly introduced contradictions.
+- Main agent records only accepted/rejected blockers and one-line rationale.
 - User progress updates should be phase-level only: drafted, review blockers, publishing, published.
 
 ## Issue Publishing
