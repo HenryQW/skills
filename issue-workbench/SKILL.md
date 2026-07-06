@@ -143,11 +143,11 @@ If the guard fails, stop unless the issue explicitly allows that path or `$revie
 
 ### 10. Final handoff
 
-Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
+Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 
 If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
 
-Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints as artifact files referenced from `artifacts`. The response is only the routing envelope.
+Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. Do not write a per-child handoff file. The response is the child handoff JSON.
 
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
 
@@ -155,9 +155,9 @@ If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+The JSON includes `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `branch`, `worktree`, `base`, `commit`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 

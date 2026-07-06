@@ -12,6 +12,7 @@ Create a PR from the current branch.
 - `base_branch` is optional and defaults to the repository default branch.
 - `issue_number` is optional and can be derived from the branch name or PR title.
 - `issue_numbers` is optional when one PR resolves multiple issues.
+- `shipyard_manifest` is optional. When provided, read it for close targets, child commits, testing bullets, known skips, and prior review status.
 
 ## Procedure
 
@@ -27,7 +28,9 @@ Create a PR from the current branch.
    - Run `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`.
    - If no upstream exists, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
-7. Draft the PR title and body from the actual diff.
+7. Draft the PR title from the actual diff and commits.
+   - If `shipyard_manifest` is present, use its merged child issues, `final_check`, checks, known skips, child commits, and review gate status for the PR body.
+   - Still inspect live git before creating the PR; the manifest is handoff state, not a replacement for repository state.
 8. Write multi-line PR body content to a temp file or heredoc.
 9. Use `gh` for GitHub or `glab` for GitLab.
 10. Create the PR against `base_branch`.

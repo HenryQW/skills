@@ -97,9 +97,14 @@ def ensure_local_progress_file() -> Path:
 
 def write_handoff_record(progress: Path, result: dict[str, object]) -> None:
     record = {
+        "issue": result["issue"],
         "branch": result["branch"],
-        "base": result["base"],
+        "base_ref": result["base_ref"],
+        "base_sha": result["base_sha"],
         "commit": result["commit"],
+        "head_sha": result["head_sha"],
+        "changed_files": result["changed_files"],
+        "diff_stat": result["diff_stat"],
         "verification": result["verification"],
         "review": result["review"],
         "checks": result["checks"],
@@ -107,8 +112,6 @@ def write_handoff_record(progress: Path, result: dict[str, object]) -> None:
     }
     if "needs_child_fix" in result:
         record["needs_child_fix"] = result["needs_child_fix"]
-    handoff = progress.parent / "integration-handoff.json"
-    handoff.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     blockers = []
     if "needs_child_fix" in record:
         blockers.append({"needs_child_fix": record["needs_child_fix"]})
@@ -118,7 +121,7 @@ def write_handoff_record(progress: Path, result: dict[str, object]) -> None:
         progress,
         "issue-workbench integration child",
         "handoff ready",
-        {"integration_handoff": os.fspath(handoff.resolve())},
+        {"handoff": "stdout"},
         blockers,
         validation,
     )
@@ -145,11 +148,20 @@ def finish_child(
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
     progress = ensure_local_progress_file()
+    branch = run(["git", "branch", "--show-current"])
+    match = re.fullmatch(r"issue-([1-9][0-9]*)", branch)
+    if not match:
+        raise RuntimeError("integration child branch must look like issue-123")
+    head_sha = run(["git", "rev-parse", "HEAD"])
     result: dict[str, object] = {
-        "branch": run(["git", "branch", "--show-current"]),
+        "issue": f"#{match.group(1)}",
+        "branch": branch,
         "worktree": os.fspath(Path.cwd()),
-        "base": review_base,
-        "commit": run(["git", "rev-parse", "HEAD"]),
+        "base_ref": review_base,
+        "base_sha": run(["git", "rev-parse", review_base]),
+        "commit": head_sha,
+        "head_sha": head_sha,
+        "changed_files": run(["git", "diff", "--name-only", f"{review_base}...HEAD"]).splitlines(),
         "diff_stat": run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | "),
         "verification": verification,
         "review": review,
@@ -240,7 +252,11 @@ def self_test() -> int:
             finish = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
             assert finish["branch"] == "issue-123"
             assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
-            assert finish["base"] == "integration"
+            assert finish["issue"] == "#123"
+            assert finish["base_ref"] == "integration"
+            assert finish["base_sha"] == integration_head
+            assert finish["head_sha"] == finish["commit"]
+            assert finish["changed_files"] == ["README.md"]
             assert str(finish["diff_stat"])
             assert finish["review"] == "PASS"
             assert finish["checks"] == ["python -m test"]
@@ -249,8 +265,8 @@ def self_test() -> int:
             assert progress_path.resolve() == (worktree / ".context" / "progress.md").resolve()
             progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
             assert set(progress_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
-            handoff_path = Path(progress_data["artifacts"]["integration_handoff"])
-            assert '"commit"' in handoff_path.read_text(encoding="utf-8")
+            assert progress_data["artifacts"]["handoff"] == "stdout"
+            assert not (worktree / ".context" / "integration-handoff.json").exists()
             fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
             assert fail["needs_child_fix"] == "#123"
             assert_raises("expected integration branch", merge_child, "issue-123", "integration")

@@ -84,9 +84,11 @@ Use this after a parent issue exists and implementation should proceed through t
 
 - Run `shipyard #<parent>`.
 - Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
+- Use `.context/shipyard-manifest.json` as the one local run artifact; keep `.context/progress.md` as a pointer to it.
 - Create worktrees only for the current runnable dependency wave, run each child through `issue-workbench` in integration mode, merge review-clean handoffs back into the shipyard branch, then re-inspect for newly unblocked children.
 - Run `final_check` through `issue-workbench` only after all other children are merged or verified complete.
-- Run `review-checkpoint` on the shipyard branch, route blocker findings back through the owning worktree or an integration fix, stop on `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
+- Coordinators that need resumable async review pass `wait_mode=defer`; direct review gates default to bounded blocking.
+- Run `review-checkpoint` on the shipyard branch, route blocker findings back through the owning worktree or an integration fix, stop on explicit `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
 
 ### 🛠️ Pull Request to Mergeable
 
@@ -117,10 +119,10 @@ This table is the canonical skill inventory: category, purpose, install command,
 |---|---|---|---|---|
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
 | Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 16:38 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 16:38 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 16:38 |
-| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 16:38 |
-| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-04 14:01 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, one manifest, review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-06 22:22 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, bounded review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-06 22:22 |
+| Review gate | `review-checkpoint` | Run bounded blocker-only Greptile review, explicit deferred reviews, or adversarial fallback. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-06 22:22 |
+| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request, optionally from a shipyard manifest. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-06 22:22 |
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 16:38 |
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
 | Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-04 06:23 |
