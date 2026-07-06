@@ -1,6 +1,6 @@
 ---
 name: pr-launchpad
-description: Create or publish a GitHub or GitLab pull request when asked to open or create a PR. Use when Codex must inspect the actual diff, commit pending work with Conventional Commits, push the current branch, and create a PR with a Conventional Commit title and fixed body template.
+description: Create or publish a GitHub or GitLab pull request when asked to open or create a PR. Use when must inspect the actual diff, commit pending work with Conventional Commits, push the current branch, and create a PR with a Conventional Commit title and fixed body template.
 ---
 
 # pr-launchpad

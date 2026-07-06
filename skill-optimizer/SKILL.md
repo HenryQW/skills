@@ -1,6 +1,6 @@
 ---
 name: skill-optimizer
-description: Optimize existing Codex workflow skills by tracing the active skill flow, removing repeated decisions, tightening dry-run/apply safety, compacting docs, and updating the smallest shared surface. Use when Codex is asked to improve, streamline, harden, reduce turn waste in, or optimize an existing skill; do not use for creating a brand-new skill.
+description: Optimize existing workflow skills by tracing the active skill flow, removing repeated decisions, tightening dry-run/apply safety, compacting docs, and updating the smallest shared surface. Use when asked to improve, streamline, harden, reduce turn waste in, or optimize an existing skill; do not use for creating a brand-new skill.
 ---
 
 # skill-optimizer
