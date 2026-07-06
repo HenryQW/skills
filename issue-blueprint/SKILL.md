@@ -1,6 +1,6 @@
 ---
 name: issue-blueprint
-description: Turn a rough plan into a grilled spec and dependency-aware GitHub issue graph. Use when asked to create specs, glossary updates, child issues, a tracker issue, or one final_check issue; requires grill-with-docs.
+description: Turn a rough plan into a grilled spec and dependency-aware GitHub issue graph. Use when asked to create specs, glossary updates, child issues, a tracker issue, or one final_check issue.
 ---
 
 # Issue Blueprint
@@ -11,7 +11,7 @@ Run the smallest end-to-end path from design pressure-test to GitHub issue graph
 
 0. Lock intent before work. If the user asks to use `$issue-blueprint`, create issues, or avoid implementation, state the boundary in one line: no code changes, issue graph only. Do not start implementation prep.
 1. Read only the project instructions, active specs, and GitHub issue state needed to publish. If the user's bullets are enough to draft the graph, proceed. Ask at most one blocking clarification.
-2. Require `$grill-with-docs`. If unavailable, stop and tell the user this skill requires `$grill-with-docs`.
+2. Use `$grill-with-docs` for the spec loop.
 3. Run the spec loop:
    - Main agent is the reviewer and scope owner.
    - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 findings per loop.
@@ -73,8 +73,6 @@ Return at most 5 deterministic blockers in the same shape.
 - User progress updates should be phase-level only: drafted, review blockers, publishing, published.
 
 ## Issue Publishing
-
-Publishing requires the GitHub CLI (`gh`) authenticated for the target repo.
 
 1. Check labels before applying them:
 

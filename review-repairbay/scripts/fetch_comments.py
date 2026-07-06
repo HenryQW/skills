@@ -20,7 +20,6 @@ import argparse
 import json
 import re
 import subprocess
-import sys
 from typing import Any
 
 QUERY = """\
@@ -108,14 +107,6 @@ def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any]:
         return json.loads(out)
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Failed to parse JSON from command output: {e}\nRaw:\n{out}") from e
-
-
-def _ensure_gh_authenticated() -> None:
-    try:
-        _run(["gh", "auth", "status"])
-    except RuntimeError:
-        print("run `gh auth login` to authenticate the GitHub CLI", file=sys.stderr)
-        raise RuntimeError("gh auth status failed; run `gh auth login` to authenticate the GitHub CLI") from None
 
 
 def gh_pr_view_json(fields: str, pr: str | None = None, repo: str | None = None) -> dict[str, Any]:
@@ -286,9 +277,7 @@ def main() -> None:
     try:
         if args.pr:
             owner, repo, number = resolve_pr_ref(args.pr, args.repo)
-            _ensure_gh_authenticated()
         else:
-            _ensure_gh_authenticated()
             owner, repo, number = resolve_pr_ref(None, args.repo)
     except ValueError as exc:
         raise SystemExit(str(exc)) from None

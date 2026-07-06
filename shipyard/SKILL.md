@@ -39,7 +39,6 @@ Infer everything else:
 Use these commands as the deterministic spine:
 
 ```bash
-gh auth status
 python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 # reconcile to that branch, then inspect
@@ -56,7 +55,6 @@ After all non-final children are merged, run `final_check` the same way. For a v
 
 ### 1. Preflight
 
-- Confirm `gh auth status`.
 - If `--integration-worktree` is present, require an absolute path and `cd` there.
 - Compute the expected branch with `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
 - Resolve the default branch with `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`.
