@@ -127,7 +127,9 @@ If `show` fails because Greptile is unavailable, use the fallback.
 When `manifest_path` is provided, record each pending, fallback, pass, fail, timeout, or blocker event with:
 
 ```bash
-python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> set-review --json '<review_event_json>'
+review_event_file=$(mktemp)
+# write the review event JSON object to "$review_event_file"
+python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> set-review --file "$review_event_file"
 ```
 
 Classify blockers from the full `show` output.
