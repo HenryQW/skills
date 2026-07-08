@@ -176,6 +176,15 @@ def status_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return [f"{prefix} status must be one of: " + ", ".join(sorted(ALLOWED_CHILD_STATUS))]
 
 
+def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    if child.get("review") != "FAIL":
+        return []
+    value = child.get("needs_child_fix")
+    if not isinstance(value, str) or not re.fullmatch(r"#[1-9][0-9]*", value.strip()):
+        return [f"{prefix} review FAIL requires needs_child_fix"]
+    return []
+
+
 def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "PENDING_REVIEW":
         return []
@@ -196,7 +205,7 @@ def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str
     missing = REQUIRED_CHILD - set(child)
     if missing:
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
-    errors = status_errors(child, "child payload") + pending_review_errors(child, "child payload")
+    errors = status_errors(child, "child payload") + failed_review_errors(child, "child payload") + pending_review_errors(child, "child payload")
     if errors:
         raise SystemExit("\n".join(errors))
     children = [item for item in manifest.get("children", []) if item.get("issue") != child["issue"]]
@@ -245,6 +254,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
             errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
         errors.extend(status_errors(child, f"children[{index}]"))
+        errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
     return errors
 
@@ -298,6 +308,28 @@ def self_test() -> int:
                 assert "status" in str(exc)
             else:
                 raise AssertionError("expected invalid status to fail")
+            failed = dict(replacement, issue="#233", review="FAIL")
+            try:
+                set_child(path, failed, "needs_fix")
+            except SystemExit as exc:
+                assert "needs_child_fix" in str(exc)
+            else:
+                raise AssertionError("expected missing needs_child_fix to fail")
+            bad_manifest = dict(load_manifest(path))
+            bad_manifest["children"] = [dict(failed, status="needs_fix")]
+            assert any("needs_child_fix" in error for error in validate_manifest(bad_manifest))
+            failed["needs_child_fix"] = "abc123"
+            try:
+                set_child(path, failed, "needs_fix")
+            except SystemExit as exc:
+                assert "needs_child_fix" in str(exc)
+            else:
+                raise AssertionError("expected malformed needs_child_fix to fail")
+            bad_manifest = dict(load_manifest(path))
+            bad_manifest["children"] = [dict(failed, status="needs_fix")]
+            assert any("needs_child_fix" in error for error in validate_manifest(bad_manifest))
+            failed["needs_child_fix"] = "#231"
+            set_child(path, failed, "needs_fix")
             pending = dict(replacement, issue="#232", review="PENDING_REVIEW")
             try:
                 set_child(path, pending, "pending_review")
