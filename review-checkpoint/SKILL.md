@@ -13,8 +13,11 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 
 - `max_iterations` is optional and defaults to `2`.
 - `review_base` is optional; use the caller-provided base ref when known.
-- `wait_mode` is optional and defaults to `defer`; supported values are `defer` and `block`.
+- `wait_mode` is optional and defaults to `block`; supported values are `block` and `defer`.
+- Use `defer` only when the user or coordinating skill explicitly asks to start a review and resume later.
 - `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
+- `max_review_wait_minutes` is optional and defaults to `30`; in `block` mode, stop with `PENDING_REVIEW` when this wait budget is spent.
+- `manifest_path` is optional. When provided, write pending review state, fallback review events, and final review status into that shipyard manifest instead of making `.context/progress.md` the source of truth.
 
 ## Rules
 
@@ -23,7 +26,9 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
-- Write fallback review payloads and large diffs to `.context/` artifacts, record their paths in `.context/progress.md`, and pass paths instead of pasted content.
+- When `manifest_path` is provided, record review state there and keep `.context/progress.md` as a pointer to the manifest.
+- Write fallback review payloads and large diffs only when the reviewer cannot reproduce them from git. Use one overwriteable `.context/review-payload.txt` and record its path and SHA in the manifest or progress pointer.
+- If review history must survive handoff, append to one `.context/review-events.jsonl`; do not create per-review artifact folders.
 - Keep `.context/progress.md` to five fields: `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Each fix iteration must resolve or reduce the deterministic blocker set.
 - Do not start another review loop for optional, cosmetic, cleanup-only, speculative, stale, or non-blocking findings; record them as `non_actionable` and stop.
@@ -50,9 +55,9 @@ git rev-parse @{upstream}
 
 If no upstream exists, run `git push --set-upstream origin HEAD`. If `HEAD` differs from `@{upstream}`, run `git push`. Re-run the three commands above and start Greptile only when `git rev-parse HEAD` equals `git rev-parse @{upstream}`.
 
-On resume, if `.context/progress.md` contains a pending Greptile review, run `git fetch --all --prune`, then compare its branch, local HEAD SHA, upstream SHA, and known base SHA with current `git branch --show-current`, `git rev-parse HEAD`, `git rev-parse @{upstream}`, and `git rev-parse <review_base>`. Poll that review ID only when recorded values match and current UTC is at or after its poll-after time. If the poll-after time has not arrived, return `PENDING_REVIEW`. If any value differs, or if `base_ref` or `base_sha` is unknown, mark the pending review `stale` with the reason and start a new review after resolving the base.
+On resume, if `manifest_path` contains a pending Greptile review, run `git fetch --all --prune`, compare its branch, local HEAD SHA, upstream SHA, and known base SHA with current `git branch --show-current`, `git rev-parse HEAD`, `git rev-parse @{upstream}`, and `git rev-parse <review_base>`, then poll that review ID only when recorded values match and current UTC is at or after its poll-after time. If no `manifest_path` is provided, use the same rule with pending state in `.context/progress.md`. If the poll-after time has not arrived, return `PENDING_REVIEW`. If any value differs, or if `base_ref` or `base_sha` is unknown, mark the pending review `stale` with the reason and start a new review after resolving the base.
 
-If the `greptile` command is missing, cannot start or show a review because of auth/service/plan availability, or returns no review ID, do not install or repair Greptile unless the user asked. Record the error and run the fallback.
+If the `greptile` command is missing, cannot start or show a review because of auth/service/plan availability, or returns no review ID, do not install or repair Greptile unless the user asked. Record the tooling error and run exactly one fallback review for that iteration. If fallback subagent capacity is unavailable, stop with `BLOCKED` unless the caller policy explicitly allows a local blocker-only review.
 
 ## Fallback
 
@@ -60,7 +65,7 @@ When Greptile is unavailable, delegate one adversarial review to a subagent:
 
 - Use a prompt that includes `working_directory=<absolute path>` as the first field.
 - Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
-- Save the full diff and payload under `.context/` and record those absolute paths under `.context/progress.md` `artifacts`.
+- Prefer reproducible git references over files. If a file payload is required, overwrite `.context/review-payload.txt` and record that absolute path under `manifest_path` or `.context/progress.md` `artifacts`.
 - Ask the subagent to inspect that branch diff only.
 - Tell it to report deterministic, in-scope blockers with file/line evidence.
 - Tell it not to edit files, commit, push, or review broad cleanup.
@@ -82,7 +87,7 @@ verification_artifact=<absolute path or short commands/results>
 Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope blockers with file/line evidence, or PASS.
 ```
 
-Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run another subagent review for the next iteration.
+Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run at most one fallback subagent review for the next iteration.
 
 ## Loop
 
@@ -98,7 +103,7 @@ Record the review ID. If none is returned, use the fallback.
 greptile review show <review_id> --agent
 ```
 
-If still running and `wait_mode=defer`, write pending state to `.context/progress.md` and return `PENDING_REVIEW` instead of sleeping. Keep the five-field progress shape and put the pending review object under `artifacts.pending_review` with at least:
+If still running and `wait_mode=defer`, write pending state to the manifest when `manifest_path` is provided; otherwise write it to `.context/progress.md`. Return `PENDING_REVIEW` instead of sleeping. Keep `.context/progress.md` as a five-field pointer when a manifest is present; otherwise put the pending review object under `artifacts.pending_review` with at least:
 
 ```text
 review_id=<review id>
@@ -113,9 +118,17 @@ progress_path=<absolute path to .context/progress.md>
 
 Set `poll_after_utc` from a Greptile retry time when provided; otherwise use current UTC plus `poll_interval_seconds`.
 
-If still running and `wait_mode=block`, wait the configured `poll_interval_seconds` exactly and run the same `show` command again until complete. Do not poll at a hardcoded 30-second interval unless the caller configured `poll_interval_seconds=30`.
+If still running and `wait_mode=block`, wait the configured `poll_interval_seconds` exactly and run the same `show` command again until complete, `max_review_wait_minutes` is spent, or the latest completed review has no review-actionable blockers. Do not poll at a hardcoded 30-second interval unless the caller configured `poll_interval_seconds=30`.
+
+When blocking on a current PR or current branch and the user did not explicitly request `defer`, do not return `PENDING_REVIEW` until `max_review_wait_minutes` is spent.
 
 If `show` fails because Greptile is unavailable, use the fallback.
+
+When `manifest_path` is provided, record each pending, fallback, pass, fail, timeout, or blocker event with:
+
+```bash
+python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> set-review --json '<review_event_json>'
+```
 
 Classify blockers from the full `show` output.
 
@@ -144,4 +157,4 @@ Start a new Greptile review, or fallback subagent review when Greptile is still 
 
 ## Output
 
-Report review IDs or fallback reviews, checks run, final status, and unresolved review-actionable blockers if any. For deferred reviews, return `PENDING_REVIEW` with the pending review state location.
+Report review IDs or fallback reviews, checks run, final status, and unresolved review-actionable blockers if any. For deferred reviews or block-mode wait timeout, return `PENDING_REVIEW` with the pending review state location.
