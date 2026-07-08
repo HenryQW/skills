@@ -183,7 +183,9 @@ def status_errors(child: dict[str, Any], prefix: str) -> list[str]:
 
 def review_status_errors(child: dict[str, Any], prefix: str) -> list[str]:
     allowed = REVIEW_STATUS.get(child.get("review"))
-    if not allowed or child.get("status") in allowed:
+    if not allowed:
+        return [f"{prefix} review must be PASS, PENDING_REVIEW, or FAIL"]
+    if child.get("status") in allowed:
         return []
     return [f"{prefix} status {child.get('status')} does not match review {child.get('review')}"]
 
@@ -276,8 +278,6 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     for index, child in enumerate(manifest["children"]):
         missing = REQUIRED_CHILD - set(child)
         errors.extend(f"children[{index}] missing field: {field}" for field in sorted(missing))
-        if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
-            errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
         errors.extend(status_errors(child, f"children[{index}]"))
         errors.extend(review_status_errors(child, f"children[{index}]"))
         errors.extend(verification_errors(child, f"children[{index}]"))
@@ -335,6 +335,16 @@ def self_test() -> int:
                 assert "status" in str(exc)
             else:
                 raise AssertionError("expected invalid status to fail")
+            invalid_review = dict(replacement, review="MAYBE")
+            try:
+                set_child(path, invalid_review, "merged")
+            except SystemExit as exc:
+                assert "review must be PASS, PENDING_REVIEW, or FAIL" in str(exc)
+            else:
+                raise AssertionError("expected invalid review to fail")
+            bad_manifest = dict(load_manifest(path))
+            bad_manifest["children"] = [dict(invalid_review, status="merged")]
+            assert any("review must be PASS" in error for error in validate_manifest(bad_manifest))
             bad_verification = dict(replacement, verification="failed tests")
             try:
                 set_child(path, bad_verification, "merged")
