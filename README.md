@@ -126,7 +126,7 @@ These tables are the canonical skill inventory: category, purpose, install comma
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
 | Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-08 05:27 |
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-08 05:54 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-08 06:00 |
 
 ### Supporting Skills
 

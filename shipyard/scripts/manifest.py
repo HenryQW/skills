@@ -53,6 +53,11 @@ REQUIRED_PENDING_REVIEW = {
     "progress_path",
 }
 ALLOWED_CHILD_STATUS = {"returned", "needs_fix", "pending_review", "merged"}
+REVIEW_STATUS = {
+    "PASS": {"returned", "merged"},
+    "PENDING_REVIEW": {"pending_review"},
+    "FAIL": {"needs_fix"},
+}
 
 
 def now_utc() -> str:
@@ -176,6 +181,13 @@ def status_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return [f"{prefix} status must be one of: " + ", ".join(sorted(ALLOWED_CHILD_STATUS))]
 
 
+def review_status_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    allowed = REVIEW_STATUS.get(child.get("review"))
+    if not allowed or child.get("status") in allowed:
+        return []
+    return [f"{prefix} status {child.get('status')} does not match review {child.get('review')}"]
+
+
 def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "FAIL":
         return []
@@ -214,6 +226,7 @@ def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
     errors = (
         status_errors(child, "child payload")
+        + review_status_errors(child, "child payload")
         + verification_errors(child, "child payload")
         + failed_review_errors(child, "child payload")
         + pending_review_errors(child, "child payload")
@@ -266,6 +279,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
             errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
         errors.extend(status_errors(child, f"children[{index}]"))
+        errors.extend(review_status_errors(child, f"children[{index}]"))
         errors.extend(verification_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
@@ -331,6 +345,16 @@ def self_test() -> int:
             bad_manifest = dict(load_manifest(path))
             bad_manifest["children"] = [dict(bad_verification, status="merged")]
             assert any("verification" in error for error in validate_manifest(bad_manifest))
+            inconsistent = dict(replacement, review="PENDING_REVIEW", pending_review={})
+            try:
+                set_child(path, inconsistent, "merged")
+            except SystemExit as exc:
+                assert "does not match review" in str(exc)
+            else:
+                raise AssertionError("expected inconsistent review/status to fail")
+            bad_manifest = dict(load_manifest(path))
+            bad_manifest["children"] = [dict(inconsistent, status="merged")]
+            assert any("does not match review" in error for error in validate_manifest(bad_manifest))
             failed = dict(replacement, issue="#233", review="FAIL")
             try:
                 set_child(path, failed, "needs_fix")
