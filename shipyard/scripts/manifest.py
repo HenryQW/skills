@@ -185,6 +185,13 @@ def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return []
 
 
+def verification_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    value = child.get("verification")
+    if isinstance(value, str) and (value.startswith("pass:") or value.startswith("skip:")):
+        return []
+    return [f"{prefix} verification must start with pass: or skip:"]
+
+
 def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "PENDING_REVIEW":
         return []
@@ -205,7 +212,12 @@ def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str
     missing = REQUIRED_CHILD - set(child)
     if missing:
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
-    errors = status_errors(child, "child payload") + failed_review_errors(child, "child payload") + pending_review_errors(child, "child payload")
+    errors = (
+        status_errors(child, "child payload")
+        + verification_errors(child, "child payload")
+        + failed_review_errors(child, "child payload")
+        + pending_review_errors(child, "child payload")
+    )
     if errors:
         raise SystemExit("\n".join(errors))
     children = [item for item in manifest.get("children", []) if item.get("issue") != child["issue"]]
@@ -254,6 +266,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
             errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
         errors.extend(status_errors(child, f"children[{index}]"))
+        errors.extend(verification_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
     return errors
@@ -308,6 +321,16 @@ def self_test() -> int:
                 assert "status" in str(exc)
             else:
                 raise AssertionError("expected invalid status to fail")
+            bad_verification = dict(replacement, verification="failed tests")
+            try:
+                set_child(path, bad_verification, "merged")
+            except SystemExit as exc:
+                assert "verification" in str(exc)
+            else:
+                raise AssertionError("expected invalid verification to fail")
+            bad_manifest = dict(load_manifest(path))
+            bad_manifest["children"] = [dict(bad_verification, status="merged")]
+            assert any("verification" in error for error in validate_manifest(bad_manifest))
             failed = dict(replacement, issue="#233", review="FAIL")
             try:
                 set_child(path, failed, "needs_fix")

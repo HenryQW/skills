@@ -149,9 +149,9 @@ def finish_child(
     run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
     progress = ensure_local_progress_file()
     branch = run(["git", "branch", "--show-current"])
-    match = re.fullmatch(r"issue-([1-9][0-9]*)", branch)
+    match = re.fullmatch(r"issue-([1-9][0-9]*)(?:-[a-z0-9][a-z0-9-]*)?", branch)
     if not match:
-        raise RuntimeError("integration child branch must look like issue-123")
+        raise RuntimeError("integration child branch must look like issue-123 or issue-123-slug")
     head_sha = run(["git", "rev-parse", "HEAD"])
     result: dict[str, object] = {
         "issue": f"#{match.group(1)}",
@@ -229,8 +229,8 @@ def self_test() -> int:
             run(["git", "add", "integration.txt"])
             run(["git", "commit", "-m", "test: integration base"])
             integration_head = run(["git", "rev-parse", "integration"])
-            assert start_child("123", os.fspath(worktree), "integration", None) == [
-                "branch=issue-123",
+            assert start_child("123", os.fspath(worktree), "integration", "Child Slice") == [
+                "branch=issue-123-child-slice",
                 f"worktree={worktree}",
                 "review_base=integration",
             ]
@@ -250,7 +250,7 @@ def self_test() -> int:
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#abc")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#123 extra")
             finish = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
-            assert finish["branch"] == "issue-123"
+            assert finish["branch"] == "issue-123-child-slice"
             assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
             assert finish["issue"] == "#123"
             assert finish["base_ref"] == "integration"
@@ -269,13 +269,13 @@ def self_test() -> int:
             assert not (worktree / ".context" / "integration-handoff.json").exists()
             fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
             assert fail["needs_child_fix"] == "#123"
-            assert_raises("expected integration branch", merge_child, "issue-123", "integration")
+            assert_raises("expected integration branch", merge_child, "issue-123-child-slice", "integration")
             os.chdir(repo)
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
             assert_raises("uncommitted non-context", merge_child, "issue-123", "integration")
             Path("dirty.txt").unlink()
-            assert_raises("expected issue-123", merge_child, "issue-123", "integration", "0" * 40)
-            merge_child("issue-123", "integration", str(finish["commit"]))
+            assert_raises("expected issue-123-child-slice", merge_child, "issue-123-child-slice", "integration", "0" * 40)
+            merge_child("issue-123-child-slice", "integration", str(finish["commit"]))
             assert "child" in Path("README.md").read_text(encoding="utf-8")
             (repo / "AGENTS.md").write_text("Use .context/progress.md\n", encoding="utf-8")
             (repo / ".context").mkdir()
