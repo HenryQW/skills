@@ -42,6 +42,16 @@ REQUIRED_CHILD = {
     "known_skips",
     "status",
 }
+REQUIRED_PENDING_REVIEW = {
+    "review_id",
+    "branch",
+    "local_head_sha",
+    "upstream_sha",
+    "base_ref",
+    "base_sha",
+    "poll_after_utc",
+    "progress_path",
+}
 
 
 def now_utc() -> str:
@@ -151,12 +161,29 @@ def update_validation_plan(manifest: dict[str, Any], child: dict[str, Any]) -> N
     plan["known_skips"] = extend_unique(plan.get("known_skips", []), child.get("known_skips", []))
 
 
+def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    if child.get("review") != "PENDING_REVIEW":
+        return []
+    pending = child.get("pending_review")
+    if not isinstance(pending, dict):
+        return [f"{prefix} requires pending_review evidence"]
+    missing = [
+        field
+        for field in sorted(REQUIRED_PENDING_REVIEW)
+        if not isinstance(pending.get(field), str) or not pending[field].strip()
+    ]
+    return [f"{prefix} pending_review missing/empty field: {field}" for field in missing]
+
+
 def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str, Any]:
     manifest = load_manifest(path)
     child = normalize_child(child, status)
     missing = REQUIRED_CHILD - set(child)
     if missing:
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
+    errors = pending_review_errors(child, "child payload")
+    if errors:
+        raise SystemExit("\n".join(errors))
     children = [item for item in manifest.get("children", []) if item.get("issue") != child["issue"]]
     children.append(child)
     manifest["children"] = sorted(children, key=lambda item: int(str(item["issue"]).lstrip("#")))
@@ -202,6 +229,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(f"children[{index}] missing field: {field}" for field in sorted(missing))
         if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
             errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
+        errors.extend(pending_review_errors(child, f"children[{index}]"))
     return errors
 
 
@@ -242,6 +270,31 @@ def self_test() -> int:
                 assert "status" in str(exc)
             else:
                 raise AssertionError("expected missing status to fail")
+            pending = dict(child, issue="#232", review="PENDING_REVIEW")
+            try:
+                set_child(path, pending, "pending_review")
+            except SystemExit as exc:
+                assert "pending_review" in str(exc)
+            else:
+                raise AssertionError("expected missing pending_review evidence to fail")
+            pending["pending_review"] = {
+                "review_id": "review-1",
+                "branch": "issue-232",
+                "local_head_sha": "b" * 40,
+                "upstream_sha": "b" * 40,
+                "base_ref": "shipyard-123",
+                "base_sha": "a" * 40,
+                "poll_after_utc": "2026-07-08T05:30:00Z",
+                "progress_path": "/tmp/child/.context/progress.md",
+            }
+            set_child(path, pending, "pending_review")
+            pending["pending_review"]["review_id"] = ""
+            try:
+                set_child(path, pending, "pending_review")
+            except SystemExit as exc:
+                assert "review_id" in str(exc)
+            else:
+                raise AssertionError("expected empty pending_review evidence to fail")
             set_review(path, {"scope": "shipyard", "status": "PASS"})
             set_pr(path, "https://github.com/org/repo/pull/1")
             manifest = load_manifest(path)
