@@ -52,6 +52,7 @@ REQUIRED_PENDING_REVIEW = {
     "poll_after_utc",
     "progress_path",
 }
+ALLOWED_CHILD_STATUS = {"returned", "needs_fix", "pending_review", "merged"}
 
 
 def now_utc() -> str:
@@ -154,11 +155,25 @@ def extend_unique(existing: list[Any], values: list[Any]) -> list[Any]:
     return result
 
 
-def update_validation_plan(manifest: dict[str, Any], child: dict[str, Any]) -> None:
-    plan = manifest.setdefault("validation_plan", {"touched_files": [], "checks": [], "final_checks": [], "known_skips": []})
-    plan["touched_files"] = extend_unique(plan.get("touched_files", []), child.get("changed_files", []))
-    plan["checks"] = extend_unique(plan.get("checks", []), child.get("checks", []))
-    plan["known_skips"] = extend_unique(plan.get("known_skips", []), child.get("known_skips", []))
+def rebuild_validation_plan(manifest: dict[str, Any]) -> None:
+    existing = manifest.get("validation_plan", {})
+    plan = {
+        "touched_files": [],
+        "checks": [],
+        "final_checks": existing.get("final_checks", []),
+        "known_skips": [],
+    }
+    for child in manifest.get("children", []):
+        plan["touched_files"] = extend_unique(plan["touched_files"], child.get("changed_files", []))
+        plan["checks"] = extend_unique(plan["checks"], child.get("checks", []))
+        plan["known_skips"] = extend_unique(plan["known_skips"], child.get("known_skips", []))
+    manifest["validation_plan"] = plan
+
+
+def status_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    if child.get("status") in ALLOWED_CHILD_STATUS:
+        return []
+    return [f"{prefix} status must be one of: " + ", ".join(sorted(ALLOWED_CHILD_STATUS))]
 
 
 def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
@@ -181,13 +196,13 @@ def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str
     missing = REQUIRED_CHILD - set(child)
     if missing:
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
-    errors = pending_review_errors(child, "child payload")
+    errors = status_errors(child, "child payload") + pending_review_errors(child, "child payload")
     if errors:
         raise SystemExit("\n".join(errors))
     children = [item for item in manifest.get("children", []) if item.get("issue") != child["issue"]]
     children.append(child)
     manifest["children"] = sorted(children, key=lambda item: int(str(item["issue"]).lstrip("#")))
-    update_validation_plan(manifest, child)
+    rebuild_validation_plan(manifest)
     save_manifest(path, manifest)
     write_progress_pointer(path, manifest)
     return manifest
@@ -229,6 +244,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(f"children[{index}] missing field: {field}" for field in sorted(missing))
         if child.get("review") not in {"PASS", "PENDING_REVIEW", "FAIL"}:
             errors.append(f"children[{index}] review must be PASS, PENDING_REVIEW, or FAIL")
+        errors.extend(status_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
     return errors
 
@@ -256,6 +272,12 @@ def self_test() -> int:
                 "known_skips": [],
             }
             set_child(path, child, "merged")
+            replacement = dict(child, changed_files=["new_file.py"], checks=["new check"], known_skips=["new skip"])
+            set_child(path, replacement, "merged")
+            manifest = load_manifest(path)
+            assert manifest["validation_plan"]["touched_files"] == ["new_file.py"]
+            assert manifest["validation_plan"]["checks"] == ["new check"]
+            assert manifest["validation_plan"]["known_skips"] == ["new skip"]
             missing = dict(child)
             missing.pop("changed_files")
             try:
@@ -270,7 +292,13 @@ def self_test() -> int:
                 assert "status" in str(exc)
             else:
                 raise AssertionError("expected missing status to fail")
-            pending = dict(child, issue="#232", review="PENDING_REVIEW")
+            try:
+                set_child(path, child, "mergd")
+            except SystemExit as exc:
+                assert "status" in str(exc)
+            else:
+                raise AssertionError("expected invalid status to fail")
+            pending = dict(replacement, issue="#232", review="PENDING_REVIEW")
             try:
                 set_child(path, pending, "pending_review")
             except SystemExit as exc:
@@ -303,8 +331,8 @@ def self_test() -> int:
             progress = json.loads((path.parent / "progress.md").read_text(encoding="utf-8"))
             assert progress["artifacts"]["manifest"] == os.fspath(path.resolve())
             assert manifest["children"][0]["status"] == "merged"
-            assert manifest["validation_plan"]["touched_files"] == ["README.md"]
-            assert manifest["validation_plan"]["checks"] == ["python3 scripts/validate.py -> passed"]
+            assert manifest["validation_plan"]["touched_files"] == ["new_file.py"]
+            assert manifest["validation_plan"]["checks"] == ["new check"]
         finally:
             os.chdir(old_cwd)
     return 0
