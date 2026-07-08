@@ -84,11 +84,13 @@ Use this after a parent issue exists and implementation should proceed through t
 
 - Run `shipyard #<parent>`.
 - Switch, create, or rename to the parent-derived integration branch before execution; stop only on dirty or unreconcilable branch state.
-- Use `.context/shipyard-manifest.json` as the one local run artifact; keep `.context/progress.md` as a pointer to it.
-- Create worktrees only for the current runnable dependency wave, run each child through `issue-workbench` in integration mode, merge review-clean handoffs back into the shipyard branch, then re-inspect for newly unblocked children.
+- Initialize `.context/shipyard-manifest.json` before launching children; keep `.context/progress.md` as a pointer to it.
+- Create worktrees only for the current runnable dependency wave, run each child through `issue-workbench` in integration mode, and write child handoff JSON to temp files before passing it to manifest tooling.
+- Use bounded blocking review for single-child waves; reserve `wait_mode=defer` for real async or resumable coordination.
+- Merge review-clean handoffs back into the shipyard branch, then re-inspect for newly unblocked children.
 - Run `final_check` through `issue-workbench` only after all other children are merged or verified complete.
-- Coordinators that need resumable async review pass `wait_mode=defer`; direct review gates default to bounded blocking.
-- Run `review-checkpoint` on the shipyard branch, route blocker findings back through the owning worktree or an integration fix, stop on explicit `PENDING_REVIEW`, then use `pr-launchpad` only after the review gate passes.
+- Run `review-checkpoint` on the shipyard branch for final review instead of driving Greptile directly; route blocker findings back through the owning worktree or an integration fix.
+- Use one PR health snapshot after `pr-launchpad`; invoke repair skills only for concrete failures or review comments.
 
 ### 🛠️ Pull Request to Mergeable
 
@@ -124,9 +126,9 @@ These tables are the canonical skill inventory: category, purpose, install comma
 | Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-08 05:54 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-08 05:27 |
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
-| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-08 05:27 |
+| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-08 16:15 |
 | PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-08 06:07 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-08 16:15 |
 
 ### Supporting Skills
 
