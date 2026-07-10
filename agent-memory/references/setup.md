@@ -1,24 +1,57 @@
 # Setup Reference
 
-Setup installs deterministic project plumbing. Keep edits minimal and idempotent.
+Load this reference only when the invocation includes `--setup`. Normal context loading, capture, and distillation never run setup.
 
-## Required Inputs
+## Prerequisites
 
-- repo root
-- `AGENT_MEMORY_ROOT`, the markdown root for durable memory files
-- project markdown `Agent/` folder under `${AGENT_MEMORY_ROOT}/projects/<Project>/.../Agent`
+Export the absolute path to the Obsidian vault in the environment that launches the agent:
 
-Ask for the markdown memory path if it cannot be inferred.
+```bash
+export OBSIDIAN_ROOT="/absolute/path/to/Obsidian/vault"
+```
 
-## Deterministic Repo Effects
+Persist that command in the appropriate shell or launcher configuration, then restart the agent. Setup verifies the variable and directory but never edits shell files.
 
-- `.context/progress.md` exists with a short progress template.
-- `.gitignore` contains `.context/progress.md`, `.context/decisions.jsonl`, and `.context/memory-context.md`.
-- `AGENTS.md` has `## Context and precedence`.
-- `AGENTS.md` points agents to the project `Agent/index.md`.
-- `AGENTS.md` explains that `$agent-memory` stages durable decisions/guidance under `Agent/Decisions/Inbox/` or `Agent/Guidance/Inbox/` for human review.
-- The project `Agent/` folder has `Decisions/Inbox/` and `Guidance/Inbox/`; do not create Inbox `index.md` files.
+Provide two explicit inputs:
 
-Use `references/agents.md` as the canonical source for deterministic `AGENTS.md` snippets. The setup script should render those snippets instead of retyping them.
+- repository root
+- path relative to the vault, such as `Project_Name`
 
-Do not add project-specific doctrine beyond the memory plumbing.
+The project declaration becomes:
+
+```text
+OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/Project_Name
+```
+
+## Preview and Apply
+
+From the installed skill folder, preview all changes:
+
+```bash
+python3 scripts/setup_agent_memory.py \
+  --project-root /path/to/project \
+  --obsidian-project Project_Name
+```
+
+Review the displayed diffs. After explicit approval, apply the same plan using its confirmation hash:
+
+```bash
+python3 scripts/setup_agent_memory.py \
+  --project-root /path/to/project \
+  --obsidian-project Project_Name \
+  --apply --confirm <preview-hash>
+```
+
+Any intervening change invalidates the hash and requires a new preview.
+
+## Effects
+
+Setup changes only these surfaces:
+
+- adds one marked block to `~/.codex/AGENTS.md` without replacing existing instructions
+- installs the bundled workflow at `${OBSIDIAN_ROOT}/agent/knowledge-workflow.md`
+- adds the exact `OBSIDIAN_PROJECT` declaration to the project `AGENTS.md`
+- creates `.context/progress.md` and the agent-memory entries in `.gitignore`
+- creates `${OBSIDIAN_PROJECT}/Agent/Memory/index.md`, `Decisions/Inbox/`, and `Guidance/Inbox/`
+
+Existing identical content is left unchanged. Conflicting declarations, marked blocks, workflow files, paths, or symlinks stop setup without overwriting them.

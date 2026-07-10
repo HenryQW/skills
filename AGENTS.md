@@ -42,12 +42,3 @@ At minimum, update the root `README.md`:
 - Keep workflow guidance short and reference skill names instead of repeating each skill's role.
 
 Do not leave README updates for a later commit.
-
-## Context and precedence
-
-- Before project work, read:
-  - `${AGENT_MEMORY_ROOT}/projects/Skills/Agent/Memory/Memory Router.md`
-
-## Execution
-
-- When `$agent-memory` is invoked or progress distillation is requested, use `.context/progress.md` as the temporary source and write or update real markdown memory under `${AGENT_MEMORY_ROOT}/projects/Skills/Agent/Memory/` only when it contains durable context future agents would otherwise rediscover. Memory can include history, mistakes to avoid, rules, coding style, library preferences, and validation paths. Skip routine progress, duplicate lessons, and one-off mistakes.

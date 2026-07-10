@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent Memory"
-  short_description: "Set up and distill project agent memory"
-  default_prompt: "Use $agent-memory to set up or distill .context/progress.md into markdown Agent memory."
+  short_description: "Use and distill project agent memory"
+  default_prompt: "Use $agent-memory to load, capture, or distill deterministic project memory; pass --setup only for explicit bootstrap."
