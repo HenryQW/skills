@@ -7,6 +7,13 @@ description: Address actionable GitHub pull request review feedback. Use when th
 
 Use this skill when the user wants to work through requested changes on a GitHub pull request. Treat thread-aware review data as a `gh api graphql` problem because flat comment surfaces do not preserve full review-thread state.
 
+## Memory Boundary
+
+- When the user invokes `review-repairbay` directly, call `$agent-memory load` before resolving the PR and `$agent-memory distill` immediately before the final `status=PASS|BLOCKED|PENDING` line.
+- When a caller such as Shipyard owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
+- Capture only an accepted durable review decision, repository rule, or reusable root cause. Do not capture comment text, thread state, review IDs, or routine fixes.
+- Memory failure must not change the repair status.
+
 ## Workflow
 
 1. Resolve the PR.

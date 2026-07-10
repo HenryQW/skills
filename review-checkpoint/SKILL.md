@@ -9,6 +9,13 @@ description: Run blocker-only Greptile review loops on the current branch, with 
 
 Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use subagent adversarial review. Fix only deterministic, in-scope blockers.
 
+## Memory Boundary
+
+- When the user invokes `review-checkpoint` directly, call `$agent-memory load` before `Before review` and `$agent-memory distill` as the final guard before every `PASS`, `BLOCKED`, or `PENDING_REVIEW` return.
+- When a caller such as `issue-workbench` or Shipyard owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
+- Capture only an accepted durable review rule or reusable root cause. Do not capture findings, review IDs, check state, or transient tooling failures.
+- Memory failure must not change the review status.
+
 ## Inputs
 
 - `max_iterations` is optional and defaults to `3`.

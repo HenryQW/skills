@@ -5,6 +5,13 @@ description: Turn a rough multi-issue plan into a user-approved spec and depende
 
 # Issue Blueprint
 
+## Memory Boundary
+
+- When the user invokes `issue-blueprint` directly, call `$agent-memory load` before Step 0 and `$agent-memory distill` as the final guard before every terminal return, including routing stops, access blockers, withheld approval, and successful publication.
+- When a caller owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
+- Append accepted durable product, domain, or architecture decisions as they are recorded in the planning bundle. Do not capture provisional options, issue mechanics, or routine planning details.
+- Memory failure must not replace the issue-plan result or stop reason.
+
 ## Workflow
 
 Run the smallest end-to-end path from a rough multi-issue plan to an approved GitHub issue graph.
