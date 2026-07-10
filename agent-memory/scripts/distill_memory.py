@@ -140,7 +140,10 @@ def apply_preview(source: Path, router: Path, preview_path: Path) -> tuple[str, 
     for change in changes:
         if not isinstance(change, dict) or not isinstance(change.get("target"), str) or not isinstance(change.get("content"), str):
             raise SystemExit(f"invalid distillation preview change: {preview_path}")
-        path = (memory_dir / change["target"]).resolve()
+        relative = Path(change["target"])
+        if relative.is_absolute():
+            raise SystemExit(f"invalid distillation preview target: {change['target']}")
+        path = unsymlinked_path(memory_dir, *relative.parts)
         rendered = change["content"]
         if path.parent not in approved_inboxes:
             raise SystemExit(f"invalid distillation preview target: {path}")
@@ -153,6 +156,7 @@ def apply_preview(source: Path, router: Path, preview_path: Path) -> tuple[str, 
         raise SystemExit(f"distillation preview has no changes: {preview_path}")
 
     for path, rendered in validated:
+        path = unsymlinked_path(memory_dir, *path.relative_to(memory_dir).parts)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
         if path.read_text(encoding="utf-8") != rendered:
@@ -193,8 +197,8 @@ def distill(
     today = today or datetime.now(timezone.utc).date().isoformat()
     for (kind, topic), grouped in sorted(grouped_rows.items()):
         folder = "Guidance" if kind == "guidance" else "Decisions"
-        approved = unsymlinked_path(memory_dir, folder) / f"{topic}.md"
-        staged = unsymlinked_path(memory_dir, folder, "Inbox") / f"{topic}.md"
+        approved = unsymlinked_path(memory_dir, folder, f"{topic}.md")
+        staged = unsymlinked_path(memory_dir, folder, "Inbox", f"{topic}.md")
         approved_text = approved.read_text(encoding="utf-8") if approved.exists() else None
         if approved_text is not None and all(row_value(row, kind) in approved_text for row in grouped):
             continue
@@ -319,6 +323,26 @@ def self_test() -> None:
             raise AssertionError("applied memory through symlinked Inbox")
         assert not (outside_inbox / "issue-workbench.md").exists()
         assert escape_preview.exists()
+
+        symlink_memory = root / "symlink-memory"
+        symlink_memory.mkdir()
+        symlink_index = symlink_memory / "index.md"
+        symlink_index.write_text("# Memory\n", encoding="utf-8")
+        symlink_preview = project / ".context/symlink-preview.json"
+        status, paths = distill(source, symlink_index, symlink_preview, today="2026-07-10")
+        assert status.startswith("PREVIEW")
+        staged = paths[0]
+        staged.parent.mkdir(parents=True)
+        redirected = staged.with_name("redirected.md")
+        staged.symlink_to(redirected)
+        try:
+            distill(source, symlink_index, symlink_preview, apply=True)
+        except SystemExit as exc:
+            assert "must not contain symlinks" in str(exc)
+        else:
+            raise AssertionError("applied memory through a symlinked target file")
+        assert not redirected.exists()
+        assert symlink_preview.exists()
 
 
 def main() -> None:
