@@ -11,7 +11,8 @@ from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 AGENTS_SNIPPETS = SKILL_ROOT / "references" / "agents.md"
-MEMORY_ROUTER_FILENAME = "Memory Router.md"
+INDEX_FILENAME = "index.md"
+LEGACY_MEMORY_ROUTER_FILENAME = "Memory Router.md"
 
 PROGRESS_TEMPLATE = """# Progress
 
@@ -24,23 +25,39 @@ Use this file as the local task ledger during implementation.
 - Keep this file local. Distill durable context with `$agent-memory` when requested.
 """
 
+IGNORED_CONTEXT_FILES = (
+    ".context/progress.md",
+    ".context/decisions.jsonl",
+    ".context/memory-context.md",
+)
 
-MEMORY_ROUTER_TEMPLATE = """# Memory Router
 
-Summary: Durable context for future agents. Load only matching notes; do not load this full folder by default.
-Keywords: agent memory, guidance, mistakes, preferences
+AGENT_INDEX_TEMPLATE = """---
+type: project-note
+status: active
+tags: []
+---
+# Agent
+
+**Summary**: Lean router for approved project agent decisions and reusable guidance.
+
+---
+
+## Role
+
+Single router for approved project agent decisions and guidance.
 
 ## Loading Rule
 
-Read this router before non-trivial project work, then open only the memory notes whose title, summary, or keywords match the task.
+Read this index before non-trivial project work. Load only the specific approved decision or guidance note whose title or summary matches the task. Do not load the full library by default. Do not read `Decisions/Inbox/` or `Guidance/Inbox/` during normal context loading; use Inbox only to create, review, or explicitly promote staged notes.
 
-Memory notes can include history, mistakes to avoid, rules, coding style, library preferences, and validation paths.
+Priority for conflicts: explicit task instructions, project `AGENTS.md`, decisions, guidance, global principles, then general judgment.
 
-When `$agent-memory` is invoked or progress distillation is requested, agents should distill `.context/progress.md` into a real memory note only when it contains durable context future agents would otherwise rediscover. No memory should be written for routine progress.
+When `$agent-memory` is invoked or progress distillation is requested, extract durable context into a new note under `Decisions/Inbox/<slug>.md` or `Guidance/Inbox/<slug>.md` using the same final note format. Treat Inbox folders as staging for human review. Do not create Inbox `index.md` files. Do not move staged notes into production folders or add them to this router unless explicitly approved. Do not preserve routine progress.
 
-## Memory
+## Decisions
 
-No active memory yet.
+## Guidance
 """
 
 
@@ -106,44 +123,41 @@ def ensure_progress(project_root: Path) -> None:
 def ensure_gitignore(project_root: Path) -> None:
     gitignore = project_root / ".gitignore"
     text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
-    if ".context/progress.md" in text.splitlines():
+    existing = set(text.splitlines())
+    missing = [item for item in IGNORED_CONTEXT_FILES if item not in existing]
+    if not missing:
         return
     suffix = "" if not text or text.endswith("\n") else "\n"
-    gitignore.write_text(
-        text + suffix + "\n# Agent local progress\n.context/progress.md\n",
-        encoding="utf-8",
-    )
+    block = "\n# Agent local context\n" + "\n".join(missing) + "\n"
+    gitignore.write_text(text + suffix + block, encoding="utf-8")
 
 
 def memory_router_path(agent_path: Path) -> Path:
-    return agent_path / "Memory" / MEMORY_ROUTER_FILENAME
+    return agent_path / INDEX_FILENAME
+
+
+def legacy_memory_router_path(agent_path: Path) -> Path:
+    return agent_path / "Memory" / LEGACY_MEMORY_ROUTER_FILENAME
 
 
 def ensure_memory_router(agent_path: Path) -> None:
-    memory = agent_path / "Memory"
-    memory.mkdir(parents=True, exist_ok=True)
-    router = memory_router_path(agent_path)
-    legacy_index = memory / "index.md"
-    if router.exists() and legacy_index.exists():
-        migrated_index = migrate_legacy_index(legacy_index.read_text(encoding="utf-8"))
-        if router.read_text(encoding="utf-8") == migrated_index:
-            legacy_index.unlink()
-            return
-        raise RuntimeError(
-            f"both {MEMORY_ROUTER_FILENAME} and index.md exist with different content; "
-            "merge them manually"
-        )
-    if not router.exists() and legacy_index.exists():
-        router.write_text(migrate_legacy_index(legacy_index.read_text(encoding="utf-8")), encoding="utf-8")
-        legacy_index.unlink()
+    agent_path.mkdir(parents=True, exist_ok=True)
+    (agent_path / "Decisions" / "Inbox").mkdir(parents=True, exist_ok=True)
+    (agent_path / "Guidance" / "Inbox").mkdir(parents=True, exist_ok=True)
+    index = memory_router_path(agent_path)
+    legacy = legacy_memory_router_path(agent_path)
+    if not index.exists() and legacy.exists():
+        index.write_text(migrate_legacy_index(legacy.read_text(encoding="utf-8")), encoding="utf-8")
         return
-    if not router.exists():
-        router.write_text(MEMORY_ROUTER_TEMPLATE, encoding="utf-8")
+    if not index.exists():
+        index.write_text(AGENT_INDEX_TEMPLATE, encoding="utf-8")
 
 
 def migrate_legacy_index(text: str) -> str:
-    text = text.replace("# Agent Memory", "# Memory Router", 1)
-    text = text.replace("Read this index", "Read this router", 1)
+    text = text.replace("# Memory Router", "# Agent", 1)
+    text = text.replace("# Agent Memory", "# Agent", 1)
+    text = text.replace("Read this router", "Read this index", 1)
+    text = text.replace("## Memory", "## Guidance", 1)
     return text
 
 
@@ -152,7 +166,7 @@ def ensure_agents(path: Path, memory_router_ref: str, agent_path: Path) -> None:
     text = ensure_section(text, "Context and precedence")
     text = ensure_section(text, "Execution")
 
-    snippets = load_agents_snippets(memory_router_ref, memory_ref(agent_path / "Memory"))
+    snippets = load_agents_snippets(memory_router_ref, memory_ref(agent_path))
     text = remove_generated_memory_lines(text)
     context_line = snippets["Context and precedence item"]
     text = ensure_before_project_work_item(text, context_line)
@@ -206,8 +220,9 @@ def remove_generated_memory_lines(text: str) -> str:
             in_context
             and line.strip().startswith("- `")
             and (
-                "/Agent/Memory/index.md`" in line
-                or f"/Agent/Memory/{MEMORY_ROUTER_FILENAME}`" in line
+                "/Agent/index.md`" in line
+                or "/Agent/Memory/index.md`" in line
+                or f"/Agent/Memory/{LEGACY_MEMORY_ROUTER_FILENAME}`" in line
             )
         )
         if not (generated_execution or generated_context):
@@ -221,49 +236,29 @@ def self_test() -> int:
         tmp = Path(raw_tmp)
         memory_root = tmp / "memory"
         fresh_project_root = tmp / "fresh-repo"
-        fresh_agent_path = memory_root / "projects" / "Fresh" / "Agent"
+        fresh_agent_path = memory_root / "projects" / "Fresh" / "Platform" / "Agent"
         fresh_instruction_path = fresh_project_root / "AGENTS.md"
         legacy_project_root = tmp / "legacy-repo"
         legacy_agent_path = memory_root / "projects" / "Example" / "Agent"
         legacy_memory_dir = legacy_agent_path / "Memory"
         legacy_instruction_path = legacy_project_root / "AGENTS.md"
-        duplicate_project_root = tmp / "duplicate-repo"
-        duplicate_agent_path = memory_root / "projects" / "Duplicate" / "Agent"
-        duplicate_memory_dir = duplicate_agent_path / "Memory"
-        duplicate_instruction_path = duplicate_project_root / "AGENTS.md"
-        conflict_project_root = tmp / "conflict-repo"
-        conflict_agent_path = memory_root / "projects" / "Conflict" / "Agent"
-        conflict_memory_dir = conflict_agent_path / "Memory"
-        conflict_instruction_path = conflict_project_root / "AGENTS.md"
         fresh_project_root.mkdir()
         legacy_project_root.mkdir()
-        duplicate_project_root.mkdir()
-        conflict_project_root.mkdir()
         legacy_memory_dir.mkdir(parents=True)
-        duplicate_memory_dir.mkdir(parents=True)
-        conflict_memory_dir.mkdir(parents=True)
-        old_index = (
-            "# Agent Memory\n\n"
+        old_router = (
+            "# Memory Router\n\n"
             "Summary: Durable context for future agents.\n\n"
             "## Loading Rule\n\n"
-            "Read this index before non-trivial project work.\n\n"
+            "Read this router before non-trivial project work.\n\n"
             "## Memory\n\n"
             "- Existing note.\n"
         )
-        router_equivalent = migrate_legacy_index(old_index)
-        (legacy_memory_dir / "index.md").write_text(
-            old_index,
-            encoding="utf-8",
-        )
-        (duplicate_memory_dir / "index.md").write_text(old_index, encoding="utf-8")
-        (duplicate_memory_dir / MEMORY_ROUTER_FILENAME).write_text(router_equivalent, encoding="utf-8")
-        (conflict_memory_dir / "index.md").write_text(old_index, encoding="utf-8")
-        (conflict_memory_dir / MEMORY_ROUTER_FILENAME).write_text("# Memory Router\n\nDifferent.\n", encoding="utf-8")
+        legacy_memory_router_path(legacy_agent_path).write_text(old_router, encoding="utf-8")
         legacy_instruction_path.write_text(
             "# AGENTS.md\n\n"
             "## Context and precedence\n\n"
             "- Before project work, read:\n"
-            "  - `${AGENT_MEMORY_ROOT}/projects/Example/Agent/Memory/index.md`\n",
+            "  - `${AGENT_MEMORY_ROOT}/projects/Example/Agent/Memory/Memory Router.md`\n",
             encoding="utf-8",
         )
 
@@ -272,37 +267,33 @@ def self_test() -> int:
             install_agent_memory(fresh_project_root, fresh_agent_path, fresh_instruction_path)
 
             assert (fresh_project_root / ".context" / "progress.md").exists()
-            assert ".context/progress.md" in (fresh_project_root / ".gitignore").read_text(encoding="utf-8")
+            fresh_gitignore = (fresh_project_root / ".gitignore").read_text(encoding="utf-8")
+            assert ".context/progress.md" in fresh_gitignore
+            assert ".context/decisions.jsonl" in fresh_gitignore
+            assert ".context/memory-context.md" in fresh_gitignore
             assert memory_router_path(fresh_agent_path).exists()
+            assert (fresh_agent_path / "Decisions" / "Inbox").is_dir()
+            assert (fresh_agent_path / "Guidance" / "Inbox").is_dir()
             fresh_router_text = memory_router_path(fresh_agent_path).read_text(encoding="utf-8")
-            assert fresh_router_text.startswith("# Memory Router")
-            assert "Read this router" in fresh_router_text
-            assert "Read this index" not in fresh_router_text
+            assert fresh_router_text.startswith("---")
+            assert "# Agent" in fresh_router_text
+            assert "Read this index" in fresh_router_text
+            assert "Decisions/Inbox" in fresh_router_text
+
+            instructions = fresh_instruction_path.read_text(encoding="utf-8")
+            assert "Agent/index.md" in instructions
+            assert "Agent/Memory/Memory Router.md" not in instructions
+            assert "Decisions/Inbox" in instructions
 
             install_agent_memory(legacy_project_root, legacy_agent_path, legacy_instruction_path)
-
             assert memory_router_path(legacy_agent_path).exists()
-            assert not (legacy_agent_path / "Memory" / "index.md").exists()
             legacy_router_text = memory_router_path(legacy_agent_path).read_text(encoding="utf-8")
-            assert legacy_router_text.startswith("# Memory Router")
-            assert "Read this router" in legacy_router_text
-            assert "Read this index" not in legacy_router_text
+            assert legacy_router_text.startswith("# Agent")
+            assert "Read this index" in legacy_router_text
             assert "Existing note" in legacy_router_text
-
             instructions = legacy_instruction_path.read_text(encoding="utf-8")
-            assert "Agent/Memory/Memory Router.md" in instructions
-            assert "Agent/Memory/index.md" not in instructions
-
-            install_agent_memory(duplicate_project_root, duplicate_agent_path, duplicate_instruction_path)
-            assert memory_router_path(duplicate_agent_path).exists()
-            assert not (duplicate_agent_path / "Memory" / "index.md").exists()
-
-            try:
-                install_agent_memory(conflict_project_root, conflict_agent_path, conflict_instruction_path)
-            except RuntimeError as exc:
-                assert "different content" in str(exc)
-            else:
-                raise AssertionError("conflicting router and index files were accepted")
+            assert "Agent/index.md" in instructions
+            assert "Agent/Memory/Memory Router.md" not in instructions
         finally:
             if previous_root is None:
                 os.environ.pop("AGENT_MEMORY_ROOT", None)

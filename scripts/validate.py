@@ -19,6 +19,9 @@ CHECKS = (
     ("ci repairbay help", ["python3", "ci-repairbay/scripts/inspect_pr_checks.py", "--help"]),
     ("shipyard parent inspection", ["python3", "shipyard/scripts/inspect_parent_issue.py", "--self-test"]),
     ("agent memory setup", ["python3", "agent-memory/scripts/setup_agent_memory.py", "--self-test"]),
+    ("agent memory context", ["python3", "agent-memory/scripts/memory_context.py", "--self-test"]),
+    ("agent memory decision append", ["python3", "agent-memory/scripts/append_decision.py", "--self-test"]),
+    ("agent memory distill", ["python3", "agent-memory/scripts/distill_memory.py", "--self-test"]),
 )
 
 
