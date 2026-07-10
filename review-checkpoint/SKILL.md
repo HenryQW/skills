@@ -11,7 +11,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 
 ## Inputs
 
-- `max_iterations` is optional and defaults to `2`.
+- `max_iterations` is optional and defaults to `3`.
 - `review_base` is optional; use the caller-provided base ref when known.
 - `wait_mode` is optional and defaults to `block`; supported values are `block` and `defer`.
 - Use `defer` only when the user or coordinating skill explicitly asks to start a review and resume later.
