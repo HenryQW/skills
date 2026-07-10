@@ -11,6 +11,13 @@ description: "Use when a user asks to debug or fix failing GitHub PR checks that
 Use this skill when the task is specifically about failing GitHub Actions checks on a pull request. Use `gh` for PR metadata, changed files, checks, and logs.
 - Summarize the root cause first, propose a focused fix plan, and implement only after explicit approval.
 
+## Memory Boundary
+
+- When the user invokes `ci-repairbay` directly, call `$agent-memory load` before resolving the PR and `$agent-memory distill` immediately before the final `status=PASS|BLOCKED|PENDING` line.
+- When a caller such as Shipyard owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
+- Capture only a confirmed reusable CI root cause, repository guardrail, or durable fix decision. Do not capture check status, logs, run IDs, or flaky/transient failures.
+- Memory failure must not change the repair status.
+
 ## Inputs
 
 - `repo_path`: path inside the repo (default `.`); pass this to the script as `--repo`

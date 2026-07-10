@@ -5,7 +5,14 @@ description: Review a repository without editing code and return evidence-backed
 
 # repo-surveyor
 
-Review only. Do not edit files, create patches, rewrite code, commit, or push.
+Review only. Do not edit repository source or docs, create patches, rewrite code, commit, or push. Agent-memory may write ignored `.context/` artifacts.
+
+## Memory Boundary
+
+- When the user invokes `repo-surveyor` directly, call `$agent-memory load` before Step 1 and `$agent-memory distill` as the final guard before every terminal return.
+- When a caller owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
+- Capture only an established durable repository rule, architectural constraint, or reusable root cause. Do not capture audit findings, scores, issue candidates, or routine observations.
+- Memory failure must not replace the survey result or stop reason.
 
 ## Scope
 

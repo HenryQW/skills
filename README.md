@@ -33,20 +33,26 @@ Then invoke `$agent-memory --setup Project_Name`. Setup instructions are loaded 
 
 ```mermaid
 flowchart TD
-  rough["Rough plan"] --> blueprint["issue-blueprint"]
-  audit["Repo review request"] --> surveyor["repo-surveyor"]
+  request["Workflow request"] --> memory_load["agent-memory load"]
+  memory_load --> route{"Route selection"}
+  route -->|Rough plan| blueprint["issue-blueprint"]
+  route -->|Repo review| surveyor["repo-surveyor"]
+  route -->|Single issue or PR route| direct["Selected direct workflow"]
+  route -->|Missing decision: stop| memory_distill["agent-memory distill"]
+  direct --> memory_distill
   surveyor --> reduce["Reduced findings"]
   reduce --> approved{"Approved issue plan?"}
   approved -->|Yes| blueprint
-  approved -->|No| stop["Stop"]
+  approved -->|No: stop| memory_distill
   blueprint --> publish_approval{"Publish approved graph?"}
   publish_approval -->|Revise| blueprint
   publish_approval -->|Yes| parent["Parent issue"]
   parent --> children["Dependency-aware child issues"]
   parent --> shipyard["shipyard"]
   shipyard --> branch["Reconcile integration branch"]
-  branch --> ready{"Runnable non-final child?"}
-  ready -->|No| blocked["Report blockers"]
+  branch -->|Reconciled| ready{"Runnable non-final child?"}
+  branch -->|Dirty or unreconcilable: stop| memory_distill
+  ready -->|No: blockers| memory_distill
   ready -->|Yes| worktrees["Ready-wave child worktrees"]
   worktrees --> workbench["issue-workbench"]
   workbench --> child_review["review-checkpoint"]
@@ -61,7 +67,7 @@ flowchart TD
   ship_review --> final_result{"Final review result?"}
   final_result -->|Blockers| final_fix["Route to child/final_check worktree or integration fix"]
   final_fix --> ship_review
-  final_result -->|PENDING_REVIEW| pending["Stop until review completes"]
+  final_result -->|PENDING_REVIEW: stop| memory_distill
   final_result -->|PASS| launch["pr-launchpad"]
   launch --> health
   health -->|CI failing| ci_repair["ci-repairbay"]
@@ -69,7 +75,8 @@ flowchart TD
   health -->|Yes| mergeable["Mergeable code"]
   ci_repair --> health
   review_repair --> health
-  mergeable --> done["Done"]
+  mergeable -->|Done| memory_distill
+  memory_distill --> result["Return workflow result"]
 ```
 
 ## 🔁 Workflows
@@ -156,21 +163,21 @@ These tables are the canonical skill inventory: category, purpose, install comma
 
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
-| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 16:38 |
-| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-10 14:44 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-08 05:54 |
-| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-08 05:27 |
-| Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |
-| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-08 16:15 |
-| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-06 16:38 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-08 16:15 |
+| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-10 17:10 |
+| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-10 17:10 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-10 17:01 |
+| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-10 17:01 |
+| Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-10 17:10 |
+| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-10 17:10 |
+| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-10 17:10 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-10 17:10 |
 
 ### Supporting Skills
 
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-04 06:23 |
-| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-10 13:03 |
+| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-10 17:01 |
 | Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-10 12:04 |
 
 ## 📄 License

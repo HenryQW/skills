@@ -17,6 +17,13 @@ Shipyard has one execution mode:
 - Reconcile to the parent-derived shipyard integration branch before creating child worktrees, branches, commits, merges, or PRs.
 - Inspect-only behavior is allowed only when the user explicitly asks to inspect, plan, dry-run, or report without executing.
 
+## Memory Boundary
+
+- Shipyard owns the memory boundary when the user invokes it directly: call `$agent-memory load` before Preflight and `$agent-memory distill` as the final guard before every terminal return, including inspect-only, dirty-worktree, dependency, review, approval, CI, and successful PR outcomes.
+- Invoke child, review, repair, and PR skills as nested workflows with their memory boundaries skipped. They must preserve durable candidates for Shipyard.
+- Append only durable cross-child decisions, accepted integration constraints, and reusable root causes. Do not capture child status, checks, review IDs, or transient blockers.
+- Memory failure must not replace the Shipyard result or stop reason.
+
 ## Inputs
 
 - `parent_issue` is required: the GitHub issue number or URL for the parent issue.
@@ -98,13 +105,15 @@ handoff_mode=integration_branch
 integration_branch=<current_branch>
 review_base=<current_branch>
 wait_mode=<block or defer per wave size>
+memory_context_path=<absolute_shipyard_memory_context_path_or_none>
+Read memory_context_path when it exists. Do not invoke agent-memory; Shipyard owns the memory boundary.
 Do not commit .context/.
 Keep .context/progress.md to goal, current_step, artifacts, blockers, and validation; write detailed artifacts to files referenced from artifacts.
 Return only the compact child handoff JSON object.
 ```
 
 - Require one child handoff JSON object with `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
-- If the child worktree has `.context/decisions.jsonl`, preserve its path or compact contents in the manifest/review artifacts for final `pr-launchpad` distillation; do not write Obsidian from Shipyard.
+- If the child worktree has `.context/decisions.jsonl`, re-append each durable record to the Shipyard root with `<agent_memory_dir>/scripts/append_decision.py`; stable IDs deduplicate repeats. Do not write Obsidian or ask `pr-launchpad` to distill.
 - Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
 - Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
 - Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, or the review value is not accepted.
@@ -139,21 +148,21 @@ Keep `.context/progress.md` as a five-field pointer to the manifest after every 
 
 ### 4. Final review and PR
 
-- Run `$review-checkpoint` on the shipyard branch with `wait_mode=block` and `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`.
+- Run `$review-checkpoint` as a nested workflow on the shipyard branch with `wait_mode=block`, `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`, and its memory boundary skipped.
 - Do not run `greptile review`, poll Greptile, or write manifest review events by hand; `$review-checkpoint` owns that loop.
 - If it returns blockers for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
 - Route `child:<issue>` and `final_check` blockers back to their recorded `$issue-workbench` worktrees, then merge the returned branch with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>` and rerun relevant checks.
 - Fix only `integration` blockers in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
 - Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. Do not route another review loop for non-blocking findings.
 - If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
-- Run `$pr-launchpad` only after a completed final review gate returns `PASS`. Pass `shipyard_manifest=<absolute_path_to_.context/shipyard-manifest.json>` so PR launch consumes child issues, checks, commits, skips, and close targets without reconstructing them.
+- Run `$pr-launchpad` as a nested workflow only after a completed final review gate returns `PASS`. Pass `shipyard_manifest=<absolute_path_to_.context/shipyard-manifest.json>` and skip its memory boundary so PR launch consumes child issues, checks, commits, skips, and close targets without reconstructing them.
 
 ### 5. Route PR health
 
 - After PR creation, do one PR health snapshot with `gh pr checks` or the repository's normal PR check command. Do not sleep-and-recheck unless a repair skill changed branch or PR state.
 - Read checks only to choose the first repair skill.
-- Invoke `$ci-repairbay` for failing GitHub Actions checks.
-- Invoke `$review-repairbay` for requested changes, unresolved threads, or inline comments. Execution mode is approval to fix/reply/resolve/re-fetch unless the user restricted GitHub writes.
+- Invoke `$ci-repairbay` as a nested workflow with its memory boundary skipped for failing GitHub Actions checks.
+- Invoke `$review-repairbay` as a nested workflow with its memory boundary skipped for requested changes, unresolved threads, or inline comments. Execution mode is approval to fix/reply/resolve/re-fetch unless the user restricted GitHub writes.
 - After invoking a repair skill, trust its `status=PASS|BLOCKED|PENDING` line; re-check only if the status is missing or inconsistent.
 - Ignore resolved, outdated, informational, approval, top-level summary, or waived unavailable external review checks.
 - Stop on human approval, merge-permission, or external-provider blockers.

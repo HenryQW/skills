@@ -1,6 +1,6 @@
 ---
 name: agent-memory
-description: Use project-scoped agent memory with `.context/progress.md` and markdown files under `OBSIDIAN_PROJECT`. Use when the user invokes `$agent-memory`, requests project memory or progress distillation, or explicitly invokes `$agent-memory --setup` to configure it.
+description: Use project-scoped agent memory with `.context/progress.md` and markdown files under `OBSIDIAN_PROJECT`. Use when the user or another workflow invokes `$agent-memory load`, `$agent-memory distill`, or `$agent-memory --setup`.
 ---
 
 # Agent Memory
@@ -24,12 +24,20 @@ Memory is artifact-driven, not conversation-driven: append structured decision c
 
 Only when the invocation includes `--setup`, read and follow `references/setup.md`. Otherwise, do not read that reference or run setup.
 
+## Workflow Boundary
+
+- `$agent-memory load`: at a top-level workflow entry, load at most two exact approved topics relevant to the task. If memory is not configured or no topic matches, return `memory_load=SKIPPED` and continue.
+- While the workflow runs, append only durable decision candidates as described below.
+- `$agent-memory distill`: before a top-level workflow returns `Done`, `Stop`, or `Blocked`, preview conservative distillation. Apply only after explicit approval. If there are no new durable records, return `memory_write=SKIPPED` without asking.
+- Nested skills do not distill. They preserve `.context/decisions.jsonl` for the top-level caller.
+- Memory failure must not replace or hide the caller's terminal result.
+
 ## Context Load
 
-Use deterministic context load at the start of non-trivial implementation when memory is configured:
+For `$agent-memory load`, select at most two exact topic IDs from the approved memory index, then run:
 
 ```bash
-python3 scripts/memory_context.py --project-root /path/to/project --topic <topic-id> --out .context/memory-context.md
+python3 <agent_memory_dir>/scripts/memory_context.py --project-root /path/to/project --topic <topic-id> --out .context/memory-context.md
 ```
 
 The topic ID is the lowercase slug of an approved note filename linked from `Agent/Memory/index.md` and must be unique across Decisions and Guidance. Load at most two exact topics. The generated file is capped at 6,000 characters. Read it only when notes were loaded.
@@ -39,7 +47,7 @@ The topic ID is the lowercase slug of an approved note filename linked from `Age
 When a durable decision is made, append a structured local candidate:
 
 ```bash
-python3 scripts/append_decision.py \
+python3 <agent_memory_dir>/scripts/append_decision.py \
   --project-root /path/to/project \
   --topic issue-workbench \
   --decision "Single known issues use issue-workbench directly" \
@@ -55,13 +63,13 @@ Equivalent normalized decisions receive the same stable ID and are recorded once
 Preview conservative distillation before final PR handoff or when explicitly requested:
 
 ```bash
-python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
+python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
 ```
 
 Inspect `.context/memory-distill-preview.json`, then apply those exact rendered bytes only after approval:
 
 ```bash
-python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
+python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
 ```
 
 Topic slugs map directly to staged filenames under `Agent/Memory/Decisions/Inbox/` or `Agent/Memory/Guidance/Inbox/`; note bodies are never searched to choose a target. Apply rejects source or staged-note drift after preview. The command must not create one note per PR, promote Inbox notes, or edit `Agent/Memory/index.md` unless explicitly approved.
@@ -71,8 +79,8 @@ Topic slugs map directly to staged filenames under `Agent/Memory/Decisions/Inbox
 When the user invokes `$agent-memory` for distillation or asks to distill progress, preview then apply after approval:
 
 ```bash
-python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
-python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
+python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
+python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
 ```
 
 Use `.context/progress.md` only to clarify already durable decisions. Follow `references/distill.md` for what qualifies.
