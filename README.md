@@ -16,7 +16,6 @@ Supports Codex and other agents that use `npx skills` to manage skills.
 These workflows assume the external tools are already available:
 
 - `gh` authenticated for the target GitHub repository.
-- `$grill-with-docs` available before `issue-blueprint` runs.
 - `greptile` is optional; `review-checkpoint` falls back to adversarial review when unavailable.
 
 ## 🧠 Agent Memory Setup
@@ -40,7 +39,9 @@ flowchart TD
   reduce --> approved{"Approved issue plan?"}
   approved -->|Yes| blueprint
   approved -->|No| stop["Stop"]
-  blueprint --> parent["Parent issue"]
+  blueprint --> publish_approval{"Publish approved graph?"}
+  publish_approval -->|Revise| blueprint
+  publish_approval -->|Yes| parent["Parent issue"]
   parent --> children["Dependency-aware child issues"]
   parent --> shipyard["shipyard"]
   shipyard --> branch["Reconcile integration branch"]
@@ -106,10 +107,11 @@ Use this when the starting point is "audit this repo" and the output should beco
 
 ### 🧱 Plan to Issue Graph
 
-Use this when the starting point is a rough plan that needs hard questioning before implementation.
+Use this when the starting point is a rough multi-issue plan that needs decisions before implementation.
 
-- Run `issue-blueprint` with `$grill-with-docs` available.
-- Produce the spec, dependency-aware child issues, parent issue, one `final_check` child, and the `shipyard` execution block.
+- Run `issue-blueprint` to draft and render the spec and provisional issue graph.
+- Let it resolve factual blockers, then answer its recommended product decisions until review reports zero blockers.
+- Approve the final bundle explicitly before it publishes the dependency-aware child issues, parent issue, one `final_check` child, and the `shipyard` execution block.
 
 ### 🚢 Issue Graph to Pull Requests
 
@@ -155,7 +157,7 @@ These tables are the canonical skill inventory: category, purpose, install comma
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-06 16:38 |
-| Planning | `issue-blueprint` | Create dependency-aware child issues, one parent issue, and exactly one `final_check`. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-06 16:38 |
+| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-10 14:44 |
 | Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-08 05:54 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-08 05:27 |
 | Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-05 14:30 |

@@ -1,59 +1,63 @@
 ---
 name: issue-blueprint
-description: Turn a rough plan into a grilled spec and dependency-aware GitHub issue graph. Use when asked to create specs, glossary updates, child issues, a tracker issue, or one final_check issue.
+description: Turn a rough multi-issue plan into a user-approved spec and dependency-aware GitHub issue graph. Use when asked to plan a multi-issue feature or create child issues plus a tracker and one final_check. Do not use for a standalone spec or glossary edit.
 ---
 
 # Issue Blueprint
 
 ## Workflow
 
-Run the smallest end-to-end path from design pressure-test to GitHub issue graph.
+Run the smallest end-to-end path from a rough multi-issue plan to an approved GitHub issue graph.
 
 0. Lock intent before work. If the user asks to use `$issue-blueprint`, create issues, or avoid implementation, state the boundary in one line: no code changes, issue graph only. Do not start implementation prep.
 1. Classify route before planning:
    - one known actionable GitHub issue → stop and route to `$issue-workbench #<issue>`;
    - clear multi-issue feature → continue;
-   - unclear destination or product behavior → ask for the missing decision before creating an issue graph.
-2. Read only the project instructions, active specs, and GitHub issue state needed to publish. If the user's bullets are enough to draft the graph, proceed. Ask at most one blocking clarification.
-3. Use `$grill-with-docs` for the spec loop.
-4. Run the spec loop:
-   - Main agent is the reviewer and scope owner.
-   - Subagent A runs `$grill-with-docs` with the Reviewer A template below and returns at most 5 deterministic blockers per loop.
-   - Main agent resolves blockers only from the user prompt, project instructions, live repo/issue/spec context, relevant memory, or reviewer evidence. Do not guess.
-   - Accept evidence-backed blockers, reject speculative/cosmetic/cleanup-only/out-of-scope blockers with a short rationale, and ask the user when resolution requires a product decision or cannot be inferred.
-   - Patch accepted blockers once. Re-run Subagent A only if accepted blockers materially changed the graph.
-   - Stop when no accepted blockers remain. Do not add a second reviewer by default.
-5. Write the minimum durable docs where the project stores specs. If no location is known, ask. Required outputs are:
-   - implementation handoff spec,
-   - glossary/domain model update only when terminology changed.
-6. Stop and ask if blockers conflict with user-stated scope or require a product decision the agents cannot make.
-7. Draft an issue plan JSON using `references/issue-plan.md`. Before publish, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
-8. Render issue markdown:
+   - standalone spec or glossary edit → stop; this workflow does not apply;
+   - unclear target repository, spec location, or product behavior → ask for the missing decision before creating the planning bundle.
+2. Read only the project instructions, active specs, glossary, repository state, and GitHub issue state needed to plan and publish. Discover facts from authoritative sources instead of asking the user. Check terminology against the project glossary and stress-test domain relationships with concrete scenarios.
+3. Draft the complete planning bundle before review:
+   - write the implementation handoff spec where the project stores specs;
+   - update the glossary only when terminology changed;
+   - create an ADR only for a hard-to-reverse, surprising decision with a real trade-off;
+   - draft the provisional issue plan JSON using `references/issue-plan.md` and preserve non-goals;
+   - render the provisional issue graph locally so the reviewer inspects the same bundle the user will approve.
 
 ```bash
 python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .context/issues
 ```
 
-9. Publish with `publish_issue_plan.py --verify`; it creates children first, then the tracker, then updates children with real numbers. Treat `--verify` plus `.context/issues/numbers.json` as sufficient verification unless the command fails or the numbers file is missing.
+4. Run interactive blocker rounds until the reviewer returns `PASS`:
+   1. Delegate exactly one read-only adversarial reviewer for the round using the template below. The reviewer must not edit files or question the user.
+   2. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
+   3. Resolve factual blockers from the user prompt, project instructions, repository, issues, specs, glossary, or other authoritative evidence. Do not ask the user for discoverable facts; report an inaccessible authoritative source as an access blocker instead of recasting it as a product decision.
+   4. Update the spec and issue plan, then re-render the graph after every factual resolution.
+   5. Present unresolved product decisions in dependency order with context, a recommendation, and the consequences of each option. Ask dependent decisions one at a time. Batch at most five independent decisions and allow the user to accept all recommendations.
+   6. Record each answer immediately in the spec and issue plan, then re-render the graph.
+   7. Treat settled user decisions as authoritative. Reopen one only when new contradictory evidence is identified.
+   8. Re-review only changed sections, unresolved blockers, and newly introduced contradictions. Start another round until no blocker remains.
+5. Before publishing, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
+6. After zero blockers, show the user the spec path, issue titles and dependency waves, non-goals, target repository, and labels. Ask for explicit approval to publish this exact graph. Earlier plan approval is not publication approval.
+7. Publish only after that approval. If approval is withheld or the graph changes, return to drafting, rendering, and blocker review; never publish the unapproved graph.
+8. Run `publish_issue_plan.py --verify`; it creates children first, then the tracker, then updates children with real numbers. Treat `--verify` plus `.context/issues/numbers.json` as sufficient verification unless the command fails or the numbers file is missing.
 
-## Reviewer Templates
+## Reviewer Template
 
-Use these prompts so reviewers inspect current artifacts, not stale drafts.
-
-Reviewer A:
+Pass exact paths so the reviewer inspects current artifacts rather than stale drafts.
 
 ```text
-Use $grill-with-docs on this exact draft/spec path: <absolute_path>.
-Working directory: <absolute_repo_path>.
-Return at most 5 deterministic blockers in this shape only:
-BLOCKERS:
-- severity | issue | exact change
+You are the only adversarial reviewer for this round.
+Read these exact paths:
+- implementation handoff spec: <absolute_spec_path>
+- provisional issue plan: <absolute_plan_path>
+- rendered issues: <absolute_rendered_issues_path>
+- repository: <absolute_repo_path>
 
-ACCEPTED:
-- change
+Remain read-only. Do not edit files or question the user.
+Return PASS when there are no material blockers. Otherwise return at most five blockers, ordered by downstream dependency impact and then severity, using one line per blocker:
+severity | kind | evidence | issue | recommended resolution
 
-REJECTED:
-- reason
+Only report ambiguity, incorrectness, unsafe behavior, untestability, or improper sequencing. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives. Treat recorded user decisions as authoritative unless you cite new contradictory evidence.
 ```
 
 ## Token Discipline
@@ -61,8 +65,8 @@ REJECTED:
 - Pass file paths, not pasted documents, whenever the receiver can read the file.
 - Subagents must not summarize the whole spec unless asked.
 - After the first loop, review only changed sections, unresolved blockers, and newly introduced contradictions.
-- Main agent records only accepted/rejected blockers and one-line rationale.
-- User progress updates should be phase-level only: drafted, review blockers, publishing, published.
+- The main agent owns blocker disposition, evidence gathering, user interaction, and all edits.
+- User progress updates should be phase-level only: drafted, decisions needed, awaiting publication approval, publishing, published.
 
 ## Issue Publishing
 
