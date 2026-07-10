@@ -38,6 +38,12 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
       "purpose": "Final pass.",
       "context": ["No major architecture work belongs here."],
       "acceptance": ["All checks pass."],
+      "testing": {
+        "seam": "Final integrated workflow.",
+        "existing_tests": "All child tests above.",
+        "validation": "npm test",
+        "do_not_test": "Child-owned implementation details."
+      },
       "blocked_by": ["foundation"],
       "blocks": [],
       "parallelism": "Final tail."

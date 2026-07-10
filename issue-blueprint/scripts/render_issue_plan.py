@@ -231,6 +231,11 @@ def render(plan_path: Path, out: Path, numbers_path: Path | None, tracker_issue:
 
 
 def self_test() -> None:
+    reference = Path(__file__).resolve().parents[1] / "references" / "issue-plan.md"
+    example = re.search(r"```json[ \t]*\r?\n(.*?)\r?\n```", reference.read_text(), re.DOTALL)
+    assert example is not None
+    validate(json.loads(example.group(1)))
+
     plan = {
         "tracker": {"title": "x", "goal": "g", "constraints": ["c"], "non_goals": ["n"], "definition_of_done": ["d"]},
         "dropped_findings": [{"finding": "duplicate cleanup", "reason": "duplicate of #1"}],

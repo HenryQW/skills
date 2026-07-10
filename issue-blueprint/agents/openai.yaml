@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Blueprint"
-  short_description: "Turn grilled specs into issue graphs"
-  default_prompt: "Use $issue-blueprint. Lock no-code issue-only intent first, run at most one compact adversarial review unless correctness blockers remain, then publish the dependency-aware issue graph."
+  short_description: "Refine and approve multi-issue graphs"
+  default_prompt: "Use $issue-blueprint to draft the planning bundle, resolve factual blockers, ask me for unresolved product decisions until review passes, and request my explicit approval before publishing the dependency-aware issue graph."
