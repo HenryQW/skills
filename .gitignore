@@ -11,3 +11,8 @@ __pycache__/
 
 # Agent local progress
 .context/progress.md
+
+# Agent local context
+.context/decisions.jsonl
+.context/memory-context.md
+.context/memory-distill-preview.json

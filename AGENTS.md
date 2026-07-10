@@ -3,7 +3,7 @@
 This repository stores skills used to automate development workflows.
 These skills are meant for AI agents to execute, not for human readers. Keep instructions agent-facing, explicit, and operational rather than human-facing narrative documentation or diagrams.
 
-OBSIDIAN_PROJECT=`${OBSIDIAN_ROOT}/Skills`
+OBSIDIAN_PROJECT=`${OBSIDIAN_ROOT}/projects/Skills`
 
 ## Organization
 
