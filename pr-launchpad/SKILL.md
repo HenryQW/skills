@@ -34,8 +34,13 @@ Create a PR from the current branch.
 8. Write multi-line PR body content to a temp file or heredoc.
 9. Use `gh` for GitHub or `glab` for GitLab.
 10. Create the PR against `base_branch`.
-11. If PR health is inspected after creation and the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, do not invoke repair skills; record `Pending external unavailable check: <check>` in caller/progress context while preserving the final user reply as only the PR URL.
-12. Compact `.context/progress.md`.
+11. If agent-memory is configured, run conservative memory distillation before the final reply:
+   ```bash
+   python3 <agent_memory_dir>/scripts/distill_memory.py --project-root . --source .context/decisions.jsonl --verify
+   ```
+   `memory_write=SKIPPED` is acceptable. If distillation fails, do not hide the PR URL; report `memory_write=FAILED` to the caller/progress context.
+12. If PR health is inspected after creation and the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, do not invoke repair skills; record `Pending external unavailable check: <check>` in caller/progress context while preserving the final user reply as only the PR URL.
+13. Compact `.context/progress.md`.
 
 Always use this PR body template:
 

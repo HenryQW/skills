@@ -28,7 +28,7 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
 - `max_iterations` is optional and passes through to `$review-checkpoint`.
-- `review_base` is optional and passes through to `$review-checkpoint`; default is the branch base selected in Step 3.
+- `review_base` is optional and passes through to `$review-checkpoint`; default is the branch base selected during branch preparation.
 - `wait_mode` is optional and passes through to `$review-checkpoint`.
 - `poll_interval_seconds` is optional and passes through to `$review-checkpoint`.
 - `worktree_path` is optional. When set, create the issue branch in that new Git worktree instead of the caller worktree.
@@ -37,10 +37,25 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 
 ## Scope and boundaries
 
+### Lite mode
+
+`$issue-workbench #<issue>` is the default path for one known actionable GitHub issue.
+
+Use lite mode when:
+- the issue already has enough acceptance criteria to implement,
+- no dependency graph or parallel child work is needed,
+- no integration branch is requested.
+
+Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create child issues, or create a `final_check` in lite mode. Stop only when the issue lacks actionable acceptance criteria, product behavior is unclear, repo state is dirty, or the requested change would require unrelated refactoring.
+
+### Boundaries
+
 - Only modify files required by the issue.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
-- Do not modify `.context/` except local uncommitted progress, review, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
+- Do not add backward compatibility, migration layers, aliases, fallback paths, or future-proofing unless explicitly required by the issue, spec, or repo instructions.
+- Do not fix sibling or newly discovered work inside the current issue; record it as a blocker, follow-up, or decision candidate instead.
+- Do not modify `.context/` except local uncommitted progress, review, memory context, decision, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Return only the PR URL on success unless `handoff_mode=integration_branch`.
@@ -56,7 +71,17 @@ git status --short
 
 Stop on existing uncommitted changes unless the user explicitly asked to continue with them. Do not overwrite or discard user changes.
 
-### 2. Read the issue
+### 2. Read memory context if configured
+
+If `agent-memory` is configured for the repo, run:
+
+```bash
+python3 <agent_memory_dir>/scripts/memory_context.py --project-root . --issue <issue_number> --out .context/memory-context.md
+```
+
+Read `.context/memory-context.md` only when the command loaded notes. If the command cannot resolve a memory router, continue without memory context; do not block implementation.
+
+### 3. Read the issue
 
 Run:
 
@@ -68,7 +93,7 @@ If truncation or omitted comments hide context needed to decide scope, rerun it 
 
 Extract explicit requirements, acceptance criteria, constraints, named files, named modules, and named behavior. Use that as the implementation scope. Do not invent product behavior.
 
-### 3. Prepare the branch
+### 4. Prepare the branch
 
 Use the current worktree by default. In `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`, then use the integration helper.
 
@@ -88,15 +113,26 @@ The child branch must start from `integration_branch`, not the repository defaul
 
 Resolve `<review_base>` from the `review_base` input when provided; otherwise use `<integration_branch>` in integration mode and `origin/<base_branch>` in PR mode. If repo instructions require `.context/progress.md`, `integration_child.py start` initializes the five-field progress object and records any prior progress file under `artifacts.source_progress`; keep it uncommitted.
 
-### 4. Inspect the repository before editing
+### 5. Inspect the repository before editing
 
 Identify the smallest relevant files or modules with `rg` or `rg --files`. Prefer existing patterns, tests, helpers, and conventions. Avoid new dependencies unless the issue requires them.
 
-### 5. Implement
+### 6. Select the testing seam
+
+Before editing tests, identify the public behavior boundary:
+
+- Seam: public interface under test, or `none` with reason.
+- Existing similar tests: paths or `none found`.
+- Validation command: smallest meaningful command, or `none obvious`.
+- Do not test: internals, mocks, or implementation details that would couple the test to the chosen design.
+
+If no useful test seam exists, use another concrete validation path. Do not invent low-value tests.
+
+### 7. Implement
 
 Apply the smallest code change that satisfies the issue. Add or update tests only when they directly validate requested behavior.
 
-### 6. Inspect the diff
+### 8. Inspect the diff
 
 ```bash
 git status --short
@@ -109,11 +145,11 @@ python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 
 If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`. Stop if any changed file or line cannot trace to the issue.
 
-### 7. Run relevant local validation
+### 9. Run relevant local validation
 
 Run the smallest relevant validation command discoverable from nearby tests, `package.json`, `pyproject.toml`, `tox.ini`, `noxfile.py`, `pytest.ini`, or `Makefile`. If no command is obvious, continue without inventing tooling.
 
-### 8. Commit
+### 10. Commit
 
 ```bash
 git add <file1> <file2>
@@ -125,11 +161,11 @@ Stage explicit inspected paths only. Commit one logical unit at a time:
 git commit -m "feat(auth): add token refresh handling"
 ```
 
-### 9. Review gate
+### 11. Review gate
 
 Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, blocker-only actionability rules, fix loops, and review-loop commits.
 
-If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in Step 10.
+If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in final handoff.
 
 If it returns anything other than `PASS` or `PENDING_REVIEW`, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
 
@@ -141,7 +177,17 @@ python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 
 If the guard fails, stop unless the issue explicitly allows that path or `$review-checkpoint` directly identified a deterministic issue in that blocked path; verify the finding before allowing the path.
 
-### 10. Final handoff
+### 12. Record durable decisions
+
+If implementation created or confirmed a durable decision future agents need, append one structured candidate instead of writing Obsidian directly:
+
+```bash
+python3 <agent_memory_dir>/scripts/append_decision.py --project-root . --topic <topic> --decision "<decision>" --reason "<why>" --source "issue #<issue_number>"
+```
+
+Skip routine progress, passing checks, and ordinary implementation details.
+
+### 13. Final handoff
 
 Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 

@@ -104,6 +104,7 @@ Return only the compact child handoff JSON object.
 ```
 
 - Require one child handoff JSON object with `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
+- If the child worktree has `.context/decisions.jsonl`, preserve its path or compact contents in the manifest/review artifacts for final `pr-launchpad` distillation; do not write Obsidian from Shipyard.
 - Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
 - Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
 - Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, or the review value is not accepted.

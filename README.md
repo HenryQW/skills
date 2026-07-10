@@ -62,6 +62,28 @@ flowchart TD
 
 ## 🔁 Workflows
 
+### 🧭 Route Selection
+
+Use the lowest-power workflow that can safely deliver the request.
+
+| Input | Route |
+|---|---|
+| One known actionable GitHub issue | `issue-workbench #<issue>` |
+| Clear multi-issue feature | `issue-blueprint` → `shipyard` |
+| Unclear destination or product behavior | Stop and ask for the missing decision before creating an issue graph |
+| Existing PR blocked by CI or review | `ci-repairbay` / `review-repairbay` |
+| Current branch just needs a PR | `pr-launchpad` |
+
+### 🪶 Single Issue to Pull Request
+
+Use this when the starting point is one existing, actionable GitHub issue.
+
+- Run `issue-workbench #<issue>` directly.
+- Do not run `issue-blueprint`.
+- Do not create a parent issue, child issue graph, Shipyard branch, or `final_check`.
+- Keep the implementation to the issue's explicit acceptance criteria.
+- `issue-workbench` still runs the review gate and hands off to `pr-launchpad`.
+
 ### 🔍 Audit to Issue Plan
 
 Use this when the starting point is "audit this repo" and the output should become approved issue work.

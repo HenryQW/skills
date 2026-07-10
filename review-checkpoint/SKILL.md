@@ -22,6 +22,13 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 ## Rules
 
 - Do not start a new review just to poll. Poll the same review ID.
+- Classify every finding before fixing:
+  - `spec_blocker`: violates explicit issue/spec acceptance or adds unrequested behavior.
+  - `standards_blocker`: violates repo instructions, local patterns, or maintainability baseline.
+  - `safety_blocker`: risks data loss, secrets, security, or forbidden paths.
+  - `test_blocker`: changed behavior lacks a meaningful validation path or has misleading tests.
+  - `non_actionable`: cosmetic, speculative, stale, broad cleanup, unclear, contradictory, or outside scope.
+- Fix only `spec_blocker`, `standards_blocker`, `safety_blocker`, and `test_blocker` findings. Record but do not fix `non_actionable` findings.
 - A finding is review-actionable only when it is a deterministic blocker in the branch diff, in scope, and fixable without a product decision.
 - Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
@@ -84,7 +91,7 @@ diff_artifact=<absolute path>
 payload_artifact=<absolute path>
 verification_artifact=<absolute path or short commands/results>
 
-Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Report deterministic in-scope blockers with file/line evidence, or PASS.
+Review only the artifact paths above. Do not inspect another worktree. Do not edit files, commit, push, or review broad cleanup. Classify each finding as `spec_blocker`, `standards_blocker`, `safety_blocker`, `test_blocker`, or `non_actionable`. Report only deterministic in-scope blockers with file/line evidence, plus any `non_actionable` findings that explain why they were not fixed, or PASS.
 ```
 
 Treat the completed subagent review as the current review output. If fixes are committed and Greptile is still unavailable, run at most one fallback subagent review for the next iteration.
