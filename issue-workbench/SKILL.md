@@ -63,23 +63,17 @@ Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create chi
 
 ## Procedure
 
-### 1. Confirm clean working tree
+### 1. Load memory context if configured
+
+When the user invoked this workflow directly, invoke `$agent-memory load` with the issue scope. Continue when it returns `memory_load=SKIPPED`; do not run setup. In integration mode, skip this step because `$shipyard` owns the memory boundary.
+
+### 2. Confirm clean working tree
 
 ```bash
 git status --short
 ```
 
 Stop on existing uncommitted changes unless the user explicitly asked to continue with them. Do not overwrite or discard user changes.
-
-### 2. Read memory context if configured
-
-If `agent-memory` is configured for the repo, run:
-
-```bash
-python3 <agent_memory_dir>/scripts/memory_context.py --project-root . --issue <issue_number> --out .context/memory-context.md
-```
-
-Read `.context/memory-context.md` only when the command loaded notes. If the command cannot resolve a memory router, continue without memory context; do not block implementation.
 
 ### 3. Read the issue
 
@@ -191,7 +185,9 @@ Skip routine progress, passing checks, and ordinary implementation details.
 
 Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 
-If `handoff_mode=pull_request`, run `pr-launchpad` only after a completed review gate returns `PASS`, then return only the PR URL.
+If `handoff_mode=pull_request`, run `pr-launchpad` as a nested skill only after a completed review gate returns `PASS`; it must skip its memory boundary. After it returns, invoke `$agent-memory distill`, then return only the PR URL.
+
+In pull-request mode, `$agent-memory distill` is the final guard before every terminal return, including early `Stop`, `Blocked`, and `PENDING_REVIEW` results. In integration mode, do not distill; preserve `.context/decisions.jsonl` for `$shipyard`.
 
 Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. Do not write a per-child handoff file. The response is the child handoff JSON.
 

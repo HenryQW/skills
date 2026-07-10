@@ -14,33 +14,34 @@ Create a PR from the current branch.
 - `issue_numbers` is optional when one PR resolves multiple issues.
 - `shipyard_manifest` is optional. When provided, read it for close targets, child commits, testing bullets, known skips, and prior review status.
 
+## Memory boundary
+
+Own the memory boundary only when the user invoked `pr-launchpad` directly. When called by `issue-workbench` or `shipyard`, skip memory load and distillation; preserve `.context/decisions.jsonl` for the caller.
+
 ## Procedure
 
-1. Inspect the repo first:
+1. If this workflow owns the memory boundary, invoke `$agent-memory load`. Continue when it returns `memory_load=SKIPPED`; do not run setup.
+2. Inspect the repo first:
    - `git status --short`
    - `git diff --stat`
    - Relevant `git diff` commands for changed files.
-2. Do not commit `.context/`, `.agents/`, or local progress files.
-3. If changes are uncommitted, split unrelated work into focused commits.
-4. Use Conventional Commits for new commits.
-5. PR title must be Conventional Commit style, derived from branch commits and the actual diff.
-6. Push explicitly:
+3. Do not commit `.context/`, `.agents/`, or local progress files.
+4. If changes are uncommitted, split unrelated work into focused commits.
+5. Use Conventional Commits for new commits.
+6. PR title must be Conventional Commit style, derived from branch commits and the actual diff.
+7. Push explicitly:
    - Run `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`.
    - If no upstream exists, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
-7. Draft the PR title from the actual diff and commits.
+8. Draft the PR title from the actual diff and commits.
    - If `shipyard_manifest` is present, use its merged child issues, `final_check`, checks, known skips, child commits, and review gate status for the PR body.
    - Still inspect live git before creating the PR; the manifest is handoff state, not a replacement for repository state.
-8. Write multi-line PR body content to a temp file or heredoc.
-9. Use `gh` for GitHub or `glab` for GitLab.
-10. Create the PR against `base_branch`.
-11. If agent-memory is configured, run conservative memory distillation before the final reply:
-   ```bash
-   python3 <agent_memory_dir>/scripts/distill_memory.py --project-root . --source .context/decisions.jsonl --verify
-   ```
-   `memory_write=SKIPPED` is acceptable. If distillation fails, do not hide the PR URL; report `memory_write=FAILED` to the caller/progress context.
+9. Write multi-line PR body content to a temp file or heredoc.
+10. Use `gh` for GitHub or `glab` for GitLab.
+11. Create the PR against `base_branch`.
 12. If PR health is inspected after creation and the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, do not invoke repair skills; record `Pending external unavailable check: <check>` in caller/progress context while preserving the final user reply as only the PR URL.
 13. Compact `.context/progress.md`.
+14. If this workflow owns the memory boundary, invoke `$agent-memory distill` as the final guard before every terminal return, including early `Stop` and `Blocked` results. `memory_write=SKIPPED` is acceptable. If distillation fails, do not hide the PR URL; report `memory_write=FAILED` to the caller/progress context.
 
 Always use this PR body template:
 
