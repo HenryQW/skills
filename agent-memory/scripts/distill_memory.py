@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Conservatively distill durable memory candidates into staged Agent notes."""
+"""Preview or apply durable memory candidates to exact staged note paths."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -11,59 +12,18 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-INDEX_NAME = "index.md"
-LEGACY_ROUTER_NAME = "Memory Router.md"
+from obsidian_project import resolve_memory_index, topic_slug, unsymlinked_path
+
 DEFAULT_SOURCE = ".context/decisions.jsonl"
-
-
-def slug(text: str) -> str:
-    value = re.sub(r"[^a-z0-9-]+", "-", text.lower()).strip("-")
-    return value or "decisions"
+DEFAULT_PREVIEW = ".context/memory-distill-preview.json"
 
 
 def titleize(topic: str) -> str:
-    return " ".join(part.capitalize() for part in re.split(r"[-_\s]+", topic.strip()) if part) or "Decisions"
+    return " ".join(part.capitalize() for part in re.split(r"[-_\s]+", topic.strip()) if part) or "Memory"
 
 
-def expand(raw: str) -> Path:
-    return Path(os.path.expandvars(raw)).expanduser().resolve()
-
-
-def resolve_agent_index(agent_path: Path) -> Path:
-    index = agent_path / INDEX_NAME
-    legacy = agent_path / "Memory" / LEGACY_ROUTER_NAME
-    if index.exists() or not legacy.exists():
-        return index
-    return legacy
-
-
-def resolve_router(project_root: Path, explicit: str | None = None, agent_path: str | None = None) -> Path:
-    if explicit:
-        return expand(explicit)
-    if os.environ.get("AGENT_MEMORY_ROUTER"):
-        return expand(os.environ["AGENT_MEMORY_ROUTER"])
-    if agent_path:
-        return resolve_agent_index(expand(agent_path))
-    agents = project_root / "AGENTS.md"
-    if agents.exists():
-        text = agents.read_text(encoding="utf-8")
-        patterns = [
-            r"\$\{AGENT_MEMORY_ROOT\}/[^`\n]*?/Agent/index\.md",
-            r"\$\{AGENT_MEMORY_ROOT\}/[^`\n]*?/Agent/Memory/Memory Router\.md",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return expand(match.group(0))
-    root = os.environ.get("AGENT_MEMORY_ROOT")
-    if root:
-        base = expand(root)
-        matches = list(base.glob("projects/**/Agent/index.md")) + list(base.glob(f"projects/**/Agent/Memory/{LEGACY_ROUTER_NAME}"))
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            raise SystemExit("multiple agent memory routers found; pass --memory-router or --agent-path")
-    raise SystemExit("cannot resolve agent memory index; pass --memory-router/--agent-path or set AGENT_MEMORY_ROOT/AGENT_MEMORY_ROUTER")
+def resolve_router(project_root: Path) -> Path:
+    return resolve_memory_index(project_root)
 
 
 def load_records(path: Path) -> list[dict]:
@@ -88,19 +48,9 @@ def load_records(path: Path) -> list[dict]:
     return rows
 
 
-def is_new_structure(router: Path) -> bool:
-    return router.name == INDEX_NAME and router.parent.name == "Agent"
-
-
-def existing_note_for_topic(base: Path, topic: str) -> Path | None:
-    topic_slug = slug(topic)
-    for path in sorted(base.rglob("*.md")):
-        if path.name in {INDEX_NAME, LEGACY_ROUTER_NAME}:
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")[:3000].lower()
-        if topic_slug in slug(path.stem) or topic.lower() in text:
-            return path
-    return None
+def row_value(row: dict, kind: str) -> str:
+    key = "guidance" if kind == "guidance" else "decision"
+    return str(row.get(key, "")).strip()
 
 
 def update_frontmatter_date(text: str, today: str) -> str:
@@ -118,44 +68,8 @@ def update_frontmatter_date(text: str, today: str) -> str:
     return head + body
 
 
-def append_to_legacy_note(note: Path, topic: str, rows: list[dict]) -> bool:
-    note.parent.mkdir(parents=True, exist_ok=True)
-    if note.exists():
-        text = note.read_text(encoding="utf-8")
-    else:
-        text = (
-            f"# {titleize(topic)}\n\n"
-            f"Summary: Durable decisions for {topic}.\n"
-            f"Keywords: {topic}, agent memory, decisions\n\n"
-            "## Decisions\n"
-        )
-    if "## Decisions" not in text:
-        text = text.rstrip() + "\n\n## Decisions\n"
-    changed = False
-    today = datetime.now(timezone.utc).date().isoformat()
-    additions = []
-    for row in rows:
-        decision = row["decision"].strip()
-        if decision in text:
-            continue
-        files = ", ".join(row.get("files", []))
-        file_suffix = f" Files: {files}." if files else ""
-        additions.append(f"- {today} — **{decision}** Reason: {row['reason']} Source: {row['source']}.{file_suffix}")
-    if additions:
-        text = text.rstrip() + "\n" + "\n".join(additions) + "\n"
-        changed = True
-    if changed:
-        note.write_text(text, encoding="utf-8")
-    return changed
-
-
-def append_to_staged_note(note: Path, topic: str, rows: list[dict], kind: str) -> bool:
-    note.parent.mkdir(parents=True, exist_ok=True)
-    today = datetime.now(timezone.utc).date().isoformat()
-    if note.exists():
-        text = note.read_text(encoding="utf-8")
-    else:
-        title = titleize(topic)
+def render_staged_note(existing: str | None, topic: str, rows: list[dict], kind: str, today: str) -> str | None:
+    if existing is None:
         text = (
             "---\n"
             "type: project-note\n"
@@ -163,21 +77,24 @@ def append_to_staged_note(note: Path, topic: str, rows: list[dict], kind: str) -
             f"last_updated: '{today}'\n"
             "tags: []\n"
             "---\n"
-            f"# {title}\n\n"
+            f"# {titleize(topic)}\n\n"
         )
         if kind == "decision":
             text += f"## Date\n\n{today}.\n\n## Decision\n"
         else:
             text += "## Use When\n\n- Review this staged guidance before promotion.\n\n## Guidance\n"
-    section = "## Decision" if kind == "decision" else "## Guidance"
+    else:
+        text = existing
+    section = "## Guidance" if kind == "guidance" else "## Decision"
     if section not in text:
         text = text.rstrip() + f"\n\n{section}\n"
     additions = []
+    seen_values: set[str] = set()
     for row in rows:
-        raw_value = row.get("decision") if kind == "decision" else row.get("guidance", row.get("decision", ""))
-        value = str(raw_value or "").strip()
-        if not value or value in text:
+        value = row_value(row, kind)
+        if not value or value in text or value in seen_values:
             continue
+        seen_values.add(value)
         if kind == "decision":
             files = ", ".join(row.get("files", []))
             file_suffix = f" Files: {files}." if files else ""
@@ -185,133 +102,242 @@ def append_to_staged_note(note: Path, topic: str, rows: list[dict], kind: str) -
         else:
             additions.append(f"- {value} Source: {row['source']}.")
     if not additions:
-        return False
-    text = update_frontmatter_date(text.rstrip() + "\n" + "\n".join(additions) + "\n", today)
-    note.write_text(text, encoding="utf-8")
-    return True
+        return None
+    return update_frontmatter_date(text.rstrip() + "\n" + "\n".join(additions) + "\n", today)
 
 
-def ensure_legacy_router_link(router: Path, note: Path, topic: str) -> bool:
-    rel = note.relative_to(router.parent).as_posix()
-    text = router.read_text(encoding="utf-8")
-    if rel in text or note.stem in text:
-        return False
-    suffix = "" if text.endswith("\n") else "\n"
-    line = f"- [{titleize(topic)}]({rel}) — durable decisions for {topic}.\n"
-    if "## Memory" in text:
-        text = text + suffix + line
-    else:
-        text = text + suffix + "\n## Memory\n\n" + line
-    router.write_text(text, encoding="utf-8")
-    return True
+def sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
 
-def distill(project_root: Path, source: Path, router: Path, dry_run: bool = False) -> tuple[str, list[Path]]:
-    rows = load_records(source)
-    if not rows:
-        return "SKIPPED reason=no durable records", []
+def file_hash(path: Path) -> str | None:
+    return sha256_bytes(path.read_bytes()) if path.exists() else None
+
+
+def apply_preview(source: Path, router: Path, preview_path: Path) -> tuple[str, list[Path]]:
+    if not preview_path.exists():
+        raise SystemExit(f"distillation preview not found: {preview_path}; run preview first")
+    try:
+        preview = json.loads(preview_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid distillation preview: {preview_path}: {exc}") from exc
+    if preview.get("version") != 1:
+        raise SystemExit(f"unsupported distillation preview: {preview_path}")
+    if preview.get("source") != str(source.resolve()) or preview.get("router") != str(router.resolve()):
+        raise SystemExit("distillation preview belongs to a different source or memory index")
+    if not source.exists() or preview.get("source_sha256") != file_hash(source):
+        raise SystemExit("distillation source changed after preview; preview again")
+    changes = preview.get("changes")
+    if not isinstance(changes, list):
+        raise SystemExit(f"invalid distillation preview changes: {preview_path}")
+
+    memory_dir = router.parent.resolve()
+    approved_inboxes = {
+        unsymlinked_path(memory_dir, "Decisions", "Inbox"),
+        unsymlinked_path(memory_dir, "Guidance", "Inbox"),
+    }
+    validated: list[tuple[Path, str]] = []
+    for change in changes:
+        if not isinstance(change, dict) or not isinstance(change.get("target"), str) or not isinstance(change.get("content"), str):
+            raise SystemExit(f"invalid distillation preview change: {preview_path}")
+        path = (memory_dir / change["target"]).resolve()
+        rendered = change["content"]
+        if path.parent not in approved_inboxes:
+            raise SystemExit(f"invalid distillation preview target: {path}")
+        if sha256_bytes(rendered.encode()) != change.get("rendered_sha256"):
+            raise SystemExit(f"distillation preview content hash mismatch: {path}")
+        if file_hash(path) != change.get("baseline_sha256"):
+            raise SystemExit(f"staged memory changed after preview: {path}; preview again")
+        validated.append((path, rendered))
+    if not validated:
+        raise SystemExit(f"distillation preview has no changes: {preview_path}")
+
+    for path, rendered in validated:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered, encoding="utf-8")
+        if path.read_text(encoding="utf-8") != rendered:
+            raise SystemExit(f"memory write verification failed: {path}")
+    preview_path.unlink()
+    paths = [path for path, _ in validated]
+    relative = ",".join(path.relative_to(memory_dir).as_posix() for path in paths)
+    return f"UPDATED files={relative}", paths
+
+
+def distill(
+    source: Path,
+    router: Path,
+    preview_path: Path,
+    apply: bool = False,
+    today: str | None = None,
+) -> tuple[str, list[Path]]:
+    source = source.resolve()
+    router = router.resolve()
+    preview_path = preview_path.resolve()
     if not router.exists():
         raise SystemExit(f"agent memory index not found: {router}")
+    if apply:
+        return apply_preview(source, router, preview_path)
 
-    updated: list[Path] = []
-    by_key: dict[tuple[str, str], list[dict]] = {}
+    rows = load_records(source)
+    if not rows:
+        preview_path.unlink(missing_ok=True)
+        return "SKIPPED reason=no durable records", []
+
+    grouped_rows: dict[tuple[str, str], list[dict]] = {}
     for row in rows:
         kind = "guidance" if row.get("type") == "guidance" else "decision"
-        by_key.setdefault((kind, row["topic"]), []).append(row)
+        grouped_rows.setdefault((kind, topic_slug(row["topic"])), []).append(row)
 
-    if is_new_structure(router):
-        agent = router.parent
-        for (kind, topic), grouped in sorted(by_key.items()):
-            folder = "Guidance" if kind == "guidance" else "Decisions"
-            production = existing_note_for_topic(agent / folder, topic)
-            staged = agent / folder / "Inbox" / f"{slug(topic)}.md"
-            if production and "Inbox" not in production.parts:
-                target = production
-                if any((row.get("decision") or row.get("guidance", "")).strip() not in target.read_text(encoding="utf-8", errors="ignore") for row in grouped):
-                    target = staged
-                else:
-                    continue
-            else:
-                target = production or staged
-            if dry_run:
-                updated.append(target)
-                continue
-            if append_to_staged_note(target, topic, grouped, kind):
-                updated.append(target)
-    else:
-        memory_dir = router.parent
-        for (_kind, topic), grouped in sorted(by_key.items()):
-            note = existing_note_for_topic(memory_dir, topic) or memory_dir / "Topics" / f"{slug(topic)}.md"
-            if dry_run:
-                updated.append(note)
-                continue
-            if append_to_legacy_note(note, topic, grouped):
-                updated.append(note)
-            if ensure_legacy_router_link(router, note, topic):
-                updated.append(router)
+    changes: list[tuple[Path, str]] = []
+    memory_dir = router.parent
+    today = today or datetime.now(timezone.utc).date().isoformat()
+    for (kind, topic), grouped in sorted(grouped_rows.items()):
+        folder = "Guidance" if kind == "guidance" else "Decisions"
+        approved = unsymlinked_path(memory_dir, folder) / f"{topic}.md"
+        staged = unsymlinked_path(memory_dir, folder, "Inbox") / f"{topic}.md"
+        approved_text = approved.read_text(encoding="utf-8") if approved.exists() else None
+        if approved_text is not None and all(row_value(row, kind) in approved_text for row in grouped):
+            continue
+        existing = staged.read_text(encoding="utf-8") if staged.exists() else None
+        rendered = render_staged_note(existing, topic, grouped, kind, today)
+        if rendered is not None:
+            changes.append((staged, rendered))
 
-    if not updated:
+    if not changes:
+        preview_path.unlink(missing_ok=True)
         return "SKIPPED reason=records already present", []
-    return "UPDATED files=" + ",".join(str(path) for path in updated), updated
+
+    preview = {
+        "version": 1,
+        "source": str(source.resolve()),
+        "source_sha256": file_hash(source),
+        "router": str(router.resolve()),
+        "changes": [
+            {
+                "target": path.relative_to(memory_dir).as_posix(),
+                "baseline_sha256": file_hash(path),
+                "rendered_sha256": sha256_bytes(rendered.encode()),
+                "content": rendered,
+            }
+            for path, rendered in changes
+        ],
+    }
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    preview_path.write_text(json.dumps(preview, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    paths = [path for path, _ in changes]
+    relative = ",".join(path.relative_to(memory_dir).as_posix() for path in paths)
+    return f"PREVIEW files={relative} artifact={preview_path}", paths
 
 
 def self_test() -> None:
     with tempfile.TemporaryDirectory() as raw:
         root = Path(raw)
         project = root / "repo"
-        agent = root / "memory" / "projects" / "Demo" / "Platform" / "Agent"
+        memory = root / "memory" / "projects" / "Demo" / "Platform" / "Agent" / "Memory"
         project.mkdir(parents=True)
-        agent.mkdir(parents=True)
+        memory.mkdir(parents=True)
         source = project / DEFAULT_SOURCE
         source.parent.mkdir()
         source.write_text(
-            json.dumps({"type": "decision", "topic": "issue-workbench", "decision": "Use lite mode for one issue.", "reason": "Avoid graph overhead.", "source": "self-test", "durable": True}) + "\n",
+            json.dumps(
+                {
+                    "type": "decision",
+                    "topic": "Issue Workbench",
+                    "decision": "Use lite mode for one issue.",
+                    "reason": "Avoid graph overhead.",
+                    "source": "self-test",
+                    "durable": True,
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
-        index = agent / INDEX_NAME
-        index.write_text("# Platform Agent\n\n## Decisions\n", encoding="utf-8")
-        status, updated = distill(project, source, index)
-        assert status.startswith("UPDATED")
-        assert len(updated) == 1
-        staged = agent / "Decisions" / "Inbox" / "issue-workbench.md"
-        assert updated == [staged]
-        assert staged.exists()
-        assert "Use lite mode" in staged.read_text(encoding="utf-8")
-        assert "issue-workbench" not in index.read_text(encoding="utf-8")
-        status_again, updated_again = distill(project, source, index)
-        assert status_again == "SKIPPED reason=records already present"
-        assert updated_again == []
+        index = memory / "index.md"
+        index.write_text("# Memory\n\n## Decisions\n", encoding="utf-8")
+        os.environ["OBSIDIAN_ROOT"] = os.fspath(root / "memory")
+        (project / "AGENTS.md").write_text(
+            "OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/projects/Demo/Platform\n",
+            encoding="utf-8",
+        )
+        assert resolve_router(project) == index.resolve()
 
-        legacy = root / "legacy" / "projects" / "Demo" / "Agent" / "Memory"
-        legacy.mkdir(parents=True)
-        router = legacy / LEGACY_ROUTER_NAME
-        router.write_text("# Memory Router\n\n## Memory\n", encoding="utf-8")
-        status_legacy, updated_legacy = distill(project, source, router)
-        assert status_legacy.startswith("UPDATED")
-        assert router in updated_legacy
+        staged = (memory / "Decisions" / "Inbox" / "issue-workbench.md").resolve()
+        preview_path = project / DEFAULT_PREVIEW
+        status, paths = distill(source, index, preview_path, today="2026-07-10")
+        assert status.startswith("PREVIEW files=Decisions/Inbox/issue-workbench.md artifact=")
+        assert paths == [staged]
+        assert not staged.exists()
+        preview = json.loads(preview_path.read_text(encoding="utf-8"))
+        rendered = preview["changes"][0]["content"]
+
+        original_source = source.read_text(encoding="utf-8")
+        source.write_text(original_source + "\n", encoding="utf-8")
+        try:
+            distill(source, index, preview_path, apply=True)
+        except SystemExit as exc:
+            assert "source changed after preview" in str(exc)
+        else:
+            raise AssertionError("applied preview after source drift")
+        source.write_text(original_source, encoding="utf-8")
+
+        staged.parent.mkdir(parents=True)
+        staged.write_text("intervening edit\n", encoding="utf-8")
+        try:
+            distill(source, index, preview_path, apply=True)
+        except SystemExit as exc:
+            assert "changed after preview" in str(exc)
+        else:
+            raise AssertionError("applied preview over changed staged memory")
+        staged.unlink()
+
+        status, paths = distill(source, index, preview_path, apply=True, today="2099-01-01")
+        assert status == "UPDATED files=Decisions/Inbox/issue-workbench.md"
+        assert paths == [staged]
+        assert staged.read_text(encoding="utf-8") == rendered
+        assert not preview_path.exists()
+
+        status, paths = distill(source, index, preview_path, today="2026-07-10")
+        assert status == "SKIPPED reason=records already present"
+        assert paths == []
+
+        escape_memory = root / "escape-memory"
+        escape_memory.mkdir()
+        escape_index = escape_memory / "index.md"
+        escape_index.write_text("# Memory\n", encoding="utf-8")
+        escape_preview = project / ".context/escape-preview.json"
+        status, _ = distill(source, escape_index, escape_preview, today="2026-07-10")
+        assert status.startswith("PREVIEW")
+        outside_inbox = root / "outside-inbox"
+        outside_inbox.mkdir()
+        (escape_memory / "Decisions").mkdir()
+        (escape_memory / "Decisions" / "Inbox").symlink_to(outside_inbox, target_is_directory=True)
+        try:
+            distill(source, escape_index, escape_preview, apply=True)
+        except SystemExit as exc:
+            assert "must not contain symlinks" in str(exc)
+        else:
+            raise AssertionError("applied memory through symlinked Inbox")
+        assert not (outside_inbox / "issue-workbench.md").exists()
+        assert escape_preview.exists()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--source", default=DEFAULT_SOURCE)
-    parser.add_argument("--memory-router")
-    parser.add_argument("--agent-path")
-    parser.add_argument("--verify", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--apply", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
         self_test()
         return
     project_root = Path(args.project_root).resolve()
-    source = project_root / args.source
-    router = resolve_router(project_root, args.memory_router, args.agent_path)
-    if args.verify:
-        load_records(source)
-        if not router.exists():
-            raise SystemExit(f"agent memory index not found: {router}")
-    status, _ = distill(project_root, source, router, args.dry_run)
+    status, _ = distill(
+        project_root / args.source,
+        resolve_router(project_root),
+        project_root / DEFAULT_PREVIEW,
+        apply=args.apply,
+    )
     print(f"memory_write={status}")
 
 

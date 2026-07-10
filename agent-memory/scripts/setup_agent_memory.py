@@ -1,355 +1,435 @@
 #!/usr/bin/env python3
-"""Install project agent-memory plumbing."""
+"""Preview or apply the self-contained agent-memory bootstrap."""
 
 from __future__ import annotations
 
 import argparse
+import difflib
+import hashlib
+import json
 import os
 import tempfile
-from pathlib import Path
+from collections.abc import Callable
+from pathlib import Path, PurePosixPath
+
+from obsidian_project import DECLARATION, resolve_obsidian_project, unsymlinked_path
 
 
-SKILL_ROOT = Path(__file__).resolve().parents[1]
-AGENTS_SNIPPETS = SKILL_ROOT / "references" / "agents.md"
-INDEX_FILENAME = "index.md"
-LEGACY_MEMORY_ROUTER_FILENAME = "Memory Router.md"
+GLOBAL_START = "<!-- agent-memory:start -->"
+GLOBAL_END = "<!-- agent-memory:end -->"
+GLOBAL_BLOCK = f"""{GLOBAL_START}
+## Agent Memory
+
+If a project `AGENTS.md` defines `OBSIDIAN_PROJECT=${{OBSIDIAN_ROOT}}/<project-path>`, read `${{OBSIDIAN_ROOT}}/agent/knowledge-workflow.md` before loading project memory. Do not infer `OBSIDIAN_PROJECT`. If `OBSIDIAN_ROOT` or a configured memory file is unavailable, report it briefly and continue unless the task depends on it.
+{GLOBAL_END}"""
 
 PROGRESS_TEMPLATE = """# Progress
 
 No active task.
 
-Use this file as the local task ledger during implementation.
-
-## Notes
-
-- Keep this file local. Distill durable context with `$agent-memory` when requested.
+Use this ignored file as the local implementation ledger. Distill only durable context with `$agent-memory`.
 """
 
 IGNORED_CONTEXT_FILES = (
     ".context/progress.md",
     ".context/decisions.jsonl",
     ".context/memory-context.md",
+    ".context/memory-distill-preview.json",
 )
 
-
-AGENT_INDEX_TEMPLATE = """---
+MEMORY_INDEX_TEMPLATE = """---
 type: project-note
 status: active
 tags: []
 ---
-# Agent
+# Memory
 
-**Summary**: Lean router for approved project agent decisions and reusable guidance.
+**Summary**: Router for approved project decisions and reusable guidance.
 
----
-
-## Role
-
-Single router for approved project agent decisions and guidance.
-
-## Loading Rule
-
-Read this index before non-trivial project work. Load only the specific approved decision or guidance note whose title or summary matches the task. Do not load the full library by default. Do not read `Decisions/Inbox/` or `Guidance/Inbox/` during normal context loading; use Inbox only to create, review, or explicitly promote staged notes.
-
-Priority for conflicts: explicit task instructions, project `AGENTS.md`, decisions, guidance, global principles, then general judgment.
-
-When `$agent-memory` is invoked or progress distillation is requested, extract durable context into a new note under `Decisions/Inbox/<slug>.md` or `Guidance/Inbox/<slug>.md` using the same final note format. Treat Inbox folders as staging for human review. Do not create Inbox `index.md` files. Do not move staged notes into production folders or add them to this router unless explicitly approved. Do not preserve routine progress.
+<!-- Link approved notes below. Each filename stem is its globally unique topic ID. -->
 
 ## Decisions
 
 ## Guidance
 """
 
+Change = tuple[Path, bool, str, str]
+
+
+def resolve_obsidian_root() -> Path:
+    value = os.environ.get("OBSIDIAN_ROOT")
+    if not value:
+        raise SystemExit('OBSIDIAN_ROOT is not set; export OBSIDIAN_ROOT="/absolute/path/to/Obsidian/vault"')
+    root = Path(value).expanduser()
+    if not root.is_absolute() or not root.is_dir():
+        raise SystemExit(f"OBSIDIAN_ROOT must be an existing absolute directory: {root}")
+    return root.resolve()
+
+
+def project_parts(value: str) -> tuple[str, ...]:
+    raw = value.strip()
+    parts = raw.split("/")
+    path = PurePosixPath(raw)
+    if (
+        not raw
+        or path.is_absolute()
+        or "\\" in raw
+        or any(character in raw for character in ("$", "`"))
+        or any(ord(character) < 32 or ord(character) == 127 for character in raw)
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        raise SystemExit("--obsidian-project must be a relative path such as Project_Name")
+    return tuple(parts)
+
+
+def file_state(path: Path) -> tuple[bool, str]:
+    if path.is_symlink():
+        raise SystemExit(f"setup target must not be a symlink: {path}")
+    if not path.exists():
+        return False, ""
+    if not path.is_file():
+        raise SystemExit(f"setup target must be a regular file: {path}")
+    with path.open(encoding="utf-8", newline="") as handle:
+        return True, handle.read()
+
+
+def read(path: Path) -> str:
+    return file_state(path)[1]
+
+
+def preferred_newline(existing: str) -> str:
+    return "\r\n" if existing and existing.count("\r\n") == existing.count("\n") else "\n"
+
+
+def append_text(existing: str, addition: str) -> str:
+    newline = preferred_newline(existing)
+    separator = "" if not existing else (newline if existing.endswith("\n") else newline * 2)
+    rendered = addition.rstrip().replace("\n", newline)
+    return existing + separator + rendered + newline
+
+
+def render_global_agents(existing: str) -> str:
+    has_start = GLOBAL_START in existing
+    has_end = GLOBAL_END in existing
+    if has_start != has_end or existing.count(GLOBAL_START) > 1 or existing.count(GLOBAL_END) > 1:
+        raise SystemExit("~/.codex/AGENTS.md has malformed agent-memory markers")
+    if has_start:
+        start = existing.index(GLOBAL_START)
+        end = existing.find(GLOBAL_END, start)
+        if end < 0:
+            raise SystemExit("~/.codex/AGENTS.md has malformed agent-memory markers")
+        end += len(GLOBAL_END)
+        expected = GLOBAL_BLOCK.replace("\n", preferred_newline(existing))
+        if existing[start:end] != expected:
+            raise SystemExit("~/.codex/AGENTS.md has a conflicting agent-memory block")
+        return existing
+    if "knowledge-workflow.md" in existing:
+        raise SystemExit("~/.codex/AGENTS.md has unmarked agent-memory instructions; reconcile them first")
+    return append_text(existing, GLOBAL_BLOCK)
+
+
+def render_project_agents(existing: str, relative: str) -> str:
+    expected = f"${{OBSIDIAN_ROOT}}/{relative}"
+    matches = list(DECLARATION.finditer(existing))
+    if len(matches) > 1:
+        raise SystemExit("project AGENTS.md has multiple OBSIDIAN_PROJECT declarations")
+    if matches:
+        if matches[0].group(1).strip() != expected:
+            raise SystemExit("project AGENTS.md has a conflicting OBSIDIAN_PROJECT declaration")
+        return existing
+    return append_text(existing, f"OBSIDIAN_PROJECT={expected}")
+
+
+def render_gitignore(existing: str) -> str:
+    present = set(existing.splitlines())
+    missing = [item for item in IGNORED_CONTEXT_FILES if item not in present]
+    if not missing:
+        return existing
+    return append_text(existing, "# Agent local context\n" + "\n".join(missing))
+
+
+def add_change(changes: list[Change], path: Path, after: str, *, conflict: bool = False) -> None:
+    existed, before = file_state(path)
+    if conflict and existed and before != after:
+        raise SystemExit(f"refusing to overwrite existing file: {path}")
+    if not existed or before != after:
+        changes.append((path, existed, before, after))
+
+
+def add_rendered_change(changes: list[Change], path: Path, render: Callable[[str], str]) -> None:
+    existed, before = file_state(path)
+    after = render(before)
+    if not existed or before != after:
+        changes.append((path, existed, before, after))
+
+
+def validate_directory_path(path: Path) -> None:
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current /= part
+        if current.is_symlink() or (current.exists() and not current.is_dir()):
+            raise SystemExit(f"setup directory is not a real directory: {current}")
+
+
+def plan_setup(
+    project_root: Path,
+    obsidian_root: Path,
+    relative_parts: tuple[str, ...],
+    codex_home: Path,
+) -> tuple[list[Path], list[Change]]:
+    project_root = project_root.resolve()
+    obsidian_root = obsidian_root.resolve()
+    codex_home = codex_home.resolve()
+    if not project_root.is_dir():
+        raise SystemExit(f"project root does not exist: {project_root}")
+    relative = "/".join(relative_parts)
+    obsidian_project = unsymlinked_path(obsidian_root, *relative_parts)
+    memory_dir = unsymlinked_path(obsidian_project, "Agent", "Memory")
+    workflow = unsymlinked_path(obsidian_root, "agent", "knowledge-workflow.md")
+    workflow_template = (Path(__file__).parent.parent / "assets" / "knowledge-workflow.md").read_text(encoding="utf-8")
+
+    expected_dirs = [
+        codex_home,
+        workflow.parent,
+        project_root / ".context",
+        unsymlinked_path(memory_dir, "Decisions", "Inbox"),
+        unsymlinked_path(memory_dir, "Guidance", "Inbox"),
+    ]
+    missing_dirs: list[Path] = []
+    for path in expected_dirs:
+        validate_directory_path(path)
+        if not path.exists():
+            missing_dirs.append(path)
+
+    changes: list[Change] = []
+    global_agents = codex_home / "AGENTS.md"
+    project_agents = project_root / "AGENTS.md"
+    add_rendered_change(changes, global_agents, render_global_agents)
+    add_change(changes, workflow, workflow_template, conflict=True)
+    add_rendered_change(changes, project_agents, lambda text: render_project_agents(text, relative))
+    progress = project_root / ".context" / "progress.md"
+    progress_exists, _ = file_state(progress)
+    if not progress_exists:
+        add_change(changes, progress, PROGRESS_TEMPLATE)
+    add_rendered_change(changes, project_root / ".gitignore", render_gitignore)
+    index = unsymlinked_path(memory_dir, "index.md")
+    index_exists, _ = file_state(index)
+    if not index_exists:
+        add_change(changes, index, MEMORY_INDEX_TEMPLATE)
+    return missing_dirs, changes
+
+
+def emit_preview(directories: list[Path], changes: list[Change]) -> None:
+    for path in directories:
+        print(f"PREVIEW mkdir={path}")
+    for path, _, before, after in changes:
+        print(f"PREVIEW file={path}")
+        print(
+            "".join(
+                difflib.unified_diff(
+                    before.splitlines(keepends=True),
+                    after.splitlines(keepends=True),
+                    fromfile=f"{path} (current)",
+                    tofile=f"{path} (proposed)",
+                )
+            ),
+            end="",
+        )
+
+
+def confirmation_hash(directories: list[Path], changes: list[Change]) -> str:
+    payload = {
+        "directories": [str(path) for path in directories],
+        "changes": [[str(path), existed, before, after] for path, existed, before, after in changes],
+    }
+    rendered = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(rendered.encode()).hexdigest()
+
+
+def apply_setup(directories: list[Path], changes: list[Change]) -> None:
+    for path in directories:
+        validate_directory_path(path)
+    for path, existed, before, _ in changes:
+        validate_directory_path(path.parent)
+        if file_state(path) != (existed, before):
+            raise SystemExit(f"setup target changed after planning: {path}")
+    for path in directories:
+        path.mkdir(parents=True, exist_ok=True)
+    for path, _, _, after in changes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(after)
+        if read(path) != after:
+            raise SystemExit(f"setup write verification failed: {path}")
+
+
+def self_test() -> int:
+    with tempfile.TemporaryDirectory() as raw:
+        root = Path(raw)
+        vault = root / "vault"
+        project = root / "repo"
+        codex_home = root / "codex"
+        vault.mkdir()
+        project.mkdir()
+        codex_home.mkdir()
+        (project / "AGENTS.md").write_text("# Project\n", encoding="utf-8")
+        (project / ".gitignore").write_text("dist/\n", encoding="utf-8")
+        (codex_home / "AGENTS.md").write_text("# Global\n", encoding="utf-8")
+
+        previous = os.environ.pop("OBSIDIAN_ROOT", None)
+        try:
+            try:
+                resolve_obsidian_root()
+            except SystemExit as exc:
+                assert "is not set" in str(exc)
+            else:
+                raise AssertionError("accepted missing OBSIDIAN_ROOT")
+            os.environ["OBSIDIAN_ROOT"] = str(vault)
+            obsidian_root = resolve_obsidian_root()
+            parts = project_parts("Project_Name")
+            directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
+            assert directories and changes
+            assert not (vault / "Project_Name").exists()
+
+            token = confirmation_hash(directories, changes)
+            assert len(token) == 64
+            workflow = vault / "agent" / "knowledge-workflow.md"
+            workflow.parent.mkdir()
+            workflow.write_text("", encoding="utf-8")
+            try:
+                apply_setup(directories, changes)
+            except SystemExit as exc:
+                assert "changed after planning" in str(exc)
+            else:
+                raise AssertionError("overwrote an empty file created after preview")
+            try:
+                plan_setup(project, obsidian_root, parts, codex_home)
+            except SystemExit as exc:
+                assert "refusing to overwrite existing file" in str(exc)
+            else:
+                raise AssertionError("accepted an empty conflicting workflow")
+            workflow.unlink()
+            workflow.parent.rmdir()
+            directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
+            assert confirmation_hash(directories, changes) == token
+
+            gitignore = project / ".gitignore"
+            gitignore.write_text("dist/\n.cache/\n", encoding="utf-8")
+            try:
+                apply_setup(directories, changes)
+            except SystemExit as exc:
+                assert "changed after planning" in str(exc)
+            else:
+                raise AssertionError("applied a stale setup plan")
+            assert not (vault / "Project_Name").exists()
+            gitignore.write_text("dist/\n", encoding="utf-8")
+            directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
+            apply_setup(directories, changes)
+            assert GLOBAL_BLOCK in read(codex_home / "AGENTS.md")
+            assert "OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/Project_Name" in read(project / "AGENTS.md")
+            assert resolve_obsidian_project(project) == (vault / "Project_Name").resolve()
+            assert read(vault / "agent" / "knowledge-workflow.md").startswith("# Knowledge Workflow")
+            assert (vault / "Project_Name" / "Agent" / "Memory" / "Decisions" / "Inbox").is_dir()
+            assert (vault / "Project_Name" / "Agent" / "Memory" / "Guidance" / "Inbox").is_dir()
+            assert all(item in read(project / ".gitignore") for item in IGNORED_CONTEXT_FILES)
+
+            directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
+            assert directories == [] and changes == []
+
+            global_path = codex_home / "AGENTS.md"
+            global_path.write_text(read(global_path).replace("## Agent Memory", "## Changed"), encoding="utf-8")
+            try:
+                plan_setup(project, obsidian_root, parts, codex_home)
+            except SystemExit as exc:
+                assert "conflicting agent-memory block" in str(exc)
+            else:
+                raise AssertionError("accepted conflicting global memory instructions")
+
+            try:
+                render_global_agents(f"{GLOBAL_END}\n{GLOBAL_START}\n")
+            except SystemExit as exc:
+                assert "malformed agent-memory markers" in str(exc)
+            else:
+                raise AssertionError("accepted reversed global markers")
+
+            rendered = render_project_agents("# Project\r\n", "Project_Name")
+            assert rendered == "# Project\r\n\r\nOBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/Project_Name\r\n"
+            global_crlf = render_global_agents("# Global\r\n")
+            assert render_global_agents(global_crlf) == global_crlf
+
+            blocked_vault = root / "blocked-vault"
+            blocked_vault.mkdir()
+            (blocked_vault / "Project_Name").write_text("not a directory", encoding="utf-8")
+            try:
+                plan_setup(project, blocked_vault, parts, codex_home)
+            except SystemExit as exc:
+                assert "setup directory is not a real directory" in str(exc)
+            else:
+                raise AssertionError("accepted an intermediate file as a directory")
+
+            for invalid in (
+                "",
+                "/absolute",
+                "../escape",
+                "Project//Name",
+                "Project\\Name",
+                "${OBSIDIAN_ROOT}/Project_Name",
+                "Project`Name",
+                "$HOME/Project_Name",
+                "Project\nName",
+            ):
+                try:
+                    project_parts(invalid)
+                except SystemExit:
+                    pass
+                else:
+                    raise AssertionError(f"accepted invalid project path: {invalid}")
+            relative = "/".join(project_parts("Project_Name"))
+            declaration = render_project_agents("", relative).strip()
+            match = DECLARATION.fullmatch(declaration)
+            assert match and match.group(1) == "${OBSIDIAN_ROOT}/Project_Name"
+        finally:
+            if previous is None:
+                os.environ.pop("OBSIDIAN_ROOT", None)
+            else:
+                os.environ["OBSIDIAN_ROOT"] = previous
+    return 0
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default=".")
-    parser.add_argument("--agent-path")
-    parser.add_argument("--instruction-file", default="AGENTS.md")
+    parser.add_argument("--obsidian-project")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--confirm")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
-
     if args.self_test:
         return self_test()
-
-    if not args.agent_path:
-        parser.error("--agent-path is required unless --self-test is set")
+    if not args.obsidian_project:
+        parser.error("--obsidian-project is required")
+    if args.apply and not args.confirm:
+        parser.error("--apply requires --confirm from the latest preview")
+    if args.confirm and not args.apply:
+        parser.error("--confirm requires --apply")
 
     project_root = Path(args.project_root).resolve()
-    memory_root = parse_memory_root(parser)
-    agent_path = Path(os.path.expandvars(args.agent_path)).resolve()
-    require_under_memory_root(parser, agent_path, memory_root)
-    instruction_path = project_root / args.instruction_file
-
-    install_agent_memory(project_root, agent_path, instruction_path)
-
-    print("project agent memory setup complete")
+    obsidian_root = resolve_obsidian_root()
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser().resolve()
+    directories, changes = plan_setup(project_root, obsidian_root, project_parts(args.obsidian_project), codex_home)
+    if not directories and not changes:
+        print("setup=UNCHANGED")
+        return 0
+    token = confirmation_hash(directories, changes)
+    if not args.apply:
+        emit_preview(directories, changes)
+        print(f"setup=PREVIEW changes={len(directories) + len(changes)} confirm={token}")
+        return 0
+    if args.confirm != token:
+        raise SystemExit("setup changed after preview; preview again")
+    apply_setup(directories, changes)
+    print(f"setup=APPLIED changes={len(directories) + len(changes)}")
     return 0
-
-
-def install_agent_memory(project_root: Path, agent_path: Path, instruction_path: Path) -> None:
-    ensure_progress(project_root)
-    ensure_gitignore(project_root)
-    ensure_memory_router(agent_path)
-    ensure_agents(instruction_path, memory_ref(memory_router_path(agent_path)), agent_path)
-
-
-def parse_memory_root(parser: argparse.ArgumentParser) -> Path:
-    root = os.environ.get("AGENT_MEMORY_ROOT")
-    if not root:
-        parser.error("set AGENT_MEMORY_ROOT to the markdown root before running setup")
-    return Path(root).expanduser().resolve()
-
-
-def require_under_memory_root(parser: argparse.ArgumentParser, path: Path, root: Path) -> None:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        parser.error("--agent-path must be under AGENT_MEMORY_ROOT")
-
-
-def memory_ref(path: Path) -> str:
-    rel = path.resolve().relative_to(Path(os.environ["AGENT_MEMORY_ROOT"]).expanduser().resolve())
-    return "${AGENT_MEMORY_ROOT}/" + rel.as_posix()
-
-
-def ensure_progress(project_root: Path) -> None:
-    progress = project_root / ".context" / "progress.md"
-    progress.parent.mkdir(parents=True, exist_ok=True)
-    if not progress.exists():
-        progress.write_text(PROGRESS_TEMPLATE, encoding="utf-8")
-
-
-def ensure_gitignore(project_root: Path) -> None:
-    gitignore = project_root / ".gitignore"
-    text = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
-    existing = set(text.splitlines())
-    missing = [item for item in IGNORED_CONTEXT_FILES if item not in existing]
-    if not missing:
-        return
-    suffix = "" if not text or text.endswith("\n") else "\n"
-    block = "\n# Agent local context\n" + "\n".join(missing) + "\n"
-    gitignore.write_text(text + suffix + block, encoding="utf-8")
-
-
-def memory_router_path(agent_path: Path) -> Path:
-    return agent_path / INDEX_FILENAME
-
-
-def legacy_memory_router_path(agent_path: Path) -> Path:
-    return agent_path / "Memory" / LEGACY_MEMORY_ROUTER_FILENAME
-
-
-def ensure_memory_router(agent_path: Path) -> None:
-    agent_path.mkdir(parents=True, exist_ok=True)
-    (agent_path / "Decisions" / "Inbox").mkdir(parents=True, exist_ok=True)
-    (agent_path / "Guidance" / "Inbox").mkdir(parents=True, exist_ok=True)
-    index = memory_router_path(agent_path)
-    legacy = legacy_memory_router_path(agent_path)
-    if not index.exists() and legacy.exists():
-        index.write_text(migrate_legacy_index(legacy.read_text(encoding="utf-8")), encoding="utf-8")
-        return
-    if not index.exists():
-        index.write_text(AGENT_INDEX_TEMPLATE, encoding="utf-8")
-
-
-def migrate_legacy_index(text: str) -> str:
-    text = text.replace("# Memory Router", "# Agent", 1)
-    text = text.replace("# Agent Memory", "# Agent", 1)
-    text = text.replace("Read this router", "Read this index", 1)
-    text = text.replace("## Memory", "## Guidance", 1)
-    return text
-
-
-def ensure_agents(path: Path, memory_router_ref: str, agent_path: Path) -> None:
-    text = path.read_text(encoding="utf-8") if path.exists() else "# AGENTS.md\n"
-    text = ensure_section(text, "Context and precedence")
-    text = ensure_section(text, "Execution")
-
-    snippets = load_agents_snippets(memory_router_ref, memory_ref(agent_path))
-    text = remove_generated_memory_lines(text)
-    context_line = snippets["Context and precedence item"]
-    text = ensure_before_project_work_item(text, context_line)
-
-    text = ensure_section_bullet(text, "Execution", snippets["Execution item"])
-
-    path.write_text(text, encoding="utf-8")
-
-
-def load_agents_snippets(memory_router_ref: str, memory_dir_ref: str) -> dict[str, str]:
-    text = AGENTS_SNIPPETS.read_text(encoding="utf-8")
-    snippets = {
-        "Context and precedence item": extract_fenced_block(text, "Context and precedence item"),
-        "Execution item": extract_fenced_block(text, "Execution item"),
-    }
-    return {
-        key: value.format(
-            memory_router_ref=memory_router_ref,
-            memory_dir_ref=memory_dir_ref,
-        )
-        for key, value in snippets.items()
-    }
-
-
-def extract_fenced_block(text: str, heading: str) -> str:
-    marker = f"## {heading}"
-    start = text.index(marker)
-    fence_start = text.index("```md\n", start) + len("```md\n")
-    fence_end = text.index("\n```", fence_start)
-    return text[fence_start:fence_end]
-
-
-def remove_generated_memory_lines(text: str) -> str:
-    lines = text.splitlines()
-    execution_start = find_section_start(lines, "Execution")
-    execution_end = find_next_section(lines, execution_start) if execution_start is not None else -1
-    context_start = find_section_start(lines, "Context and precedence")
-    context_end = find_next_section(lines, context_start) if context_start is not None else -1
-    kept = []
-    for i, line in enumerate(lines):
-        in_execution = execution_start is not None and execution_start < i < execution_end
-        in_context = context_start is not None and context_start < i < context_end
-        generated_execution = (
-            in_execution
-            and line.startswith("- When `$agent-memory` is invoked or progress distillation is requested, ")
-            and ".context/progress.md" in line
-            and "future agents would otherwise rediscover" in line
-            and "Skip routine progress" in line
-        )
-        generated_context = (
-            in_context
-            and line.strip().startswith("- `")
-            and (
-                "/Agent/index.md`" in line
-                or "/Agent/Memory/index.md`" in line
-                or f"/Agent/Memory/{LEGACY_MEMORY_ROUTER_FILENAME}`" in line
-            )
-        )
-        if not (generated_execution or generated_context):
-            kept.append(line)
-    return "\n".join(kept) + "\n"
-
-
-def self_test() -> int:
-    previous_root = os.environ.get("AGENT_MEMORY_ROOT")
-    with tempfile.TemporaryDirectory() as raw_tmp:
-        tmp = Path(raw_tmp)
-        memory_root = tmp / "memory"
-        fresh_project_root = tmp / "fresh-repo"
-        fresh_agent_path = memory_root / "projects" / "Fresh" / "Platform" / "Agent"
-        fresh_instruction_path = fresh_project_root / "AGENTS.md"
-        legacy_project_root = tmp / "legacy-repo"
-        legacy_agent_path = memory_root / "projects" / "Example" / "Agent"
-        legacy_memory_dir = legacy_agent_path / "Memory"
-        legacy_instruction_path = legacy_project_root / "AGENTS.md"
-        fresh_project_root.mkdir()
-        legacy_project_root.mkdir()
-        legacy_memory_dir.mkdir(parents=True)
-        old_router = (
-            "# Memory Router\n\n"
-            "Summary: Durable context for future agents.\n\n"
-            "## Loading Rule\n\n"
-            "Read this router before non-trivial project work.\n\n"
-            "## Memory\n\n"
-            "- Existing note.\n"
-        )
-        legacy_memory_router_path(legacy_agent_path).write_text(old_router, encoding="utf-8")
-        legacy_instruction_path.write_text(
-            "# AGENTS.md\n\n"
-            "## Context and precedence\n\n"
-            "- Before project work, read:\n"
-            "  - `${AGENT_MEMORY_ROOT}/projects/Example/Agent/Memory/Memory Router.md`\n",
-            encoding="utf-8",
-        )
-
-        try:
-            os.environ["AGENT_MEMORY_ROOT"] = os.fspath(memory_root)
-            install_agent_memory(fresh_project_root, fresh_agent_path, fresh_instruction_path)
-
-            assert (fresh_project_root / ".context" / "progress.md").exists()
-            fresh_gitignore = (fresh_project_root / ".gitignore").read_text(encoding="utf-8")
-            assert ".context/progress.md" in fresh_gitignore
-            assert ".context/decisions.jsonl" in fresh_gitignore
-            assert ".context/memory-context.md" in fresh_gitignore
-            assert memory_router_path(fresh_agent_path).exists()
-            assert (fresh_agent_path / "Decisions" / "Inbox").is_dir()
-            assert (fresh_agent_path / "Guidance" / "Inbox").is_dir()
-            fresh_router_text = memory_router_path(fresh_agent_path).read_text(encoding="utf-8")
-            assert fresh_router_text.startswith("---")
-            assert "# Agent" in fresh_router_text
-            assert "Read this index" in fresh_router_text
-            assert "Decisions/Inbox" in fresh_router_text
-
-            instructions = fresh_instruction_path.read_text(encoding="utf-8")
-            assert "Agent/index.md" in instructions
-            assert "Agent/Memory/Memory Router.md" not in instructions
-            assert "Decisions/Inbox" in instructions
-
-            install_agent_memory(legacy_project_root, legacy_agent_path, legacy_instruction_path)
-            assert memory_router_path(legacy_agent_path).exists()
-            legacy_router_text = memory_router_path(legacy_agent_path).read_text(encoding="utf-8")
-            assert legacy_router_text.startswith("# Agent")
-            assert "Read this index" in legacy_router_text
-            assert "Existing note" in legacy_router_text
-            instructions = legacy_instruction_path.read_text(encoding="utf-8")
-            assert "Agent/index.md" in instructions
-            assert "Agent/Memory/Memory Router.md" not in instructions
-        finally:
-            if previous_root is None:
-                os.environ.pop("AGENT_MEMORY_ROOT", None)
-            else:
-                os.environ["AGENT_MEMORY_ROOT"] = previous_root
-    return 0
-
-
-def find_section_start(lines: list[str], title: str) -> int | None:
-    marker = f"## {title}"
-    for i, line in enumerate(lines):
-        if line == marker:
-            return i
-    return None
-
-
-def find_next_section(lines: list[str], start: int) -> int:
-    for i in range(start + 1, len(lines)):
-        if lines[i].startswith("## "):
-            return i
-    return len(lines)
-
-
-def ensure_section(text: str, title: str) -> str:
-    marker = f"## {title}"
-    if marker in text:
-        return text
-    suffix = "" if text.endswith("\n") else "\n"
-    return f"{text}{suffix}\n{marker}\n\n"
-
-
-def ensure_before_project_work_item(text: str, line: str) -> str:
-    if line in text:
-        return text
-    lines = text.splitlines()
-    for i, current in enumerate(lines):
-        if current.strip() == "- Before project work, read:":
-            lines.insert(i + 1, line)
-            return "\n".join(lines) + "\n"
-    return ensure_section_bullet(
-        text,
-        "Context and precedence",
-        f"- Before project work, read:\n{line}",
-    )
-
-
-def ensure_section_bullet(text: str, title: str, bullet: str) -> str:
-    if bullet in text:
-        return text
-    marker = f"## {title}"
-    start = text.index(marker)
-    next_section = text.find("\n## ", start + len(marker))
-    insert_at = len(text) if next_section == -1 else next_section
-    before = text[:insert_at].rstrip()
-    after = text[insert_at:]
-    return f"{before}\n\n{bullet}\n{after}"
 
 
 if __name__ == "__main__":

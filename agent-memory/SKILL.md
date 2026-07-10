@@ -1,6 +1,6 @@
 ---
 name: agent-memory
-description: Set up and use project-scoped agent memory with `.context/progress.md`, `.gitignore`, repo instructions, and markdown files under `AGENT_MEMORY_ROOT`. Use when the user invokes `$agent-memory`, asks to set up agent memory, project memory, progress tracking, `.context/progress.md`, markdown Agent memory, or asks to distill progress.
+description: Use project-scoped agent memory with `.context/progress.md` and markdown files under `OBSIDIAN_PROJECT`. Use when the user invokes `$agent-memory`, requests project memory or progress distillation, or explicitly invokes `$agent-memory --setup` to configure it.
 ---
 
 # Agent Memory
@@ -12,42 +12,27 @@ Maintain the smallest durable memory loop:
 - `.context/progress.md` is the local, ignored task ledger.
 - `.context/decisions.jsonl` is the local, ignored durable-decision candidate log.
 - `.context/memory-context.md` is generated task context loaded from matching memory notes.
-- `AGENTS.md` tells agents how to use progress and markdown Agent memory.
-- `${AGENT_MEMORY_ROOT}/projects/.../Agent/index.md` is the approved project router.
-- `${AGENT_MEMORY_ROOT}/projects/.../Agent/Decisions/` and `Guidance/` store approved notes.
+- `.context/memory-distill-preview.json` stores ignored rendered bytes and state hashes between distillation preview and apply.
+- The project `AGENTS.md` declares `OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/<project-path>` and supplies only project-specific instructions.
+- `${OBSIDIAN_PROJECT}/Agent/Memory/index.md` is the approved project memory router.
+- `${OBSIDIAN_PROJECT}/Agent/Memory/Decisions/` and `Guidance/` store approved notes.
 - `Decisions/Inbox/` and `Guidance/Inbox/` are staging only; agents create there but do not promote or link staged notes without explicit approval.
 
 Memory is artifact-driven, not conversation-driven: append structured decision candidates during work, then let scripts conservatively patch topic notes. Do not create one note per PR.
 
-## Setup
+## Setup Gate
 
-Use setup when a project needs this system installed or checked.
-
-1. Resolve the project markdown `Agent/` folder under `AGENT_MEMORY_ROOT`. If ambiguous, ask. Example: `${AGENT_MEMORY_ROOT}/projects/Evermark/Platform/Agent`.
-2. Set `AGENT_MEMORY_ROOT` to the markdown root for this shell session.
-3. From this skill folder, run:
-
-```bash
-export AGENT_MEMORY_ROOT="/path/to/markdown-root"
-python3 scripts/setup_agent_memory.py \
-  --project-root /path/to/project \
-  --agent-path "$AGENT_MEMORY_ROOT/projects/<Project>/.../Agent"
-```
-
-4. Review the diff against `references/setup.md`.
-
-Reference: `references/setup.md`.
-Canonical `AGENTS.md` snippets: `references/agents.md`.
+Only when the invocation includes `--setup`, read and follow `references/setup.md`. Otherwise, do not read that reference or run setup.
 
 ## Context Load
 
 Use deterministic context load at the start of non-trivial implementation when memory is configured:
 
 ```bash
-python3 scripts/memory_context.py --project-root /path/to/project --agent-path "$AGENT_MEMORY_ROOT/projects/<Project>/.../Agent" --issue <issue_number> --out .context/memory-context.md
+python3 scripts/memory_context.py --project-root /path/to/project --topic <topic-id> --out .context/memory-context.md
 ```
 
-Read `.context/memory-context.md` only if matching notes were loaded.
+The topic ID is the lowercase slug of an approved note filename linked from `Agent/Memory/index.md` and must be unique across Decisions and Guidance. Load at most two exact topics. The generated file is capped at 6,000 characters. Read it only when notes were loaded.
 
 ## Decision Capture
 
@@ -63,23 +48,31 @@ python3 scripts/append_decision.py \
 ```
 
 Skip routine progress, checks, and implementation details.
+Equivalent normalized decisions receive the same stable ID and are recorded once.
 
 ## Distill
 
-Use conservative distillation before final PR handoff or when explicitly requested:
+Preview conservative distillation before final PR handoff or when explicitly requested:
 
 ```bash
-python3 scripts/distill_memory.py --project-root /path/to/project --agent-path "$AGENT_MEMORY_ROOT/projects/<Project>/.../Agent" --source .context/decisions.jsonl --verify
+python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
 ```
 
-The command either prints `memory_write=SKIPPED ...` or writes staged notes under `Agent/Decisions/Inbox/` or `Agent/Guidance/Inbox/`. It must not create one note per PR, promote Inbox notes, or edit `Agent/index.md` unless explicitly approved.
+Inspect `.context/memory-distill-preview.json`, then apply those exact rendered bytes only after approval:
+
+```bash
+python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
+```
+
+Topic slugs map directly to staged filenames under `Agent/Memory/Decisions/Inbox/` or `Agent/Memory/Guidance/Inbox/`; note bodies are never searched to choose a target. Apply rejects source or staged-note drift after preview. The command must not create one note per PR, promote Inbox notes, or edit `Agent/Memory/index.md` unless explicitly approved.
 
 ## Distill On Request
 
-When the user invokes `$agent-memory` for distillation or asks to distill progress, run:
+When the user invokes `$agent-memory` for distillation or asks to distill progress, preview then apply after approval:
 
 ```bash
-python3 scripts/distill_memory.py --project-root /path/to/project --agent-path "$AGENT_MEMORY_ROOT/projects/<Project>/.../Agent" --source .context/decisions.jsonl --verify
+python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
+python3 scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
 ```
 
 Use `.context/progress.md` only to clarify already durable decisions. Follow `references/distill.md` for what qualifies.

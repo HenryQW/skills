@@ -19,6 +19,17 @@ These workflows assume the external tools are already available:
 - `$grill-with-docs` available before `issue-blueprint` runs.
 - `greptile` is optional; `review-checkpoint` falls back to adversarial review when unavailable.
 
+## 🧠 Agent Memory Setup
+
+`agent-memory` includes its own Obsidian policy and bootstrap script. Export an existing vault root before launching the agent:
+
+```bash
+export OBSIDIAN_ROOT="/absolute/path/to/Obsidian/vault"
+npx skills install HenryQW/skills agent-memory -a codex -y
+```
+
+Then invoke `$agent-memory --setup Project_Name`. Setup instructions are loaded only when `--setup` is present; normal memory work does not spend context on them. Setup previews the global, project, local-context, and Obsidian changes and applies them only after approval with the preview hash. It never edits shell startup files. See [`agent-memory/references/setup.md`](agent-memory/references/setup.md) for the exact commands and file effects.
+
 ## 🧭 Workflow Map
 
 ```mermaid
@@ -157,7 +168,7 @@ These tables are the canonical skill inventory: category, purpose, install comma
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-04 06:23 |
-| Support | `agent-memory` | Set up and distill project-scoped Agent memory. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-04 06:23 |
+| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-10 12:37 |
 | Support | `skill-optimizer` | Optimize existing workflow skills by removing repeated decisions and tightening safety. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-06 22:20 |
 
 ## 📄 License
