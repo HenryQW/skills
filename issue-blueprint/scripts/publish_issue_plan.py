@@ -89,8 +89,8 @@ def self_test() -> None:
             plan = {
                 "tracker": {"title": "Tracker", "goal": "Goal.", "constraints": ["C."], "non_goals": ["N."], "definition_of_done": ["D."]},
                 "issues": [
-                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
-                    {"id": "b", "title": "B", "role": "final_check", "purpose": "B.", "context": ["B."], "acceptance": ["B."], "blocked_by": ["a"], "blocks": [], "parallelism": "Second."},
+                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "testing": {"seam": "public API", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
+                    {"id": "b", "title": "B", "role": "final_check", "purpose": "B.", "context": ["B."], "acceptance": ["B."], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": [], "parallelism": "Second."},
                 ],
                 "waves": [{"name": "Wave 0", "items": ["a"], "notes": "Start."}, {"name": "Wave 1", "items": ["b"], "notes": "End."}],
             }

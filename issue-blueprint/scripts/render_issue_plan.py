@@ -24,6 +24,23 @@ def checkbox(items: list[str]) -> str:
     return "\n".join(f"- [ ] {item}" for item in items) or "- [ ] Define acceptance criteria."
 
 
+def validate_testing(issue: dict) -> None:
+    testing = issue.get("testing")
+    issue_id = issue.get("id", "<unknown>")
+    if isinstance(testing, str):
+        if not testing.strip():
+            raise SystemExit(f"{issue_id}.testing must not be empty")
+        return
+    if not isinstance(testing, dict):
+        raise SystemExit(f"{issue_id}.testing is required")
+    required = ("seam", "validation", "do_not_test")
+    missing = [key for key in required if not str(testing.get(key, "")).strip()]
+    if missing:
+        raise SystemExit(f"{issue_id}.testing missing {', '.join(missing)}")
+    if testing.get("seam") == "Not specified" or testing.get("validation") == "Not specified":
+        raise SystemExit(f"{issue_id}.testing must be explicit")
+
+
 def validate(plan: dict) -> None:
     if not plan.get("tracker", {}).get("title"):
         raise SystemExit("tracker.title is required")
@@ -47,6 +64,7 @@ def validate(plan: dict) -> None:
         raise SystemExit(f"{final_id} final_check must not block other issues")
     for issue in plan["issues"]:
         issue_id = issue["id"]
+        validate_testing(issue)
         for key in ("blocked_by", "blocks"):
             deps = set(issue.get(key, []))
             if issue_id in deps:
@@ -94,6 +112,24 @@ def ordered_issues(plan: dict) -> list[dict]:
     return ordered
 
 
+def testing_section(issue: dict) -> str:
+    testing = issue.get("testing") or {}
+    if isinstance(testing, str):
+        return testing
+    seam = testing.get("seam", "Not specified.")
+    existing = testing.get("existing_tests", "Not specified.")
+    validation = testing.get("validation", "Not specified.")
+    do_not_test = testing.get("do_not_test", "Implementation details.")
+    return "\n".join(
+        [
+            f"- Seam: {seam}",
+            f"- Existing similar tests: {existing}",
+            f"- Validation command: {validation}",
+            f"- Do not test: {do_not_test}",
+        ]
+    )
+
+
 def child_body(issue: dict, numbers: dict[str, str], tracker_issue: str | None) -> str:
     context = "\n".join(f"- {line}" for line in issue.get("context", [])) or "- No extra context."
     return f"""## Tracker
@@ -110,6 +146,10 @@ Context:
 ## Acceptance criteria
 
 {checkbox(issue.get("acceptance", []))}
+
+## Testing
+
+{testing_section(issue)}
 
 ## Blocked by
 
@@ -195,8 +235,8 @@ def self_test() -> None:
         "tracker": {"title": "x", "goal": "g", "constraints": ["c"], "non_goals": ["n"], "definition_of_done": ["d"]},
         "dropped_findings": [{"finding": "duplicate cleanup", "reason": "duplicate of #1"}],
         "issues": [
-            {"id": "b", "title": "B", "role": "final_check", "purpose": "B work.", "acceptance": ["b ok"], "blocked_by": ["a"], "blocks": []},
-            {"id": "a", "title": "A", "purpose": "A work.", "acceptance": ["a ok"], "blocked_by": [], "blocks": ["b"]},
+            {"id": "b", "title": "B", "role": "final_check", "purpose": "B work.", "acceptance": ["b ok"], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": []},
+            {"id": "a", "title": "A", "purpose": "A work.", "acceptance": ["a ok"], "testing": {"seam": "public API", "existing_tests": "none found", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"]},
         ],
         "waves": [
             {"name": "Wave 0", "items": ["a"], "notes": "start"},
@@ -212,6 +252,7 @@ def self_test() -> None:
         nums.write_text(json.dumps({"a": "#1", "b": "#2"}))
         render(plan_path, out, nums, "#9")
         assert "#9" in (out / "01-a.md").read_text()
+        assert "## Testing" in (out / "01-a.md").read_text()
         assert "#1" in (out / "00-tracker.md").read_text()
         assert "duplicate cleanup" in (out / "00-tracker.md").read_text()
         assert "a\tA\t" in (out / "create-order.tsv").read_text()

@@ -21,6 +21,12 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
       "purpose": "One sentence purpose.",
       "context": ["Why this issue exists."],
       "acceptance": ["A concrete checkbox."],
+      "testing": {
+        "seam": "Public interface or behavior boundary under test.",
+        "existing_tests": "tests/example.test.ts or none found",
+        "validation": "npm test -- example.test.ts",
+        "do_not_test": "Implementation details or private helpers."
+      },
       "blocked_by": [],
       "blocks": ["tail"],
       "parallelism": "Root blocker; do this first."
@@ -48,6 +54,7 @@ Rules:
 - `id` is stable and lowercase. It becomes the filename slug and numbers-map key.
 - `blocked_by` and `blocks` use issue IDs, not GitHub numbers.
 - `tracker` creates the implementation tracker issue. Do not create a child issue for the implementation tracker.
+- `testing` is required for every implementation child. It captures the public seam, existing similar tests, smallest validation command, and what not to test. Use `seam: none` only with a concrete alternative validation path.
 - `dropped_findings` is optional, but required when repo-surveyor or review findings were excluded before publish. Record the reason so the parent graph explains why duplicates were not sliced.
 - Exactly one issue must use `"role": "final_check"`; it must be blocked by every non-final child and block nothing.
 - Keep bodies short enough to scan, but include enough context for an AFK agent.
