@@ -11,9 +11,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from render_issue_plan import render
-from render_issue_plan import ordered_issues
 from render_issue_plan import self_test as render_self_test
+from render_issue_plan import render
+from issue_plan import final_check, load_plan, ordered_issues
 
 
 def run(cmd: list[str]) -> str:
@@ -26,7 +26,7 @@ def save(path: Path, data: dict[str, str]) -> None:
 
 def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bool = False) -> dict[str, str]:
     plan_data = plan_path.read_bytes()
-    plan = json.loads(plan_data)
+    plan = load_plan(plan_path)
     numbers_path = out / "numbers.json"
     state_path = out / "publish-state.json"
     expected_state = {"repo": repo, "plan_sha256": hashlib.sha256(plan_data).hexdigest()}
@@ -67,6 +67,7 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
         numbers["tracker"] = f"#{tracker_url.rsplit('/', 1)[-1]}"
         save(numbers_path, numbers)
     render(plan_path, out, numbers_path, numbers["tracker"])
+    run(["gh", "issue", "edit", numbers["tracker"].lstrip("#"), "--repo", repo, "--body-file", str(out / "00-tracker.md")])
 
     for row in (out / "create-order.tsv").read_text().splitlines():
         issue_id, _, body_file = row.split("\t")
@@ -75,16 +76,16 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
 
 
 def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path, numbers_path: Path) -> str:
-    plan = json.loads(plan_path.read_text())
+    plan = load_plan(plan_path)
     children = [numbers[issue["id"]] for issue in ordered_issues(plan)]
-    final_check = next(numbers[issue["id"]] for issue in plan["issues"] if issue.get("role") == "final_check")
+    final_check_number = numbers[final_check(plan)["id"]]
     parent = numbers["tracker"]
     return "\n".join(
         [
             "execution:",
             f"parent_issue={parent}",
             f"child_issues={' '.join(children)}",
-            f"final_check_issue={final_check}",
+            f"final_check_issue={final_check_number}",
             f"numbers_json={numbers_path.resolve()}",
             f"shipyard_worktree={worktree}",
             f"shipyard_command=Use $shipyard {parent}",
@@ -130,6 +131,8 @@ def self_test() -> None:
             assert f"numbers_json={(root / 'out' / 'numbers.json').resolve()}" in block
             assert f"shipyard_worktree={root}" in block
             assert "shipyard_command=Use $shipyard #3" in block
+            assert "issue-plan-graph" in (root / "out" / "00-tracker.md").read_text()
+            assert "issue-plan-graph" in (root / "out" / "01-a.md").read_text()
             assert json.loads((root / "out" / "publish-state.json").read_text())["repo"] == "o/r"
 
             try:

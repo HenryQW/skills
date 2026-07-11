@@ -11,8 +11,9 @@ import sys
 from typing import Any, Callable
 
 
-SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 ISSUE_REF_RE = re.compile(r"(?:https://github\.com/[^/\s]+/[^/\s]+/issues/|#)([1-9][0-9]*)")
+GRAPH_RE = re.compile(r"<!--\s*issue-plan-graph\s*\n(.*?)\n-->", re.DOTALL)
+GRAPH_VERSION = 1
 
 
 def run(command: list[str]) -> str:
@@ -36,41 +37,58 @@ def issue_number(value: str) -> str:
     return match.group(1)
 
 
-def section(text: str, title: str) -> str:
-    matches = list(SECTION_RE.finditer(text or ""))
-    for index, match in enumerate(matches):
-        if match.group(1).strip().lower() != title.lower():
-            continue
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        return text[start:end].strip()
-    return ""
+def graph_from_body(body: str) -> dict[str, Any]:
+    match = GRAPH_RE.search(body or "")
+    if not match:
+        raise SystemExit("parent issue is missing issue-plan-graph payload")
+    try:
+        graph = json.loads(match.group(1))
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"malformed issue-plan-graph payload: {error.msg}") from error
+    if not isinstance(graph, dict):
+        raise SystemExit("malformed issue-plan-graph payload: expected an object")
+    version = graph.get("version")
+    if version != GRAPH_VERSION:
+        raise SystemExit(f"unsupported issue-plan-graph version: {version!r}")
+    if not isinstance(graph.get("tracker"), int) or graph["tracker"] < 1:
+        raise SystemExit("malformed issue-plan-graph payload: tracker must be a positive integer")
+    issues = graph.get("issues")
+    if not isinstance(issues, list) or not issues:
+        raise SystemExit("malformed issue-plan-graph payload: issues must be a non-empty list")
+    numbers: set[int] = set()
+    ids: set[str] = set()
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, dict):
+            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}] must be an object")
+        if not isinstance(issue.get("id"), str) or not issue["id"]:
+            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].id is required")
+        number = issue.get("number")
+        if not isinstance(number, int) or number < 1:
+            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].number must be a positive integer")
+        if issue["id"] in ids or number in numbers:
+            raise SystemExit("malformed issue-plan-graph payload: duplicate issue id or number")
+        ids.add(issue["id"])
+        numbers.add(number)
+        for key in ("blocked_by", "blocks"):
+            refs = issue.get(key)
+            if not isinstance(refs, list) or any(not isinstance(ref, int) or ref < 1 for ref in refs):
+                raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].{key} must contain positive integers")
+    for issue in issues:
+        unknown = (set(issue["blocked_by"]) | set(issue["blocks"])) - numbers
+        if unknown:
+            raise SystemExit(f"malformed issue-plan-graph payload: unknown issue references {sorted(unknown)}")
+    return graph
 
 
-def refs(text: str) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for match in ISSUE_REF_RE.finditer(text or ""):
-        number = match.group(1)
-        if number not in seen:
-            seen.add(number)
-            result.append(number)
-    return result
-
-
-def child_from_issue(issue: dict[str, Any]) -> dict[str, Any]:
-    body = issue.get("body") or ""
-    labels = {label.get("name", "").lower() for label in issue.get("labels") or []}
-    title = issue.get("title", "")
+def child_from_issue(issue: dict[str, Any], graph_issue: dict[str, Any]) -> dict[str, Any]:
     return {
         "number": str(issue["number"]),
-        "title": title,
+        "title": issue.get("title", ""),
         "state": issue.get("state", ""),
         "url": issue.get("url", ""),
-        "blocked_by": refs(section(body, "Blocked by")),
-        "blocks": refs(section(body, "Blocks")),
-        "parallelism": section(body, "Parallelism"),
-        "final_check": "final_check" in labels or "final_check" in body or "final_check" in title.lower(),
+        "blocked_by": [str(number) for number in graph_issue["blocked_by"]],
+        "blocks": [str(number) for number in graph_issue["blocks"]],
+        "final_check": graph_issue.get("role") == "final_check",
         "closing_prs": normalize_prs(issue.get("closedByPullRequestsReferences")),
     }
 
@@ -115,13 +133,6 @@ def branch_mode(current_branch: str, default_branch: str) -> str:
     return "default_branch_blocked" if current_branch == default_branch else "integration"
 
 
-def mark_final_check(children: list[dict[str, Any]]) -> None:
-    child_numbers = {child["number"] for child in children}
-    for child in children:
-        graph_final = not child["blocks"] and set(child["blocked_by"]) == child_numbers - {child["number"]}
-        child["final_check"] = child["final_check"] or graph_final
-
-
 def graph_errors(children: list[dict[str, Any]]) -> list[str]:
     errors: list[str] = []
     if not children:
@@ -138,7 +149,6 @@ def child_is_done(child: dict[str, Any], default_branch: str) -> bool:
 
 def classify(children: list[dict[str, Any]], default_branch: str, local_done: set[str] | None = None) -> list[dict[str, Any]]:
     local_done = local_done or set()
-    mark_final_check(children)
     by_number = {child["number"]: child for child in children}
     for child in children:
         blockers = [by_number.get(number) for number in child["blocked_by"]]
@@ -179,21 +189,24 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
     parent_number = issue_number(parent_issue)
     repo_args = ["--repo", repo] if repo else []
     parent = gh_json(["issue", "view", parent_number, *repo_args, "--json", "number,title,url,body,state"])
-    child_numbers = [number for number in refs(parent.get("body") or "") if number != str(parent["number"])]
+    graph = graph_from_body(parent.get("body") or "")
+    if graph["tracker"] != parent["number"]:
+        raise SystemExit(f"issue-plan-graph tracker #{graph['tracker']} does not match parent #{parent['number']}")
     children = [
         child_from_issue(
             gh_json(
                 [
                     "issue",
                     "view",
-                    number,
+                    str(graph_issue["number"]),
                     *repo_args,
                     "--json",
-                    "number,title,url,state,body,labels,closedByPullRequestsReferences",
+                    "number,title,url,state,closedByPullRequestsReferences",
                 ]
-            )
+            ),
+            graph_issue,
         )
-        for number in child_numbers
+        for graph_issue in graph["issues"]
     ]
     default_branch = gh_json(repo_view_args(repo))["defaultBranchRef"]["name"]
     current_branch = run(["git", "branch", "--show-current"])
@@ -236,9 +249,11 @@ def print_text(plan: dict[str, Any]) -> None:
 
 
 def self_test() -> None:
-    parent_body = "| #11 | work | - | #12 |\n| #12 | final | #11 | - |"
+    parent_body = '<!-- issue-plan-graph\n{"version":1,"tracker":10,"issues":[{"id":"a","number":11,"role":"implementation","blocked_by":[],"blocks":[12]},{"id":"b","number":12,"role":"final_check","blocked_by":[11],"blocks":[]}]}\n-->'
+    graph = graph_from_body(parent_body)
     child_a = child_from_issue(
-        {"number": 11, "title": "foundation", "state": "OPEN", "url": "", "labels": [], "body": "## Blocked by\n-\n## Blocks\n#12"}
+        {"number": 11, "title": "foundation", "state": "OPEN", "url": ""},
+        graph["issues"][0],
     )
     child_b = child_from_issue(
         {
@@ -246,9 +261,8 @@ def self_test() -> None:
             "title": "final verification",
             "state": "OPEN",
             "url": "",
-            "labels": [],
-            "body": "## Blocked by\n#11\n## Blocks\n-",
-        }
+        },
+        graph["issues"][1],
     )
     child_c = child_from_issue(
         {
@@ -256,13 +270,23 @@ def self_test() -> None:
             "title": "started work",
             "state": "OPEN",
             "url": "",
-            "labels": [],
-            "body": "## Blocked by\n-\n## Blocks\n-",
             "closedByPullRequestsReferences": [{"number": 3, "url": "https://github.com/org/repo/pull/3", "state": "OPEN"}],
-        }
+        },
+        {"blocked_by": [], "blocks": [], "role": "implementation"},
     )
-    assert refs(parent_body) == ["11", "12"]
-    assert section(child_b["parallelism"], "anything") == ""
+    assert graph["tracker"] == 10
+    for body, expected in (
+        ("", "missing issue-plan-graph"),
+        ("<!-- issue-plan-graph\n{bad}\n-->", "malformed issue-plan-graph"),
+        ('<!-- issue-plan-graph\n{"version":2}\n-->', "unsupported issue-plan-graph version"),
+        ('<!-- issue-plan-graph\n{"version":1,"tracker":10,"issues":{}}\n-->', "issues must be a non-empty list"),
+    ):
+        try:
+            graph_from_body(body)
+        except SystemExit as error:
+            assert expected in str(error)
+        else:
+            raise AssertionError(f"expected graph error containing {expected!r}")
     classified = classify([child_a, child_b], "main")
     assert classified[0]["status"] == "runnable"
     assert classified[1]["status"] == "blocked"
