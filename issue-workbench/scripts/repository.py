@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -60,6 +61,36 @@ def issue(number: str, fields: str, repo: str | None = None) -> dict[str, object
     return value
 
 
+def normalize_slug(raw: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    return re.sub(r"-{2,}", "-", slug)
+
+
+def branch_name(issue_number: str, branch_slug: str | None = None) -> str:
+    if not re.fullmatch(r"[1-9][0-9]*", issue_number):
+        raise ValueError("issue_number must be a positive integer")
+    if not branch_slug:
+        return f"issue-{issue_number}"
+    slug = normalize_slug(branch_slug)
+    if not slug:
+        raise ValueError("branch_slug must contain at least one letter or digit")
+    return f"issue-{issue_number}-{slug}"
+
+
+def integration_branch_name_from_title(title: str) -> str:
+    slug = normalize_slug(title)
+    if not slug:
+        raise ValueError("parent issue title must contain at least one letter or digit")
+    return f"feat/{slug}"
+
+
+def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
+    if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
+        raise ValueError("parent_issue must be a positive integer")
+    title = issue(parent_issue, "title", repo).get("title", "")
+    return integration_branch_name_from_title(str(title))
+
+
 def current_branch() -> str:
     return run(["git", "branch", "--show-current"])
 
@@ -81,3 +112,37 @@ def diff_snapshot(base: str) -> tuple[list[str], str]:
 
 def add_worktree(path: Path, branch: str, base: str) -> None:
     run(["git", "worktree", "add", "-b", branch, os.fspath(path), base])
+
+
+def create_issue_branch(
+    issue_number: str,
+    *,
+    base_branch: str | None = None,
+    branch_slug: str | None = None,
+    worktree_path: str | None = None,
+    integration_branch: str | None = None,
+) -> list[str]:
+    name = branch_name(issue_number, branch_slug)
+    if local_branch_exists(name):
+        raise RuntimeError(f"local branch already exists: {name}")
+    if remote_branch_exists(name):
+        raise RuntimeError(f"origin branch already exists: {name}")
+
+    run(["git", "fetch", "origin"])
+    if worktree_path:
+        if not integration_branch:
+            raise RuntimeError("--integration-branch is required with --worktree-path")
+        path = Path(worktree_path)
+        if path.exists():
+            raise RuntimeError(f"worktree path already exists: {path}")
+        base_commit = revision(integration_branch)
+        add_worktree(path, name, integration_branch)
+        if revision("HEAD", cwd=os.fspath(path)) != base_commit:
+            raise RuntimeError(f"child branch was not created from {integration_branch}")
+        return [f"branch={name}", f"worktree={path}"]
+
+    if integration_branch:
+        raise RuntimeError("--integration-branch requires --worktree-path")
+    base = base_branch or default_branch()
+    run(["git", "checkout", "-b", name, f"origin/{base}"])
+    return [f"branch={name}"]

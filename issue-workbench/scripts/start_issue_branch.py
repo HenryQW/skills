@@ -9,45 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from branch_name import branch_name
-from repository import add_worktree, default_branch, local_branch_exists, remote_branch_exists, revision, run
-
-
-def create_issue_branch(
-    issue_number: str,
-    *,
-    base_branch: str | None = None,
-    branch_slug: str | None = None,
-    worktree_path: str | None = None,
-    integration_branch: str | None = None,
-) -> list[str]:
-    name = branch_name(issue_number, branch_slug)
-    if local_branch_exists(name):
-        raise RuntimeError(f"local branch already exists: {name}")
-    if remote_branch_exists(name):
-        raise RuntimeError(f"origin branch already exists: {name}")
-
-    run(["git", "fetch", "origin"])
-
-    if worktree_path:
-        if not integration_branch:
-            raise RuntimeError("--integration-branch is required with --worktree-path")
-        path = Path(worktree_path)
-        if path.exists():
-            raise RuntimeError(f"worktree path already exists: {path}")
-        base_commit = revision(integration_branch)
-        add_worktree(path, name, integration_branch)
-        child_head = revision("HEAD", cwd=os.fspath(path))
-        if child_head != base_commit:
-            raise RuntimeError(f"child branch was not created from {integration_branch}")
-        return [f"branch={name}", f"worktree={path}"]
-
-    if integration_branch:
-        raise RuntimeError("--integration-branch requires --worktree-path")
-
-    base = base_branch or default_branch()
-    run(["git", "checkout", "-b", name, f"origin/{base}"])
-    return [f"branch={name}"]
+from repository import branch_name, create_issue_branch, run
 
 
 def self_test() -> int:

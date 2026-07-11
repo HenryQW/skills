@@ -11,8 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from repository import current_branch, diff_snapshot, revision, run, status_lines
-from start_issue_branch import create_issue_branch
+from repository import create_issue_branch, current_branch, diff_snapshot, revision, run, status_lines
 
 
 def emit(lines: list[str]) -> None:
