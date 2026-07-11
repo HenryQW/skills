@@ -62,6 +62,7 @@ REVIEW_STATUS = {
 HANDOFF_TRANSITIONS = {
     "pending_review": {"returned", "needs_fix"},
     "needs_fix": {"pending_review", "returned"},
+    "merged": {"returned"},
 }
 
 
@@ -258,6 +259,13 @@ def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
     if existing:
         if handoff_data(existing) == handoff_data(child):
             return manifest
+        same_merged_commit = (
+            existing.get("status") == "merged"
+            and child["status"] == "returned"
+            and existing.get("commit") == child.get("commit")
+        )
+        if same_merged_commit:
+            raise SystemExit(f"child {child['issue']} repair handoff requires a new commit")
         allowed = HANDOFF_TRANSITIONS.get(existing.get("status"), set())
         if child["status"] not in allowed:
             raise SystemExit(f"child {child['issue']} cannot transition from {existing.get('status')} to {child['status']}")
@@ -385,15 +393,37 @@ def self_test() -> int:
             assert path.read_text(encoding="utf-8") == unchanged
             merge_child(path, "#231", "b" * 40)
             merged = path.read_text(encoding="utf-8")
+            merged_progress = (path.parent / "progress.md").read_text(encoding="utf-8")
             merge_child(path, "#231", "b" * 40)
             assert path.read_text(encoding="utf-8") == merged
+            same_commit_repair = dict(passed, checks=["different check"])
+            try:
+                ingest_child(path, same_commit_repair)
+            except SystemExit as exc:
+                assert "repair handoff requires a new commit" in str(exc)
+            else:
+                raise AssertionError("expected same-commit repair handoff to fail")
+            assert path.read_text(encoding="utf-8") == merged
+            assert (path.parent / "progress.md").read_text(encoding="utf-8") == merged_progress
+            repaired = dict(passed, commit="c" * 40, head_sha="c" * 40, checks=["repair check"])
+            ingest_child(path, repaired)
+            assert load_manifest(path)["children"][0]["status"] == "returned"
+            merge_child(path, "#231", "c" * 40)
+            repaired_merged = path.read_text(encoding="utf-8")
+            ingest_child(path, repaired)
+            assert path.read_text(encoding="utf-8") == repaired_merged
             try:
                 merge_child(path, "#231", "c" * 40)
+            except SystemExit:
+                raise AssertionError("expected identical repaired merge to be idempotent")
+            assert path.read_text(encoding="utf-8") == repaired_merged
+            try:
+                merge_child(path, "#231", "d" * 40)
             except SystemExit as exc:
                 assert "commit does not match" in str(exc)
             else:
-                raise AssertionError("expected conflicting merge repeat to fail")
-            assert path.read_text(encoding="utf-8") == merged
+                raise AssertionError("expected conflicting repaired merge to fail")
+            assert path.read_text(encoding="utf-8") == repaired_merged
 
             pending = dict(passed, issue="#232", branch="issue-232", review="PENDING_REVIEW")
             before_pending = path.read_text(encoding="utf-8")

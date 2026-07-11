@@ -131,7 +131,7 @@ Keep `.context/progress.md` as a five-field pointer to the manifest after every 
 - Run `$review-checkpoint` as a nested workflow on the shipyard branch with `wait_mode=block`, `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`, and its memory boundary skipped.
 - Do not run `greptile review`, poll Greptile, or write manifest review events by hand; `$review-checkpoint` owns that loop.
 - If it returns blockers for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
-- Route `child:<issue>` and `final_check` blockers back to their recorded `$issue-workbench` worktrees, then merge the returned branch with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>` and rerun relevant checks.
+- Route `child:<issue>` and `final_check` blockers back to their recorded `$issue-workbench` worktrees. Ingest the repaired PASS handoff, merge the returned branch, record `merge-child`, and rerun relevant checks.
 - Fix only `integration` blockers in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
 - Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. Do not route another review loop for non-blocking findings.
 - If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
