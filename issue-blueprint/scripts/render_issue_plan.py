@@ -9,7 +9,7 @@ import re
 import tempfile
 from pathlib import Path
 
-ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+from issue_plan import embedded_graph, final_check, graph_payload, load_plan, ordered_issues, validate
 
 
 def slug(text: str) -> str:
@@ -22,128 +22,6 @@ def refs(ids: list[str], numbers: dict[str, str]) -> str:
 
 def checkbox(items: list[str]) -> str:
     return "\n".join(f"- [ ] {item}" for item in items) or "- [ ] Define acceptance criteria."
-
-
-def validate_testing(issue: dict) -> None:
-    testing = issue.get("testing")
-    issue_id = issue.get("id", "<unknown>")
-    if not isinstance(testing, dict):
-        raise SystemExit(f"{issue_id}.testing is required")
-    required = ("seam", "validation", "do_not_test")
-    missing = [key for key in required if not str(testing.get(key, "")).strip()]
-    if missing:
-        raise SystemExit(f"{issue_id}.testing missing {', '.join(missing)}")
-    if testing.get("seam") == "Not specified" or testing.get("validation") == "Not specified":
-        raise SystemExit(f"{issue_id}.testing must be explicit")
-
-
-def validate(plan: dict) -> None:
-    tracker = plan.get("tracker")
-    if not isinstance(tracker, dict):
-        raise SystemExit("tracker is required")
-    for key in ("title", "goal"):
-        if not isinstance(tracker.get(key), str) or not tracker[key].strip():
-            raise SystemExit(f"tracker.{key} is required")
-    for key in ("constraints", "non_goals", "definition_of_done"):
-        values = tracker.get(key)
-        if not isinstance(values, list) or any(not isinstance(item, str) or not item.strip() for item in values):
-            raise SystemExit(f"tracker.{key} must be a list of non-empty strings")
-
-    issues = plan.get("issues")
-    if not isinstance(issues, list) or not issues:
-        raise SystemExit("issues must be a non-empty list")
-    for index, issue in enumerate(issues, 1):
-        if not isinstance(issue, dict):
-            raise SystemExit(f"issues[{index}] must be an object")
-        issue_id = issue.get("id")
-        if not isinstance(issue_id, str) or not issue_id:
-            raise SystemExit(f"issues[{index}].id is required")
-        for key in ("title", "purpose", "parallelism"):
-            if not isinstance(issue.get(key), str) or not issue[key].strip():
-                raise SystemExit(f"{issue_id}.{key} is required")
-        acceptance = issue.get("acceptance")
-        if not isinstance(acceptance, list) or not acceptance or any(not isinstance(item, str) or not item.strip() for item in acceptance):
-            raise SystemExit(f"{issue_id}.acceptance must be a non-empty list")
-        for key in ("blocked_by", "blocks"):
-            values = issue.get(key)
-            if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
-                raise SystemExit(f"{issue_id}.{key} must be a list of issue IDs")
-
-    ids = [item["id"] for item in issues]
-    if len(ids) != len(set(ids)):
-        raise SystemExit("duplicate issue id")
-    bad_ids = [item for item in ids if not ID_RE.match(item)]
-    if bad_ids:
-        raise SystemExit(f"invalid issue id: {bad_ids}")
-    known = set(ids)
-    by_id = {issue["id"]: issue for issue in issues}
-    final_checks = [issue for issue in issues if issue.get("role") == "final_check"]
-    if len(final_checks) != 1:
-        raise SystemExit("exactly one issue must have role final_check")
-    final_check = final_checks[0]
-    final_id = final_check["id"]
-    non_final = known - {final_id}
-    if set(final_check.get("blocked_by", [])) != non_final:
-        raise SystemExit(f"{final_id} must be blocked by every non-final issue")
-    if final_check.get("blocks"):
-        raise SystemExit(f"{final_id} final_check must not block other issues")
-    for issue in issues:
-        issue_id = issue["id"]
-        validate_testing(issue)
-        for key in ("blocked_by", "blocks"):
-            deps = set(issue.get(key, []))
-            if issue_id in deps:
-                raise SystemExit(f"{issue_id} cannot depend on itself")
-            missing = deps - known
-            if missing:
-                raise SystemExit(f"{issue_id} has unknown {key}: {sorted(missing)}")
-        for blocker in issue.get("blocked_by", []):
-            if issue_id not in by_id[blocker].get("blocks", []):
-                raise SystemExit(f"{issue_id} blocked_by {blocker}, but {blocker}.blocks is missing {issue_id}")
-        for blocked in issue.get("blocks", []):
-            if issue_id not in by_id[blocked].get("blocked_by", []):
-                raise SystemExit(f"{issue_id} blocks {blocked}, but {blocked}.blocked_by is missing {issue_id}")
-    ordered_issues(plan)
-    waves = plan.get("waves")
-    if not isinstance(waves, list) or not waves:
-        raise SystemExit("waves must be a non-empty list")
-    seen: set[str] = set()
-    for index, wave in enumerate(waves, 1):
-        if not isinstance(wave, dict) or not isinstance(wave.get("name"), str) or not wave["name"].strip():
-            raise SystemExit(f"waves[{index}].name is required")
-        items = wave.get("items", [])
-        if not isinstance(items, list) or not items or any(not isinstance(item, str) or not item for item in items):
-            raise SystemExit(f"{wave['name']}.items must be a non-empty list of issue IDs")
-        if len(items) != len(set(items)) or set(items) & seen:
-            raise SystemExit(f"{wave['name']} repeats issue membership")
-        missing = set(items) - known
-        if missing:
-            raise SystemExit(f"{wave['name']} has unknown items: {sorted(missing)}")
-        for item in items:
-            blockers = set(by_id[item].get("blocked_by", []))
-            if not blockers <= seen:
-                raise SystemExit(f"{wave['name']} schedules {item} before blockers {sorted(blockers - seen)}")
-        seen.update(items)
-    if seen != known:
-        raise SystemExit(f"waves omit issues: {sorted(known - seen)}")
-    for index, item in enumerate(plan.get("dropped_findings", []), 1):
-        if not item.get("finding") or not item.get("reason"):
-            raise SystemExit(f"dropped_findings[{index}] requires finding and reason")
-
-
-def ordered_issues(plan: dict) -> list[dict]:
-    remaining = {issue["id"]: issue for issue in plan["issues"]}
-    ordered: list[dict] = []
-    done: set[str] = set()
-    while remaining:
-        ready = [issue for issue in plan["issues"] if issue["id"] in remaining and set(issue.get("blocked_by", [])) <= done]
-        if not ready:
-            raise SystemExit(f"dependency cycle: {sorted(remaining)}")
-        for issue in ready:
-            ordered.append(issue)
-            done.add(issue["id"])
-            remaining.pop(issue["id"])
-    return ordered
 
 
 def testing_section(issue: dict) -> str:
@@ -162,7 +40,7 @@ def testing_section(issue: dict) -> str:
     )
 
 
-def child_body(issue: dict, numbers: dict[str, str], tracker_issue: str | None) -> str:
+def child_body(plan: dict, issue: dict, numbers: dict[str, str], tracker_issue: str | None) -> str:
     context = "\n".join(f"- {line}" for line in issue.get("context", [])) or "- No extra context."
     return f"""## Tracker
 
@@ -193,8 +71,13 @@ Context:
 
 ## Parallelism
 
-{issue.get("parallelism", "No parallelism notes.")}
+{issue.get("parallelism", "No parallelism notes.")}{graph_section(plan, numbers)}
 """
+
+
+def graph_section(plan: dict, numbers: dict[str, str]) -> str:
+    required = {"tracker", *(issue["id"] for issue in plan["issues"])}
+    return f"\n\n{embedded_graph(plan, numbers)}" if required <= set(numbers) else ""
 
 
 def tracker_body(plan: dict, numbers: dict[str, str]) -> str:
@@ -245,19 +128,18 @@ def tracker_body(plan: dict, numbers: dict[str, str]) -> str:
         *[f"- [ ] {item}" for item in tracker.get("definition_of_done", [])],
         "",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + graph_section(plan, numbers)
 
 
 def render(plan_path: Path, out: Path, numbers_path: Path | None, tracker_issue: str | None) -> None:
-    plan = json.loads(plan_path.read_text())
-    validate(plan)
+    plan = load_plan(plan_path)
     numbers = json.loads(numbers_path.read_text()) if numbers_path else {}
     out.mkdir(parents=True, exist_ok=True)
     (out / "00-tracker.md").write_text(tracker_body(plan, numbers))
     rows = []
     for index, issue in enumerate(ordered_issues(plan), 1):
         file = out / f"{index:02d}-{slug(issue['id'])}.md"
-        file.write_text(child_body(issue, numbers, tracker_issue))
+        file.write_text(child_body(plan, issue, numbers, tracker_issue))
         rows.append(f"{issue['id']}\t{issue['title']}\t{file}")
     (out / "create-order.tsv").write_text("\n".join(rows) + "\n")
 
@@ -280,6 +162,9 @@ def self_test() -> None:
             {"name": "Wave 1", "items": ["b"], "notes": "finish"},
         ],
     }
+    assert [issue["id"] for issue in ordered_issues(plan)] == ["a", "b"]
+    assert final_check(plan)["id"] == "b"
+    assert graph_payload(plan, {"tracker": "#9", "a": "#1", "b": "#2"})["issues"][1]["role"] == "final_check"
 
     def assert_invalid(candidate: dict, expected: str) -> None:
         try:
@@ -310,8 +195,13 @@ def self_test() -> None:
         assert "#9" in (out / "01-a.md").read_text()
         assert "## Testing" in (out / "01-a.md").read_text()
         assert "#1" in (out / "00-tracker.md").read_text()
+        assert "issue-plan-graph" not in (out / "00-tracker.md").read_text()
         assert "duplicate cleanup" in (out / "00-tracker.md").read_text()
         assert "a\tA\t" in (out / "create-order.tsv").read_text()
+        nums.write_text(json.dumps({"tracker": "#9", "a": "#1", "b": "#2"}))
+        render(plan_path, out, nums, "#9")
+        assert '"version":1' in (out / "00-tracker.md").read_text()
+        assert '"role":"final_check"' in (out / "02-b.md").read_text()
 
 
 def main() -> None:
