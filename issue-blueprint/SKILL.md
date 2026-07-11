@@ -36,7 +36,7 @@ python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .c
 
 4. Run interactive blocker rounds until the reviewer returns `PASS`:
    1. Delegate exactly one read-only adversarial reviewer for the round using the template below. The reviewer must not edit files or question the user.
-   2. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
+   2. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, poorly sliced, unnecessarily interfering, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
    3. Resolve factual blockers from the user prompt, project instructions, repository, issues, specs, glossary, or other authoritative evidence. Do not ask the user for discoverable facts; report an inaccessible authoritative source as an access blocker instead of recasting it as a product decision.
    4. Update the spec and issue plan, then re-render the graph after every factual resolution.
    5. Present unresolved product decisions in dependency order with context, a recommendation, and the consequences of each option. Ask dependent decisions one at a time. Batch at most five independent decisions and allow the user to accept all recommendations.
@@ -64,7 +64,7 @@ Remain read-only. Do not edit files or question the user.
 Return PASS when there are no material blockers. Otherwise return at most five blockers, ordered by downstream dependency impact and then severity, using one line per blocker:
 severity | kind | evidence | issue | recommended resolution
 
-Only report ambiguity, incorrectness, unsafe behavior, untestability, or improper sequencing. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives. Treat recorded user decisions as authoritative unless you cite new contradictory evidence.
+Only report ambiguity, incorrectness, unsafe behavior, untestability, poor slicing, avoidable interference, or improper sequencing. Treat micro-issues, separable mega-issues, and same-wave work with unnecessary shared surfaces as slicing blockers, not implementation preferences. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives. Treat recorded user decisions as authoritative unless you cite new contradictory evidence.
 ```
 
 ## Token Discipline
@@ -91,6 +91,8 @@ python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo 
 
 `--verify` runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, and prints the Shipyard execution block. Do not run extra `gh issue view` checks after a successful `--verify`; use a single fallback check only if `--verify` reports an incomplete result or `numbers.json` is missing or malformed.
 
+The publisher checkpoints `numbers.json` after each created issue and binds `publish-state.json` to the approved plan and repository. If publication fails, fix the cause and rerun the same command with `--resume`; a normal rerun stops rather than duplicating recorded issues, and resume rejects a changed plan or repository.
+
 The publisher writes `.context/issues/numbers.json`:
 
 ```json
@@ -113,10 +115,15 @@ repo=OWNER/REPO
 ## Slicing Rules
 
 - Prefer vertical tracer-bullet issues over layer-only work.
+- Size each implementation issue around one cohesive, independently verifiable outcome. Merge incidental edits into the issue that owns their outcome instead of creating micro-issues for a few lines of work.
+- Split large issues when they contain separable outcomes with distinct acceptance criteria, public seams, risks, or dependencies, or when their parts can be implemented independently. Keep them whole when splitting would create incomplete intermediate states or extra coordination.
+- Treat changes of only a few lines or many hundreds or thousands of lines as review signals, not fixed thresholds. Explain in the issue `context` why an unusually small issue cannot be combined or an unusually large issue cannot be split.
+- Within each dependency wave, minimize overlap in files, interfaces, and shared state so issues can be implemented in parallel with minimal coordination or merge conflicts.
 - Do not add backward compatibility, migration layers, aliases, fallback paths, or future-proofing unless explicitly required by the issue, spec, or repo instructions.
 - `tracker` is the implementation tracker issue. Use a title like `<version/topic> implementation tracker`.
-- Default to the tight graph: tracker, the minimum implementation children that can be worked independently, and one `final_check`.
+- Default to the tight graph: tracker, the fewest cohesive, reasonably bounded, non-interfering implementation children, and one `final_check`.
 - Every child issue must include `Tracker`, `What to build`, `Acceptance criteria`, `Testing`, `Blocked by`, `Blocks`, and `Parallelism`.
+- Every child issue's `Parallelism` section must state why it is safe in its wave and identify any files, interfaces, or shared state expected to overlap with same-wave issues.
 - Every child issue's `Testing` section must name the public seam under test, existing similar tests if known, the smallest validation command, and what not to test. If no useful seam exists, say so and provide a concrete non-test validation path.
 - Exactly one child issue must have `"role": "final_check"`. It blocks nothing and is blocked by every other child issue.
 - The implementation tracker issue must include the full issue graph and explicit waves for parallel execution.

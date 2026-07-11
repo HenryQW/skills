@@ -27,10 +27,6 @@ def checkbox(items: list[str]) -> str:
 def validate_testing(issue: dict) -> None:
     testing = issue.get("testing")
     issue_id = issue.get("id", "<unknown>")
-    if isinstance(testing, str):
-        if not testing.strip():
-            raise SystemExit(f"{issue_id}.testing must not be empty")
-        return
     if not isinstance(testing, dict):
         raise SystemExit(f"{issue_id}.testing is required")
     required = ("seam", "validation", "do_not_test")
@@ -42,17 +38,46 @@ def validate_testing(issue: dict) -> None:
 
 
 def validate(plan: dict) -> None:
-    if not plan.get("tracker", {}).get("title"):
-        raise SystemExit("tracker.title is required")
-    ids = [item["id"] for item in plan["issues"]]
+    tracker = plan.get("tracker")
+    if not isinstance(tracker, dict):
+        raise SystemExit("tracker is required")
+    for key in ("title", "goal"):
+        if not isinstance(tracker.get(key), str) or not tracker[key].strip():
+            raise SystemExit(f"tracker.{key} is required")
+    for key in ("constraints", "non_goals", "definition_of_done"):
+        values = tracker.get(key)
+        if not isinstance(values, list) or any(not isinstance(item, str) or not item.strip() for item in values):
+            raise SystemExit(f"tracker.{key} must be a list of non-empty strings")
+
+    issues = plan.get("issues")
+    if not isinstance(issues, list) or not issues:
+        raise SystemExit("issues must be a non-empty list")
+    for index, issue in enumerate(issues, 1):
+        if not isinstance(issue, dict):
+            raise SystemExit(f"issues[{index}] must be an object")
+        issue_id = issue.get("id")
+        if not isinstance(issue_id, str) or not issue_id:
+            raise SystemExit(f"issues[{index}].id is required")
+        for key in ("title", "purpose", "parallelism"):
+            if not isinstance(issue.get(key), str) or not issue[key].strip():
+                raise SystemExit(f"{issue_id}.{key} is required")
+        acceptance = issue.get("acceptance")
+        if not isinstance(acceptance, list) or not acceptance or any(not isinstance(item, str) or not item.strip() for item in acceptance):
+            raise SystemExit(f"{issue_id}.acceptance must be a non-empty list")
+        for key in ("blocked_by", "blocks"):
+            values = issue.get(key)
+            if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
+                raise SystemExit(f"{issue_id}.{key} must be a list of issue IDs")
+
+    ids = [item["id"] for item in issues]
     if len(ids) != len(set(ids)):
         raise SystemExit("duplicate issue id")
     bad_ids = [item for item in ids if not ID_RE.match(item)]
     if bad_ids:
         raise SystemExit(f"invalid issue id: {bad_ids}")
     known = set(ids)
-    by_id = {issue["id"]: issue for issue in plan["issues"]}
-    final_checks = [issue for issue in plan["issues"] if issue.get("role") == "final_check"]
+    by_id = {issue["id"]: issue for issue in issues}
+    final_checks = [issue for issue in issues if issue.get("role") == "final_check"]
     if len(final_checks) != 1:
         raise SystemExit("exactly one issue must have role final_check")
     final_check = final_checks[0]
@@ -62,7 +87,7 @@ def validate(plan: dict) -> None:
         raise SystemExit(f"{final_id} must be blocked by every non-final issue")
     if final_check.get("blocks"):
         raise SystemExit(f"{final_id} final_check must not block other issues")
-    for issue in plan["issues"]:
+    for issue in issues:
         issue_id = issue["id"]
         validate_testing(issue)
         for key in ("blocked_by", "blocks"):
@@ -79,9 +104,18 @@ def validate(plan: dict) -> None:
             if issue_id not in by_id[blocked].get("blocked_by", []):
                 raise SystemExit(f"{issue_id} blocks {blocked}, but {blocked}.blocked_by is missing {issue_id}")
     ordered_issues(plan)
+    waves = plan.get("waves")
+    if not isinstance(waves, list) or not waves:
+        raise SystemExit("waves must be a non-empty list")
     seen: set[str] = set()
-    for wave in plan.get("waves", []):
+    for index, wave in enumerate(waves, 1):
+        if not isinstance(wave, dict) or not isinstance(wave.get("name"), str) or not wave["name"].strip():
+            raise SystemExit(f"waves[{index}].name is required")
         items = wave.get("items", [])
+        if not isinstance(items, list) or not items or any(not isinstance(item, str) or not item for item in items):
+            raise SystemExit(f"{wave['name']}.items must be a non-empty list of issue IDs")
+        if len(items) != len(set(items)) or set(items) & seen:
+            raise SystemExit(f"{wave['name']} repeats issue membership")
         missing = set(items) - known
         if missing:
             raise SystemExit(f"{wave['name']} has unknown items: {sorted(missing)}")
@@ -90,7 +124,7 @@ def validate(plan: dict) -> None:
             if not blockers <= seen:
                 raise SystemExit(f"{wave['name']} schedules {item} before blockers {sorted(blockers - seen)}")
         seen.update(items)
-    if plan.get("waves") and seen != known:
+    if seen != known:
         raise SystemExit(f"waves omit issues: {sorted(known - seen)}")
     for index, item in enumerate(plan.get("dropped_findings", []), 1):
         if not item.get("finding") or not item.get("reason"):
@@ -114,8 +148,6 @@ def ordered_issues(plan: dict) -> list[dict]:
 
 def testing_section(issue: dict) -> str:
     testing = issue.get("testing") or {}
-    if isinstance(testing, str):
-        return testing
     seam = testing.get("seam", "Not specified.")
     existing = testing.get("existing_tests", "Not specified.")
     validation = testing.get("validation", "Not specified.")
@@ -240,14 +272,33 @@ def self_test() -> None:
         "tracker": {"title": "x", "goal": "g", "constraints": ["c"], "non_goals": ["n"], "definition_of_done": ["d"]},
         "dropped_findings": [{"finding": "duplicate cleanup", "reason": "duplicate of #1"}],
         "issues": [
-            {"id": "b", "title": "B", "role": "final_check", "purpose": "B work.", "acceptance": ["b ok"], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": []},
-            {"id": "a", "title": "A", "purpose": "A work.", "acceptance": ["a ok"], "testing": {"seam": "public API", "existing_tests": "none found", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"]},
+            {"id": "b", "title": "B", "role": "final_check", "purpose": "B work.", "acceptance": ["b ok"], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": [], "parallelism": "Final tail."},
+            {"id": "a", "title": "A", "purpose": "A work.", "acceptance": ["a ok"], "testing": {"seam": "public API", "existing_tests": "none found", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "Root work."},
         ],
         "waves": [
             {"name": "Wave 0", "items": ["a"], "notes": "start"},
             {"name": "Wave 1", "items": ["b"], "notes": "finish"},
         ],
     }
+
+    def assert_invalid(candidate: dict, expected: str) -> None:
+        try:
+            validate(candidate)
+        except SystemExit as error:
+            assert expected in str(error)
+        else:
+            raise AssertionError(f"expected validation failure containing {expected!r}")
+
+    for field in ("title", "purpose", "acceptance", "parallelism"):
+        invalid = json.loads(json.dumps(plan))
+        del invalid["issues"][1][field]
+        assert_invalid(invalid, f"a.{field}")
+    invalid = json.loads(json.dumps(plan))
+    del invalid["waves"]
+    assert_invalid(invalid, "waves must be a non-empty list")
+    invalid = json.loads(json.dumps(plan))
+    invalid["waves"].insert(1, {"name": "Duplicate", "items": ["a"]})
+    assert_invalid(invalid, "repeats issue membership")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         plan_path = root / "plan.json"

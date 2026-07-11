@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -23,25 +24,48 @@ def save(path: Path, data: dict[str, str]) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def publish(plan_path: Path, repo: str, labels: list[str], out: Path) -> dict[str, str]:
-    render(plan_path, out, None, None)
-    plan = json.loads(plan_path.read_text())
-    numbers: dict[str, str] = {}
+def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bool = False) -> dict[str, str]:
+    plan_data = plan_path.read_bytes()
+    plan = json.loads(plan_data)
+    numbers_path = out / "numbers.json"
+    state_path = out / "publish-state.json"
+    expected_state = {"repo": repo, "plan_sha256": hashlib.sha256(plan_data).hexdigest()}
+    checkpoint_exists = numbers_path.exists() or state_path.exists()
+    if checkpoint_exists and not resume:
+        raise SystemExit(f"{out} contains a publish checkpoint; pass --resume to continue without duplicating recorded issues")
+    if resume and not checkpoint_exists:
+        raise SystemExit(f"{out} has no publish checkpoint to resume")
+    if resume and (not state_path.exists() or json.loads(state_path.read_text()) != expected_state):
+        raise SystemExit(f"{state_path} does not match this plan and repository")
+    numbers = json.loads(numbers_path.read_text()) if numbers_path.exists() else {}
+    allowed = {issue["id"] for issue in plan["issues"]} | {"tracker"}
+    if not isinstance(numbers, dict) or set(numbers) - allowed:
+        raise SystemExit(f"{numbers_path} does not match this plan")
+    if any(not isinstance(number, str) or not number.startswith("#") or not number[1:].isdigit() for number in numbers.values()):
+        raise SystemExit(f"{numbers_path} contains invalid issue numbers")
+    if "tracker" in numbers and not allowed - {"tracker"} <= set(numbers):
+        raise SystemExit(f"{numbers_path} records the tracker before all children")
+
+    render(plan_path, out, numbers_path if numbers else None, numbers.get("tracker"))
+    if not state_path.exists():
+        save(state_path, expected_state)
     label_args = [arg for label in labels for arg in ("--label", label)]
 
     for row in (out / "create-order.tsv").read_text().splitlines():
         issue_id, title, body_file = row.split("\t")
+        if issue_id in numbers:
+            continue
         url = run(["gh", "issue", "create", "--repo", repo, "--title", title, *label_args, "--body-file", body_file])
         numbers[issue_id] = f"#{url.rsplit('/', 1)[-1]}"
+        save(numbers_path, numbers)
 
-    numbers_path = out / "numbers.json"
-    save(numbers_path, numbers)
     render(plan_path, out, numbers_path, None)
 
-    tracker_title = plan["tracker"]["title"]
-    tracker_url = run(["gh", "issue", "create", "--repo", repo, "--title", tracker_title, *label_args, "--body-file", str(out / "00-tracker.md")])
-    numbers["tracker"] = f"#{tracker_url.rsplit('/', 1)[-1]}"
-    save(numbers_path, numbers)
+    if "tracker" not in numbers:
+        tracker_title = plan["tracker"]["title"]
+        tracker_url = run(["gh", "issue", "create", "--repo", repo, "--title", tracker_title, *label_args, "--body-file", str(out / "00-tracker.md")])
+        numbers["tracker"] = f"#{tracker_url.rsplit('/', 1)[-1]}"
+        save(numbers_path, numbers)
     render(plan_path, out, numbers_path, numbers["tracker"])
 
     for row in (out / "create-order.tsv").read_text().splitlines():
@@ -77,7 +101,7 @@ def self_test() -> None:
         gh = fake_bin / "gh"
         gh.write_text(
             "#!/bin/sh\n"
-            "if [ \"$2\" = create ]; then n=$(cat \"$TMPDIR/n\" 2>/dev/null || echo 0); n=$((n+1)); echo $n > \"$TMPDIR/n\"; echo https://github.com/o/r/issues/$n; exit 0; fi\n"
+            "if [ \"$2\" = create ]; then n=$(cat \"$TMPDIR/n\" 2>/dev/null || echo 0); n=$((n+1)); echo $n > \"$TMPDIR/n\"; [ \"$FAIL_CREATE\" = \"$n\" ] && exit 1; echo https://github.com/o/r/issues/$n; exit 0; fi\n"
             "exit 0\n"
         )
         gh.chmod(0o755)
@@ -106,7 +130,37 @@ def self_test() -> None:
             assert f"numbers_json={(root / 'out' / 'numbers.json').resolve()}" in block
             assert f"shipyard_worktree={root}" in block
             assert "shipyard_command=Use $shipyard #3" in block
+            assert json.loads((root / "out" / "publish-state.json").read_text())["repo"] == "o/r"
+
+            try:
+                publish(plan_path, "o/r", ["enhancement"], root / "out")
+            except SystemExit as error:
+                assert "--resume" in str(error)
+            else:
+                raise AssertionError("existing publish state must require --resume")
+            assert publish(plan_path, "o/r", ["enhancement"], root / "out", resume=True) == numbers
+            assert (root / "n").read_text().strip() == "3"
+            try:
+                publish(plan_path, "other/repo", ["enhancement"], root / "out", resume=True)
+            except SystemExit as error:
+                assert "does not match" in str(error)
+            else:
+                raise AssertionError("resume must reject a different repository")
+
+            (root / "n").write_text("0")
+            os.environ["FAIL_CREATE"] = "2"
+            partial_out = root / "partial"
+            try:
+                publish(plan_path, "o/r", ["enhancement"], partial_out)
+            except subprocess.CalledProcessError:
+                assert json.loads((partial_out / "numbers.json").read_text()) == {"a": "#1"}
+            else:
+                raise AssertionError("simulated publish failure must stop")
+            os.environ.pop("FAIL_CREATE")
+            resumed = publish(plan_path, "o/r", ["enhancement"], partial_out, resume=True)
+            assert resumed == {"a": "#1", "b": "#3", "tracker": "#4"}
         finally:
+            os.environ.pop("FAIL_CREATE", None)
             os.environ["PATH"] = old_path
             if old_tmpdir:
                 os.environ["TMPDIR"] = old_tmpdir
@@ -122,6 +176,7 @@ def main() -> None:
     parser.add_argument("--out", default=".context/issues")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--verify", action="store_true", help="Run self-tests before publishing")
+    parser.add_argument("--resume", action="store_true", help="Continue from checkpointed numbers.json")
     args = parser.parse_args()
     if args.self_test:
         self_test()
@@ -133,7 +188,7 @@ def main() -> None:
         self_test()
     plan_path = Path(args.plan)
     out = Path(args.out)
-    numbers = publish(plan_path, args.repo, args.label, out)
+    numbers = publish(plan_path, args.repo, args.label, out, args.resume)
     print(execution_block(plan_path, numbers, args.repo, Path.cwd(), out / "numbers.json"))
 
 
