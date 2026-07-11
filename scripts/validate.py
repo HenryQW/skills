@@ -35,6 +35,7 @@ CHECKS_BY_SKILL: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
         ("publish", ("python3", "issue-blueprint/scripts/publish_issue_plan.py", "--self-test")),
     ),
     "issue-workbench": (
+        ("issue snapshot", ("python3", "issue-workbench/scripts/issue_snapshot.py", "--self-test")),
         ("branch name", ("python3", "issue-workbench/scripts/branch_name.py", "123", "Add Thing!!")),
         ("branch start", ("python3", "issue-workbench/scripts/start_issue_branch.py", "--self-test")),
         ("integration child", ("python3", "issue-workbench/scripts/integration_child.py", "--self-test")),
