@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import json
+import os
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
+
+from repository import CommandError, issue
 
 
 def clip(text: str | None, limit: int) -> str:
@@ -16,13 +20,13 @@ def clip(text: str | None, limit: int) -> str:
     return text[: limit - 20].rstrip() + "\n\n[truncated]"
 
 
-def main() -> int:
+def snapshot(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Compact a GitHub issue for implementation.")
     parser.add_argument("issue_number")
     parser.add_argument("--body-chars", type=int, default=6000)
     parser.add_argument("--comment-chars", type=int, default=1200)
     parser.add_argument("--max-comments", type=int, default=8, help="Print only the last N comments")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.max_comments < 1:
         print("--max-comments must be a positive integer", file=sys.stderr)
         return 2
@@ -32,30 +36,22 @@ def main() -> int:
 
     fields = "number,title,state,url,labels,body,comments"
     try:
-        result = subprocess.run(
-            ["gh", "issue", "view", args.issue_number, "--json", fields],
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError as exc:
-        print(exc.stderr.strip() or str(exc), file=sys.stderr)
+        data = issue(args.issue_number, fields)
+    except CommandError as exc:
+        print(str(exc), file=sys.stderr)
         return exc.returncode
+    labels = ", ".join(label.get("name", "") for label in data.get("labels", []) if label.get("name"))
 
-    issue = json.loads(result.stdout)
-    labels = ", ".join(label.get("name", "") for label in issue.get("labels", []) if label.get("name"))
-
-    print(f"# Issue #{issue.get('number')}: {issue.get('title', '').strip()}")
-    print(f"- State: {issue.get('state', '')}")
-    print(f"- URL: {issue.get('url', '')}")
+    print(f"# Issue #{data.get('number')}: {str(data.get('title', '')).strip()}")
+    print(f"- State: {data.get('state', '')}")
+    print(f"- URL: {data.get('url', '')}")
     if labels:
         print(f"- Labels: {labels}")
 
     print("\n## Body")
-    print(clip(issue.get("body"), args.body_chars) or "[empty]")
+    print(clip(str(data.get("body") or ""), args.body_chars) or "[empty]")
 
-    all_comments = issue.get("comments") or []
+    all_comments = data.get("comments") or []
     omitted = max(0, len(all_comments) - args.max_comments)
     comments = all_comments[-args.max_comments :]
     if comments:
@@ -69,6 +65,32 @@ def main() -> int:
         print(clip(comment.get("body"), args.comment_chars) or "[empty]")
 
     return 0
+
+
+def self_test() -> int:
+    with tempfile.TemporaryDirectory() as raw_tmp:
+        fake_gh = Path(raw_tmp) / "gh"
+        fake_gh.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$3\" = 500 ]; then echo 'fake gh failure' >&2; exit 7; fi\n"
+            "printf '%s\\n' '{\"number\":23,\"title\":\"Adapter\",\"state\":\"OPEN\",\"url\":\"https://example.invalid/23\",\"labels\":[{\"name\":\"enhancement\"}],\"body\":\"Body\",\"comments\":[]}'\n",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
+        env = {**os.environ, "PATH": f"{raw_tmp}{os.pathsep}{os.environ.get('PATH', '')}"}
+        success = subprocess.run([sys.executable, __file__, "23"], text=True, capture_output=True, env=env)
+        assert success.returncode == 0, success.stderr
+        assert "# Issue #23: Adapter" in success.stdout
+        failure = subprocess.run([sys.executable, __file__, "500"], text=True, capture_output=True, env=env)
+        assert failure.returncode == 7
+        assert failure.stderr.strip() == "fake gh failure"
+    return 0
+
+
+def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
+    return snapshot(sys.argv[1:])
 
 
 if __name__ == "__main__":

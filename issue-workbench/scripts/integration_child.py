@@ -11,8 +11,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from repository import current_branch, diff_snapshot, revision, run, status_lines
 from start_issue_branch import create_issue_branch
-from start_issue_branch import run
 
 
 def emit(lines: list[str]) -> None:
@@ -84,8 +84,7 @@ def start_child(issue_number: str, worktree_path: str, integration_branch: str, 
 
 
 def changed_code_status() -> list[str]:
-    lines = run(["git", "status", "--short"]).splitlines()
-    return [line for line in lines if not line[3:].startswith(".context/")]
+    return [line for line in status_lines() if not line[3:].startswith(".context/")]
 
 
 def ensure_local_progress_file() -> Path:
@@ -148,21 +147,22 @@ def finish_child(
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
     progress = ensure_local_progress_file()
-    branch = run(["git", "branch", "--show-current"])
+    branch = current_branch()
     match = re.fullmatch(r"issue-([1-9][0-9]*)(?:-[a-z0-9][a-z0-9-]*)?", branch)
     if not match:
         raise RuntimeError("integration child branch must look like issue-123 or issue-123-slug")
-    head_sha = run(["git", "rev-parse", "HEAD"])
+    head_sha = revision("HEAD")
+    changed_files, diff_stat = diff_snapshot(review_base)
     result: dict[str, object] = {
         "issue": f"#{match.group(1)}",
         "branch": branch,
         "worktree": os.fspath(Path.cwd()),
         "base_ref": review_base,
-        "base_sha": run(["git", "rev-parse", review_base]),
+        "base_sha": revision(review_base),
         "commit": head_sha,
         "head_sha": head_sha,
-        "changed_files": run(["git", "diff", "--name-only", f"{review_base}...HEAD"]).splitlines(),
-        "diff_stat": run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | "),
+        "changed_files": changed_files,
+        "diff_stat": diff_stat,
         "verification": verification,
         "review": review,
         "checks": checks or [],
@@ -176,14 +176,14 @@ def finish_child(
 
 
 def merge_child(branch: str, integration_branch: str, expected_commit: str | None = None) -> None:
-    current = run(["git", "branch", "--show-current"])
+    current = current_branch()
     if current != integration_branch:
         raise RuntimeError(f"expected integration branch {integration_branch}, got {current}")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     if expected_commit:
-        actual_commit = run(["git", "rev-parse", branch])
+        actual_commit = revision(branch)
         if actual_commit != expected_commit:
             raise RuntimeError(f"expected {branch} at {expected_commit}, got {actual_commit}")
     run(["git", "merge", "--no-ff", "--no-edit", branch])

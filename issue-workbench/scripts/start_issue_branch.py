@@ -5,41 +5,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from branch_name import branch_name
-
-
-def run(command: list[str], *, cwd: str | None = None) -> str:
-    result = subprocess.run(command, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(detail or f"{command[0]} exited {result.returncode}")
-    return result.stdout.strip()
-
-
-def ref_exists(ref: str) -> bool:
-    return subprocess.run(["git", "show-ref", "--verify", "--quiet", ref]).returncode == 0
-
-
-def remote_branch_exists(name: str) -> bool:
-    result = subprocess.run(
-        ["git", "ls-remote", "--heads", "origin", name],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(detail or "git ls-remote failed")
-    return bool(result.stdout.strip())
-
-
-def default_branch() -> str:
-    return run(["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"])
+from repository import add_worktree, default_branch, local_branch_exists, remote_branch_exists, revision, run
 
 
 def create_issue_branch(
@@ -51,7 +22,7 @@ def create_issue_branch(
     integration_branch: str | None = None,
 ) -> list[str]:
     name = branch_name(issue_number, branch_slug)
-    if ref_exists(f"refs/heads/{name}"):
+    if local_branch_exists(name):
         raise RuntimeError(f"local branch already exists: {name}")
     if remote_branch_exists(name):
         raise RuntimeError(f"origin branch already exists: {name}")
@@ -64,9 +35,9 @@ def create_issue_branch(
         path = Path(worktree_path)
         if path.exists():
             raise RuntimeError(f"worktree path already exists: {path}")
-        base_commit = run(["git", "rev-parse", integration_branch])
-        run(["git", "worktree", "add", "-b", name, os.fspath(path), integration_branch])
-        child_head = run(["git", "-C", os.fspath(path), "rev-parse", "HEAD"])
+        base_commit = revision(integration_branch)
+        add_worktree(path, name, integration_branch)
+        child_head = revision("HEAD", cwd=os.fspath(path))
         if child_head != base_commit:
             raise RuntimeError(f"child branch was not created from {integration_branch}")
         return [f"branch={name}", f"worktree={path}"]
