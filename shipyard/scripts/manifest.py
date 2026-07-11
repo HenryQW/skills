@@ -42,6 +42,7 @@ REQUIRED_CHILD = {
     "known_skips",
     "status",
 }
+REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"}
 REQUIRED_PENDING_REVIEW = {
     "review_id",
     "branch",
@@ -57,6 +58,10 @@ REVIEW_STATUS = {
     "PASS": {"returned", "merged"},
     "PENDING_REVIEW": {"pending_review"},
     "FAIL": {"needs_fix"},
+}
+HANDOFF_TRANSITIONS = {
+    "pending_review": {"returned", "needs_fix"},
+    "needs_fix": {"pending_review", "returned"},
 }
 
 
@@ -144,11 +149,9 @@ def child_issue(child: dict[str, Any]) -> str:
     raise SystemExit("child payload requires issue")
 
 
-def normalize_child(child: dict[str, Any], status: str | None) -> dict[str, Any]:
+def normalize_child(child: dict[str, Any]) -> dict[str, Any]:
     child = dict(child)
     child["issue"] = child_issue(child)
-    if status:
-        child["status"] = status
     return child
 
 
@@ -220,25 +223,72 @@ def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return [f"{prefix} pending_review missing/empty field: {field}" for field in missing]
 
 
-def set_child(path: Path, child: dict[str, Any], status: str | None) -> dict[str, Any]:
-    manifest = load_manifest(path)
-    child = normalize_child(child, status)
-    missing = REQUIRED_CHILD - set(child)
-    if missing:
-        raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
-    errors = (
-        status_errors(child, "child payload")
-        + review_status_errors(child, "child payload")
+def handoff_status(child: dict[str, Any]) -> str:
+    return {
+        "PASS": "returned",
+        "PENDING_REVIEW": "pending_review",
+        "FAIL": "needs_fix",
+    }.get(child.get("review"), "")
+
+
+def handoff_data(child: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in child.items() if key != "status"}
+
+
+def child_payload_errors(child: dict[str, Any]) -> list[str]:
+    return (
+        review_status_errors(child, "child payload")
         + verification_errors(child, "child payload")
         + failed_review_errors(child, "child payload")
         + pending_review_errors(child, "child payload")
     )
+
+
+def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
+    manifest = load_manifest(path)
+    child = normalize_child(child)
+    missing = REQUIRED_HANDOFF - set(child)
+    if missing:
+        raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
+    child["status"] = handoff_status(child)
+    errors = child_payload_errors(child)
     if errors:
         raise SystemExit("\n".join(errors))
+    existing = next((item for item in manifest.get("children", []) if item.get("issue") == child["issue"]), None)
+    if existing:
+        if handoff_data(existing) == handoff_data(child):
+            return manifest
+        allowed = HANDOFF_TRANSITIONS.get(existing.get("status"), set())
+        if child["status"] not in allowed:
+            raise SystemExit(f"child {child['issue']} cannot transition from {existing.get('status')} to {child['status']}")
     children = [item for item in manifest.get("children", []) if item.get("issue") != child["issue"]]
     children.append(child)
     manifest["children"] = sorted(children, key=lambda item: int(str(item["issue"]).lstrip("#")))
     rebuild_validation_plan(manifest)
+    errors = validate_manifest(manifest)
+    if errors:
+        raise SystemExit("\n".join(errors))
+    save_manifest(path, manifest)
+    write_progress_pointer(path, manifest)
+    return manifest
+
+
+def merge_child(path: Path, issue: str, commit: str) -> dict[str, Any]:
+    manifest = load_manifest(path)
+    normalized_issue = normalize_issue(issue)
+    existing = next((item for item in manifest.get("children", []) if item.get("issue") == normalized_issue), None)
+    if not existing:
+        raise SystemExit(f"child {normalized_issue} has no ingested handoff")
+    if existing.get("commit") != commit:
+        raise SystemExit(f"child {normalized_issue} commit does not match ingested handoff")
+    if existing.get("status") == "merged":
+        return manifest
+    if existing.get("status") != "returned":
+        raise SystemExit(f"child {normalized_issue} cannot transition from {existing.get('status')} to merged")
+    existing["status"] = "merged"
+    errors = validate_manifest(manifest)
+    if errors:
+        raise SystemExit("\n".join(errors))
     save_manifest(path, manifest)
     write_progress_pointer(path, manifest)
     return manifest
@@ -293,7 +343,7 @@ def self_test() -> int:
             os.chdir(raw_tmp)
             path = DEFAULT_MANIFEST
             init_manifest(path, "#123", "shipyard-123", "main")
-            child = {
+            passed = {
                 "issue": "#231",
                 "branch": "issue-231",
                 "worktree": "/tmp/child",
@@ -308,92 +358,52 @@ def self_test() -> int:
                 "checks": ["python3 scripts/validate.py -> passed"],
                 "known_skips": [],
             }
-            set_child(path, child, "merged")
-            replacement = dict(child, changed_files=["new_file.py"], checks=["new check"], known_skips=["new skip"])
-            set_child(path, replacement, "merged")
+            ingest_child(path, passed)
             manifest = load_manifest(path)
-            assert manifest["validation_plan"]["touched_files"] == ["new_file.py"]
-            assert manifest["validation_plan"]["checks"] == ["new check"]
-            assert manifest["validation_plan"]["known_skips"] == ["new skip"]
-            missing = dict(child)
-            missing.pop("changed_files")
+            assert manifest["children"][0]["status"] == "returned"
+            assert manifest["validation_plan"]["touched_files"] == ["README.md"]
+            unchanged = path.read_text(encoding="utf-8")
+            unchanged_progress = (path.parent / "progress.md").read_text(encoding="utf-8")
+            ingest_child(path, passed)
+            assert path.read_text(encoding="utf-8") == unchanged
+            assert (path.parent / "progress.md").read_text(encoding="utf-8") == unchanged_progress
+            conflicting = dict(passed, changed_files=["other.py"])
             try:
-                set_child(path, missing, "merged")
+                ingest_child(path, conflicting)
             except SystemExit as exc:
-                assert "changed_files" in str(exc)
+                assert "cannot transition from returned to returned" in str(exc)
             else:
-                raise AssertionError("expected missing changed_files to fail")
+                raise AssertionError("expected conflicting repeat to fail")
+            assert path.read_text(encoding="utf-8") == unchanged
+            assert (path.parent / "progress.md").read_text(encoding="utf-8") == unchanged_progress
             try:
-                set_child(path, child, None)
+                merge_child(path, "#999", "b" * 40)
             except SystemExit as exc:
-                assert "status" in str(exc)
+                assert "no ingested handoff" in str(exc)
             else:
-                raise AssertionError("expected missing status to fail")
+                raise AssertionError("expected out-of-order merge to fail")
+            assert path.read_text(encoding="utf-8") == unchanged
+            merge_child(path, "#231", "b" * 40)
+            merged = path.read_text(encoding="utf-8")
+            merge_child(path, "#231", "b" * 40)
+            assert path.read_text(encoding="utf-8") == merged
             try:
-                set_child(path, child, "mergd")
+                merge_child(path, "#231", "c" * 40)
             except SystemExit as exc:
-                assert "status" in str(exc)
+                assert "commit does not match" in str(exc)
             else:
-                raise AssertionError("expected invalid status to fail")
-            invalid_review = dict(replacement, review="MAYBE")
+                raise AssertionError("expected conflicting merge repeat to fail")
+            assert path.read_text(encoding="utf-8") == merged
+
+            pending = dict(passed, issue="#232", branch="issue-232", review="PENDING_REVIEW")
+            before_pending = path.read_text(encoding="utf-8")
             try:
-                set_child(path, invalid_review, "merged")
-            except SystemExit as exc:
-                assert "review must be PASS, PENDING_REVIEW, or FAIL" in str(exc)
-            else:
-                raise AssertionError("expected invalid review to fail")
-            bad_manifest = dict(load_manifest(path))
-            bad_manifest["children"] = [dict(invalid_review, status="merged")]
-            assert any("review must be PASS" in error for error in validate_manifest(bad_manifest))
-            bad_verification = dict(replacement, verification="failed tests")
-            try:
-                set_child(path, bad_verification, "merged")
-            except SystemExit as exc:
-                assert "verification" in str(exc)
-            else:
-                raise AssertionError("expected invalid verification to fail")
-            bad_manifest = dict(load_manifest(path))
-            bad_manifest["children"] = [dict(bad_verification, status="merged")]
-            assert any("verification" in error for error in validate_manifest(bad_manifest))
-            inconsistent = dict(replacement, review="PENDING_REVIEW", pending_review={})
-            try:
-                set_child(path, inconsistent, "merged")
-            except SystemExit as exc:
-                assert "does not match review" in str(exc)
-            else:
-                raise AssertionError("expected inconsistent review/status to fail")
-            bad_manifest = dict(load_manifest(path))
-            bad_manifest["children"] = [dict(inconsistent, status="merged")]
-            assert any("does not match review" in error for error in validate_manifest(bad_manifest))
-            failed = dict(replacement, issue="#233", review="FAIL")
-            try:
-                set_child(path, failed, "needs_fix")
-            except SystemExit as exc:
-                assert "needs_child_fix" in str(exc)
-            else:
-                raise AssertionError("expected missing needs_child_fix to fail")
-            bad_manifest = dict(load_manifest(path))
-            bad_manifest["children"] = [dict(failed, status="needs_fix")]
-            assert any("needs_child_fix" in error for error in validate_manifest(bad_manifest))
-            failed["needs_child_fix"] = "abc123"
-            try:
-                set_child(path, failed, "needs_fix")
-            except SystemExit as exc:
-                assert "needs_child_fix" in str(exc)
-            else:
-                raise AssertionError("expected malformed needs_child_fix to fail")
-            bad_manifest = dict(load_manifest(path))
-            bad_manifest["children"] = [dict(failed, status="needs_fix")]
-            assert any("needs_child_fix" in error for error in validate_manifest(bad_manifest))
-            failed["needs_child_fix"] = "#231"
-            set_child(path, failed, "needs_fix")
-            pending = dict(replacement, issue="#232", review="PENDING_REVIEW")
-            try:
-                set_child(path, pending, "pending_review")
+                ingest_child(path, pending)
             except SystemExit as exc:
                 assert "pending_review" in str(exc)
             else:
-                raise AssertionError("expected missing pending_review evidence to fail")
+                raise AssertionError("expected pending handoff without evidence to fail")
+            assert path.read_text(encoding="utf-8") == before_pending
             pending["pending_review"] = {
                 "review_id": "review-1",
                 "branch": "issue-232",
@@ -404,14 +414,44 @@ def self_test() -> int:
                 "poll_after_utc": "2026-07-08T05:30:00Z",
                 "progress_path": "/tmp/child/.context/progress.md",
             }
-            set_child(path, pending, "pending_review")
-            pending["pending_review"]["review_id"] = ""
+            ingest_child(path, pending)
+            before_out_of_order = path.read_text(encoding="utf-8")
             try:
-                set_child(path, pending, "pending_review")
+                merge_child(path, "#232", "b" * 40)
             except SystemExit as exc:
-                assert "review_id" in str(exc)
+                assert "cannot transition from pending_review to merged" in str(exc)
             else:
-                raise AssertionError("expected empty pending_review evidence to fail")
+                raise AssertionError("expected pending child merge to fail")
+            assert path.read_text(encoding="utf-8") == before_out_of_order
+            resumed = dict(passed, issue="#232", branch="issue-232")
+            ingest_child(path, resumed)
+            assert next(child for child in load_manifest(path)["children"] if child["issue"] == "#232")["status"] == "returned"
+
+            failed = dict(passed, issue="#233", branch="issue-233", review="FAIL")
+            before_failed = path.read_text(encoding="utf-8")
+            try:
+                ingest_child(path, failed)
+            except SystemExit as exc:
+                assert "needs_child_fix" in str(exc)
+            else:
+                raise AssertionError("expected failed handoff without evidence to fail")
+            assert path.read_text(encoding="utf-8") == before_failed
+            failed["needs_child_fix"] = "#231"
+            ingest_child(path, failed)
+            fixed = dict(passed, issue="#233", branch="issue-233")
+            ingest_child(path, fixed)
+            assert next(child for child in load_manifest(path)["children"] if child["issue"] == "#233")["status"] == "returned"
+
+            invalid = dict(passed, issue="#234", verification="failed tests")
+            before_invalid = path.read_text(encoding="utf-8")
+            try:
+                ingest_child(path, invalid)
+            except SystemExit as exc:
+                assert "verification" in str(exc)
+            else:
+                raise AssertionError("expected invalid handoff to fail")
+            assert path.read_text(encoding="utf-8") == before_invalid
+
             set_review(path, {"scope": "shipyard", "status": "PASS"})
             set_pr(path, "https://github.com/org/repo/pull/1")
             manifest = load_manifest(path)
@@ -420,8 +460,7 @@ def self_test() -> int:
             progress = json.loads((path.parent / "progress.md").read_text(encoding="utf-8"))
             assert progress["artifacts"]["manifest"] == os.fspath(path.resolve())
             assert manifest["children"][0]["status"] == "merged"
-            assert manifest["validation_plan"]["touched_files"] == ["new_file.py"]
-            assert manifest["validation_plan"]["checks"] == ["new check"]
+            assert manifest["review_gate"]["latest"]["scope"] == "shipyard"
         finally:
             os.chdir(old_cwd)
     return 0
@@ -438,10 +477,13 @@ def main() -> int:
     init.add_argument("integration_branch")
     init.add_argument("--base-branch")
 
-    child = subparsers.add_parser("set-child")
+    child = subparsers.add_parser("ingest-child")
     child.add_argument("--json")
     child.add_argument("--file")
-    child.add_argument("--status")
+
+    merged_child = subparsers.add_parser("merge-child")
+    merged_child.add_argument("issue")
+    merged_child.add_argument("--commit", required=True)
 
     review = subparsers.add_parser("set-review")
     review.add_argument("--json")
@@ -459,8 +501,10 @@ def main() -> int:
         return self_test()
     if args.command == "init":
         init_manifest(path, args.parent_issue, args.integration_branch, args.base_branch)
-    elif args.command == "set-child":
-        set_child(path, read_json_arg(args.json, args.file), args.status)
+    elif args.command == "ingest-child":
+        ingest_child(path, read_json_arg(args.json, args.file))
+    elif args.command == "merge-child":
+        merge_child(path, args.issue, args.commit)
     elif args.command == "set-review":
         set_review(path, read_json_arg(args.json, args.file))
     elif args.command == "set-pr":
