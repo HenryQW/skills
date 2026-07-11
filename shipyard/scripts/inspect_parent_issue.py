@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -113,9 +116,7 @@ def has_pending_pr(child: dict[str, Any], default_branch: str) -> bool:
 
 def local_branch_merged(child_number: str, current_branch: str) -> bool:
     branch = f"refs/heads/issue-{child_number}"
-    if subprocess.run(["git", "show-ref", "--verify", "--quiet", branch]).returncode != 0:
-        return False
-    return subprocess.run(["git", "merge-base", "--is-ancestor", branch, current_branch]).returncode == 0
+    return bool(run(["git", "for-each-ref", f"--merged={current_branch}", "--format=%(refname)", branch, f"{branch}-*"]))
 
 
 def local_done_numbers(
@@ -304,6 +305,19 @@ def self_test() -> None:
     assert graph_errors(classified) == []
     assert repo_view_args("OWNER/REPO") == ["repo", "view", "OWNER/REPO", "--json", "defaultBranchRef"]
     assert repo_view_args(None) == ["repo", "view", "--json", "defaultBranchRef"]
+    with tempfile.TemporaryDirectory() as tmp:
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp)
+            run(["git", "init", "-q", "-b", "integration"])
+            Path("README.md").write_text("test\n", encoding="utf-8")
+            run(["git", "add", "README.md"])
+            run(["git", "-c", "user.name=Agent", "-c", "user.email=agent@example.invalid", "commit", "-qm", "init"])
+            run(["git", "branch", "issue-11-child-slice"])
+            assert local_branch_merged("11", "integration")
+            assert not local_branch_merged("1", "integration")
+        finally:
+            os.chdir(old_cwd)
 
 
 def main() -> int:
