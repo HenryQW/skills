@@ -210,6 +210,14 @@ def verification_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return [f"{prefix} verification must start with pass: or skip:"]
 
 
+def artifact_errors(child: dict[str, Any], prefix: str) -> list[str]:
+    artifacts = child.get("artifacts")
+    value = artifacts.get("progress_path") if isinstance(artifacts, dict) else None
+    if isinstance(value, str) and value.strip():
+        return []
+    return [f"{prefix} artifacts.progress_path must be a non-empty string"]
+
+
 def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "PENDING_REVIEW":
         return []
@@ -240,6 +248,7 @@ def child_payload_errors(child: dict[str, Any]) -> list[str]:
     return (
         review_status_errors(child, "child payload")
         + verification_errors(child, "child payload")
+        + artifact_errors(child, "child payload")
         + failed_review_errors(child, "child payload")
         + pending_review_errors(child, "child payload")
     )
@@ -339,6 +348,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(status_errors(child, f"children[{index}]"))
         errors.extend(review_status_errors(child, f"children[{index}]"))
         errors.extend(verification_errors(child, f"children[{index}]"))
+        errors.extend(artifact_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
     return errors
@@ -365,7 +375,16 @@ def self_test() -> int:
                 "review": "PASS",
                 "checks": ["python3 scripts/validate.py -> passed"],
                 "known_skips": [],
+                "artifacts": {"progress_path": "/tmp/child/.context/progress.md"},
             }
+            missing_artifact = dict(passed)
+            missing_artifact.pop("artifacts")
+            try:
+                ingest_child(path, missing_artifact)
+            except SystemExit as exc:
+                assert "artifacts.progress_path" in str(exc)
+            else:
+                raise AssertionError("expected handoff without progress artifact to fail")
             ingest_child(path, passed)
             manifest = load_manifest(path)
             assert manifest["children"][0]["status"] == "returned"
