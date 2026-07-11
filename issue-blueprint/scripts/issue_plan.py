@@ -73,6 +73,14 @@ def validate(plan: dict) -> None:
     by_id = {issue["id"]: issue for issue in issues}
     final = final_check(plan)
     final_id = final["id"]
+    final_validation = re.sub(r"[^a-z ]", "", str(final.get("testing", {}).get("validation", "")).strip().lower())
+    if final_validation in {
+        "all checks pass",
+        "all tests pass",
+        "run all checks",
+        "run all tests",
+    }:
+        raise SystemExit(f"{final_id}.testing.validation must name concrete integration commands")
     non_final = known - {final_id}
     if set(final.get("blocked_by", [])) != non_final:
         raise SystemExit(f"{final_id} must be blocked by every non-final issue")

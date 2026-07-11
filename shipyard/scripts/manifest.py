@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-VERSION = 1
+VERSION = 2
 DEFAULT_MANIFEST = Path(".context/shipyard-manifest.json")
 REQUIRED_TOP_LEVEL = {
     "version",
@@ -53,6 +53,7 @@ REQUIRED_PENDING_REVIEW = {
     "poll_after_utc",
     "progress_path",
 }
+REQUIRED_PASS_REVIEW = {"status", "branch", "base_sha", "head_sha"}
 ALLOWED_CHILD_STATUS = {"returned", "needs_fix", "pending_review", "merged"}
 REVIEW_STATUS = {
     "PASS": {"returned", "merged"},
@@ -126,8 +127,8 @@ def init_manifest(path: Path, parent_issue: str, integration_branch: str, base_b
         "validation_plan": {
             "touched_files": [],
             "checks": [],
-            "final_checks": [],
             "known_skips": [],
+            "final": None,
         },
         "review_gate": {
             "latest": None,
@@ -169,8 +170,8 @@ def rebuild_validation_plan(manifest: dict[str, Any]) -> None:
     plan = {
         "touched_files": [],
         "checks": [],
-        "final_checks": existing.get("final_checks", []),
         "known_skips": [],
+        "final": existing.get("final"),
     }
     for child in manifest.get("children", []):
         plan["touched_files"] = extend_unique(plan["touched_files"], child.get("changed_files", []))
@@ -314,6 +315,9 @@ def merge_child(path: Path, issue: str, commit: str) -> dict[str, Any]:
 def set_review(path: Path, event: dict[str, Any]) -> dict[str, Any]:
     manifest = load_manifest(path)
     event = dict(event)
+    errors = review_event_errors(event)
+    if errors:
+        raise SystemExit("\n".join(errors))
     event.setdefault("recorded_at", now_utc())
     review_gate = manifest.setdefault("review_gate", {"latest": None, "events": []})
     events = review_gate.setdefault("events", [])
@@ -324,6 +328,73 @@ def set_review(path: Path, event: dict[str, Any]) -> dict[str, Any]:
     save_manifest(path, manifest)
     write_progress_pointer(path, manifest)
     return manifest
+
+
+def validation_event_errors(event: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    try:
+        normalize_issue(str(event.get("issue", "")))
+    except SystemExit:
+        errors.append("validation event issue must look like #123")
+    if event.get("status") != "PASS":
+        errors.append("validation event status must be PASS")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(event.get("head_sha", ""))):
+        errors.append("validation event head_sha must be a 40-character lowercase commit SHA")
+    checks = event.get("checks")
+    if not isinstance(checks, list) or not checks:
+        errors.append("validation event checks must be a non-empty list")
+    else:
+        for index, check in enumerate(checks):
+            if not isinstance(check, dict):
+                errors.append(f"validation event checks[{index}] must be an object")
+                continue
+            if not isinstance(check.get("command"), str) or not check["command"].strip():
+                errors.append(f"validation event checks[{index}].command must be non-empty")
+            if check.get("result") != "PASS":
+                errors.append(f"validation event checks[{index}].result must be PASS")
+    return errors
+
+
+def review_event_errors(event: dict[str, Any]) -> list[str]:
+    if event.get("status") != "PASS":
+        return []
+    missing = [field for field in sorted(REQUIRED_PASS_REVIEW) if not isinstance(event.get(field), str) or not event[field].strip()]
+    errors = [f"passing review event missing/empty field: {field}" for field in missing]
+    for field in ("base_sha", "head_sha"):
+        value = event.get(field)
+        if isinstance(value, str) and value and not re.fullmatch(r"[0-9a-f]{40}", value):
+            errors.append(f"passing review event {field} must be a 40-character lowercase commit SHA")
+    return errors
+
+
+def set_validation(path: Path, event: dict[str, Any]) -> dict[str, Any]:
+    manifest = load_manifest(path)
+    event = dict(event)
+    errors = validation_event_errors(event)
+    if errors:
+        raise SystemExit("\n".join(errors))
+    event["issue"] = normalize_issue(event["issue"])
+    event.setdefault("known_skips", [])
+    event.setdefault("recorded_at", now_utc())
+    manifest.setdefault("validation_plan", {})["final"] = event
+    save_manifest(path, manifest)
+    write_progress_pointer(path, manifest)
+    return manifest
+
+
+def reusable_evidence_errors(manifest: dict[str, Any], head_sha: str) -> list[str]:
+    final = manifest.get("validation_plan", {}).get("final")
+    review = manifest.get("review_gate", {}).get("latest")
+    errors: list[str] = []
+    if not isinstance(final, dict) or validation_event_errors(final):
+        errors.append("final validation evidence is missing or invalid")
+    elif final.get("head_sha") != head_sha:
+        errors.append("final validation evidence is stale")
+    if not isinstance(review, dict) or review_event_errors(review) or review.get("status") != "PASS":
+        errors.append("passing integration review evidence is missing or invalid")
+    elif review.get("head_sha") != head_sha:
+        errors.append("passing integration review evidence is stale")
+    return errors
 
 
 def set_pr(path: Path, url: str) -> dict[str, Any]:
@@ -351,6 +422,12 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(artifact_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
+    final = manifest.get("validation_plan", {}).get("final")
+    if final is not None:
+        errors.extend(validation_event_errors(final))
+    latest_review = manifest.get("review_gate", {}).get("latest")
+    if isinstance(latest_review, dict):
+        errors.extend(review_event_errors(latest_review))
     return errors
 
 
@@ -501,7 +578,39 @@ def self_test() -> int:
                 raise AssertionError("expected invalid handoff to fail")
             assert path.read_text(encoding="utf-8") == before_invalid
 
-            set_review(path, {"scope": "shipyard", "status": "PASS"})
+            head_sha = "c" * 40
+            validation = {
+                "issue": "#234",
+                "status": "PASS",
+                "head_sha": head_sha,
+                "checks": [{"command": "python3 scripts/validate.py", "result": "PASS"}],
+            }
+            set_validation(path, validation)
+            final = load_manifest(path)["validation_plan"]["final"]
+            assert final["issue"] == "#234"
+            assert final["head_sha"] == head_sha
+            try:
+                set_validation(path, dict(validation, checks=[]))
+            except SystemExit as exc:
+                assert "non-empty" in str(exc)
+            else:
+                raise AssertionError("expected empty final validation to fail")
+            review_event = {
+                "scope": "shipyard",
+                "status": "PASS",
+                "branch": "shipyard-123",
+                "base_sha": "a" * 40,
+                "head_sha": head_sha,
+            }
+            set_review(path, review_event)
+            assert reusable_evidence_errors(load_manifest(path), head_sha) == []
+            assert "stale" in "\n".join(reusable_evidence_errors(load_manifest(path), "d" * 40))
+            try:
+                set_review(path, {"scope": "shipyard", "status": "PASS"})
+            except SystemExit as exc:
+                assert "head_sha" in str(exc)
+            else:
+                raise AssertionError("expected incomplete passing review to fail")
             set_pr(path, "https://github.com/org/repo/pull/1")
             manifest = load_manifest(path)
             errors = validate_manifest(manifest)
@@ -538,6 +647,13 @@ def main() -> int:
     review.add_argument("--json")
     review.add_argument("--file")
 
+    validation = subparsers.add_parser("set-validation")
+    validation.add_argument("--json")
+    validation.add_argument("--file")
+
+    reuse = subparsers.add_parser("can-reuse")
+    reuse.add_argument("head_sha")
+
     pr = subparsers.add_parser("set-pr")
     pr.add_argument("url")
 
@@ -556,6 +672,14 @@ def main() -> int:
         merge_child(path, args.issue, args.commit)
     elif args.command == "set-review":
         set_review(path, read_json_arg(args.json, args.file))
+    elif args.command == "set-validation":
+        set_validation(path, read_json_arg(args.json, args.file))
+    elif args.command == "can-reuse":
+        errors = reusable_evidence_errors(load_manifest(path), args.head_sha)
+        if errors:
+            print("\n".join(errors), file=sys.stderr)
+            return 1
+        print(f"reusable evidence for {args.head_sha}")
     elif args.command == "set-pr":
         set_pr(path, args.url)
     elif args.command == "validate":

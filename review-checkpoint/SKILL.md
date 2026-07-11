@@ -144,6 +144,8 @@ review_event_file=$(mktemp)
 python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> set-review --file "$review_event_file"
 ```
 
+Every passing integration event must include `status:"PASS"`, the current `branch`, `base_sha`, and exact reviewed `head_sha`. Resolve both SHAs from git after the review completes, and do not return `PASS` unless `set-review` accepts the event.
+
 Classify blockers from the full `show` output.
 
 If no review-actionable blockers remain, stop.

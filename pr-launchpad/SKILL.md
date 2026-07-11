@@ -30,14 +30,14 @@ Own the memory boundary only when the user invoked `pr-launchpad` directly. When
    - `git diff --cached` for staged changes.
 4. Do not commit `.context/`, `.agents/`, or local progress files.
 5. If uncommitted changes are materially unrelated to the intended PR, or the intended scope is ambiguous, stop for user direction. Otherwise commit the focused changes with Conventional Commits.
-6. Run the smallest relevant non-destructive validation supported by the repository. If none applies, record an honest reason in the PR's Testing section.
+6. Run the smallest relevant non-destructive validation supported by the repository. When `shipyard_manifest` is present, first resolve the installed Shipyard skill and run `python3 <shipyard_dir>/scripts/manifest.py --manifest <shipyard_manifest> can-reuse $(git rev-parse HEAD)`. Reuse its recorded checks only when that succeeds. If evidence is missing, invalid, or stale, run normal validation and do not present the manifest evidence as current. If no validation applies, record an honest reason in the PR's Testing section.
 7. Draft a Conventional Commit-style PR title from the branch commits and complete diff.
 8. Push explicitly:
    - Run `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`.
    - If no upstream exists, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
 9. Draft the PR body from the actual diff and validation results.
-   - If `shipyard_manifest` is present, use its merged child issues, `final_check`, checks, known skips, child commits, and review gate status for the PR body.
+   - If `shipyard_manifest` is present, use its merged child issues, `validation_plan.final.issue` final-check close target, checks, known skips, child commits, and review gate status for the PR body.
    - Still inspect live git before creating the PR; the manifest is handoff state, not a replacement for repository state.
 10. Write multi-line PR body content to a temp file or heredoc.
 11. Use `gh` for GitHub or `glab` for GitLab.

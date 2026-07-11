@@ -42,6 +42,7 @@ def testing_section(issue: dict) -> str:
 
 def child_body(plan: dict, issue: dict, numbers: dict[str, str], tracker_issue: str | None) -> str:
     context = "\n".join(f"- {line}" for line in issue.get("context", [])) or "- No extra context."
+    execution = "\n\n## Execution\n\nVerification only. Do not edit code; return implementation defects to the owning child issue." if issue.get("role") == "final_check" else ""
     return f"""## Tracker
 
 {tracker_issue or numbers.get("tracker", "Tracker issue pending.")}
@@ -51,7 +52,7 @@ def child_body(plan: dict, issue: dict, numbers: dict[str, str], tracker_issue: 
 {issue["purpose"]}
 
 Context:
-{context}
+{context}{execution}
 
 ## Acceptance criteria
 
@@ -184,6 +185,9 @@ def self_test() -> None:
     invalid = json.loads(json.dumps(plan))
     invalid["waves"].insert(1, {"name": "Duplicate", "items": ["a"]})
     assert_invalid(invalid, "repeats issue membership")
+    invalid = json.loads(json.dumps(plan))
+    invalid["issues"][0]["testing"]["validation"] = "All checks pass."
+    assert_invalid(invalid, "concrete integration commands")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         plan_path = root / "plan.json"
@@ -202,6 +206,7 @@ def self_test() -> None:
         render(plan_path, out, nums, "#9")
         assert '"version":1' in (out / "00-tracker.md").read_text()
         assert '"role":"final_check"' in (out / "02-b.md").read_text()
+        assert "Verification only. Do not edit code" in (out / "02-b.md").read_text()
 
 
 def main() -> None:

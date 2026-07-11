@@ -36,7 +36,7 @@ python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .c
 
 4. Run interactive blocker rounds until the reviewer returns `PASS`:
    1. Delegate exactly one read-only adversarial reviewer for the round using the template below. The reviewer must not edit files or question the user.
-   2. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, poorly sliced, unnecessarily interfering, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
+   2. Trace every acceptance criterion to a concrete testing command or inspection in that issue. Treat an unproven criterion as an untestability blocker. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, poorly sliced, unnecessarily interfering, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
    3. Resolve factual blockers from the user prompt, project instructions, repository, issues, specs, glossary, or other authoritative evidence. Do not ask the user for discoverable facts; report an inaccessible authoritative source as an access blocker instead of recasting it as a product decision.
    4. Update the spec and issue plan, then re-render the graph after every factual resolution.
    5. Present unresolved product decisions in dependency order with context, a recommendation, and the consequences of each option. Ask dependent decisions one at a time. Batch at most five independent decisions and allow the user to accept all recommendations.
@@ -65,6 +65,7 @@ Return PASS when there are no material blockers. Otherwise return at most five b
 severity | kind | evidence | issue | recommended resolution
 
 Only report ambiguity, incorrectness, unsafe behavior, untestability, poor slicing, avoidable interference, or improper sequencing. Treat micro-issues, separable mega-issues, and same-wave work with unnecessary shared surfaces as slicing blockers, not implementation preferences. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives. Treat recorded user decisions as authoritative unless you cite new contradictory evidence.
+For every acceptance criterion, identify the exact testing command or inspection that proves it. Report any criterion without concrete evidence as an untestability blocker.
 ```
 
 ## Token Discipline
@@ -125,7 +126,7 @@ repo=OWNER/REPO
 - Every child issue must include `Tracker`, `What to build`, `Acceptance criteria`, `Testing`, `Blocked by`, `Blocks`, and `Parallelism`.
 - Every child issue's `Parallelism` section must state why it is safe in its wave and identify any files, interfaces, or shared state expected to overlap with same-wave issues.
 - Every child issue's `Testing` section must name the public seam under test, existing similar tests if known, the smallest validation command, and what not to test. If no useful seam exists, say so and provide a concrete non-test validation path.
-- Exactly one child issue must have `"role": "final_check"`. It blocks nothing and is blocked by every other child issue.
+- Exactly one child issue must have `"role": "final_check"`. It is strictly verification-only, blocks nothing, and is blocked by every other child issue. It must name concrete integration commands; reject generic validation such as `all checks pass`. Any implementation defect returns to the child that owns the failed acceptance criterion.
 - The implementation tracker issue must include the full issue graph and explicit waves for parallel execution.
 - If findings were dropped before publish, record them in `dropped_findings`; the tracker will include a dropped-findings section.
 - Publish blockers before blocked work so the final graph can use real issue numbers. The renderer topologically sorts `create-order.tsv` from `blocked_by`.

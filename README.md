@@ -57,13 +57,13 @@ These tables are the canonical skill inventory: category, purpose, install comma
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-11 10:55 |
-| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 21:30 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 22:47 |
-| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-11 10:58 |
+| Planning | `issue-blueprint` | Refine a multi-issue plan with acceptance-linked checks, then publish its approved dependency graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 23:46 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, blocking review gates, and file-based integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 23:46 |
+| PR publishing | `pr-launchpad` | Publish a pull request while reusing current SHA-bound Shipyard validation. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-11 23:46 |
 | Planning | `repo-surveyor` | Review a repo and return concise evidence-backed maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-11 10:58 |
-| Review gate | `review-checkpoint` | Run read-only Greptile reviews or authorized blocker-fix loops, with adversarial review fallback. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 21:50 |
+| Review gate | `review-checkpoint` | Run blocker-only reviews and record passing integration evidence against the reviewed SHA. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 23:46 |
 | PR cleanup | `review-repairbay` | Inspect, fix selected, or clear all actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-11 11:00 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 23:27 |
+| Execution | `shipyard` | Orchestrate minimal-context child worktrees, direct final verification, one integration review, and one PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 23:46 |
 
 ### Supporting Skills
 
@@ -71,7 +71,7 @@ These tables are the canonical skill inventory: category, purpose, install comma
 |---|---|---|---|---|
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-11 10:54 |
 | Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-11 10:55 |
-| Support | `identify-optimizations` | Read-only scan for five architecture improvements with before/after diagrams. | `npx skills install HenryQW/skills identify-optimizations -a codex -y` | 2026-07-11 20:52 |
+| Support | `identify-optimizations` | Read-only scan for five architecture improvements with browser-checked before/after Mermaid diagrams. | `npx skills install HenryQW/skills identify-optimizations -a codex -y` | 2026-07-11 23:51 |
 | Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-11 11:03 |
 
 ## 📄 License

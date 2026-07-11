@@ -73,32 +73,28 @@ Infer everything else:
 - Run only current non-final children with status `runnable`; do not pre-create blocked children.
 - Choose deterministic sibling worktree paths such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>` and stop if a path already exists.
 - Start each child with `python3 <issue_workbench_dir>/scripts/integration_child.py start <child_issue> --worktree-path <absolute_child_worktree> --integration-branch <current_branch>`.
-- Use `wait_mode=block` for a single runnable child. Use `wait_mode=defer` only for multi-child async waves or explicit resumable coordination.
+- Spawn each child with `fork_turns=none`; the prompt below is its complete context. Launch a runnable wave in parallel, but use `wait_mode=block` for every child. Use `defer` only when the user explicitly requests resumable coordination; a block-mode timeout may still return `PENDING_REVIEW`.
 - Launch children in parallel with this prompt:
 
 ```text
 Use $issue-workbench <child_issue>
-working_directory=<absolute_child_worktree>
-worktree_path=<path>
+worktree_path=<absolute_child_worktree>
 handoff_mode=integration_branch
 integration_branch=<current_branch>
 review_base=<current_branch>
-wait_mode=<block or defer per wave size>
-memory_context_path=<absolute_shipyard_memory_context_path_or_none>
-Read memory_context_path when it exists. Do not invoke agent-memory; Shipyard owns the memory boundary.
-Do not commit .context/.
-Keep .context/progress.md to goal, current_step, artifacts, blockers, and validation; write detailed artifacts to files referenced from artifacts.
-Return only the compact child handoff JSON object.
+wait_mode=block
+handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 ```
 
-- Require one child handoff JSON object with `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
+- Do not send status probes to running children. Wait for completion notifications and keep user updates phase-level.
+- Read the returned handoff file and require `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
 - If the child worktree has `.context/decisions.jsonl`, re-append each durable record to the Shipyard root with `<agent_memory_dir>/scripts/append_decision.py`; stable IDs deduplicate repeats. Do not write Obsidian or ask `pr-launchpad` to distill.
 - Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
 - Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
 - Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, or the review value is not accepted.
 - If `needs_child_fix` is present, stop shipyard edits and rerun or reuse `$issue-workbench` in that child worktree.
 - If `review` is `PENDING_REVIEW`, do not merge the branch and continue other runnable independent children when available.
-- Write each returned child handoff JSON object to a temp file and run `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`. The manifest derives and validates the child status; Shipyard does not select one. Do not inline JSON in shell commands.
+- Ingest each returned path serially with `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`. The manifest derives and validates child status; Shipyard does not copy or reconstruct JSON.
 - Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
 - Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`.
 - After each successful merge, run `python3 <shipyard_dir>/scripts/manifest.py merge-child <child_issue> --commit <commit>`.
@@ -120,22 +116,22 @@ Keep `.context/progress.md` as a five-field pointer to the manifest after every 
 - If non-final children have `pending_review`, resume those child worktrees at or after `poll_after_utc` and merge only after they return `review:"PASS"`.
 - If non-final children remain blocked, pending, or missing and no independent child is runnable, stop and report blockers before `final_check`.
 - Stop if the parent issue has no `final_check` child.
-- Run `final_check` through `$issue-workbench` only after every non-final child is merged or otherwise done.
-- Start and run `final_check` using Step 2's worktree, prompt, and handoff procedure.
-- Verification-only `final_check` children must not create empty commits; empty `diff_stat` plus `commit` equal to shipyard HEAD is the no-op completion signal.
-- `final_check` may fix only final-check-owned docs/tests. Code defects must return `needs_child_fix:"#<issue>"`.
-- Validate `final_check` with the same handoff JSON checks as any child. If it returns `PENDING_REVIEW`, record it and resume later; do not merge or enter final review. Skip merge for the no-op completion signal; otherwise merge it with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`.
+- Treat `final_check` as verification-only. Read its named integration commands and run them directly on the clean integration branch after every non-final child is merged. Do not launch a child or review for it, and do not edit code.
+- If a command fails, route the defect to the child whose acceptance criterion owns it. Stop for user direction when ownership is unclear.
+- Record passing final-check evidence in one JSON file with `issue`, `status:"PASS"`, current `head_sha`, non-empty `checks` objects containing `command` and `result:"PASS"`, and `known_skips`; run `python3 <shipyard_dir>/scripts/manifest.py set-validation --file <event_file>`.
+- On resume, skip `final_check` only when `validation_plan.final.issue` matches it and `validation_plan.final.head_sha` equals current `HEAD`.
 
 ### 4. Final review and PR
 
-- Run `$review-checkpoint` as a nested workflow on the shipyard branch with `wait_mode=block`, `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`, and its memory boundary skipped.
+- Run exactly one mandatory review gate: `$review-checkpoint` as a nested workflow on the shipyard branch with `wait_mode=block`, `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`, and its memory boundary skipped.
 - Do not run `greptile review`, poll Greptile, or write manifest review events by hand; `$review-checkpoint` owns that loop.
 - If it returns blockers for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
-- Route `child:<issue>` and `final_check` blockers back to their recorded `$issue-workbench` worktrees. Ingest the repaired PASS handoff, merge the returned branch, record `merge-child`, and rerun relevant checks.
+- Route `child:<issue>` blockers back to their recorded `$issue-workbench` worktrees. Treat `final_check` blockers as failed verification and route them to the child that owns the failed acceptance criterion; stop for user direction when ownership is unclear. Ingest repaired PASS handoffs, merge returned branches, record `merge-child`, and rerun relevant checks.
 - Fix only `integration` blockers in the shipyard worktree: merge conflicts, PR body, progress scratch, or final assembly mistakes.
 - Record `stale`, `non_actionable`, and `tooling_unavailable` findings and stop the fix loop for them. Do not route another review loop for non-blocking findings.
 - If the final review returns `PENDING_REVIEW`, record it and stop before PR publication until resume returns `PASS`.
-- Run `$pr-launchpad` as a nested workflow only after a completed final review gate returns `PASS`. Pass `shipyard_manifest=<absolute_path_to_.context/shipyard-manifest.json>` and skip its memory boundary so PR launch consumes child issues, checks, commits, skips, and close targets without reconstructing them.
+- After a review fix commit, rerun the final-check commands and replace the SHA-bound validation event.
+- Run `python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> can-reuse $(git rev-parse HEAD)`. Run `$pr-launchpad` only after it succeeds. Pass `shipyard_manifest=<absolute_path_to_.context/shipyard-manifest.json>` and skip its memory boundary so PR launch consumes child issues, final-check evidence, checks, commits, skips, and close targets without reconstructing them.
 
 ### 5. Route PR health
 
