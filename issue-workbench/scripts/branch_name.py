@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
+
+from repository import CommandError, issue
 
 
 def normalize_slug(raw: str) -> str:
@@ -39,14 +40,8 @@ def integration_branch_name_from_title(title: str) -> str:
 def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
     if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
         raise ValueError("parent_issue must be a positive integer")
-    command = ["gh", "issue", "view", parent_issue, "--json", "title", "--jq", ".title"]
-    if repo:
-        command.extend(["--repo", repo])
-    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(detail or "gh issue view failed")
-    return integration_branch_name_from_title(result.stdout.strip())
+    title = issue(parent_issue, "title", repo).get("title", "")
+    return integration_branch_name_from_title(str(title))
 
 
 def self_test() -> int:
@@ -91,9 +86,9 @@ def integration_main(argv: list[str]) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    except RuntimeError as exc:
+    except CommandError as exc:
         print(str(exc), file=sys.stderr)
-        return 1
+        return exc.returncode
     return 0
 
 
