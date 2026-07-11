@@ -26,15 +26,15 @@ If no target skill exists yet, stop and use `$skill-creator`.
 
 ## Establish Behavior
 
-1. Define representative positive cases, negative or non-trigger cases, intended outcomes, and behavior that must remain unchanged.
+1. Define representative positive, negative or non-trigger, and regression cases, including intent and authorization routing, intended outcomes, and behavior that must remain unchanged.
 2. Classify the skill as workflow, tool-integration, knowledge or domain, artifact-producing, or hybrid.
 3. Map only the applicable surfaces:
    - selection: frontmatter description, UI metadata, overlaps, and handoffs
-   - instruction: defaults, decisions, degrees of freedom, stop conditions, and output contract
-   - context: references, progressive disclosure, duplicated guidance, and resource loading
+   - instruction: hard domain, safety, authorization, and success constraints versus model-inferable procedure; defaults, stop conditions, and output contract
+   - context: instruction and resource footprint at run start and as nesting or conversation grows; progressive disclosure, duplication, and loading
    - execution: entrypoints, scripts, state, side effects, recovery, and post-actions
    - verification: validators, tests, smoke checks, forward tests, and repository sync
-4. Before editing, observe representative cases when feasible and record a baseline: wrong outcomes, repeated decisions, unnecessary turns or tool calls, repeated reads, noisy output, or fragile manual steps. If execution is unsafe or unavailable, use concrete static artifact evidence and state that limitation.
+4. Before editing, observe representative cases when feasible and record a baseline: outcomes, turns, tool calls, repeated reads, noisy output, fragile steps, and instruction or resource context at run start and after representative nesting or conversation growth. If execution is unsafe or unavailable, use concrete static artifact evidence and state that limitation.
 
 ## Find Problems
 

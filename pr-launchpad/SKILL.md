@@ -21,27 +21,30 @@ Own the memory boundary only when the user invoked `pr-launchpad` directly. When
 ## Procedure
 
 1. If this workflow owns the memory boundary, invoke `$agent-memory load`. Continue when it returns `memory_load=SKIPPED`; do not run setup.
-2. Inspect the repo first:
+2. Resolve `base_branch` from the input or repository default. Prefer its remote-tracking ref when available.
+3. Inspect the repo first:
    - `git status --short`
-   - `git diff --stat`
-   - Relevant `git diff` commands for changed files.
-3. Do not commit `.context/`, `.agents/`, or local progress files.
-4. If changes are uncommitted, split unrelated work into focused commits.
-5. Use Conventional Commits for new commits.
-6. PR title must be Conventional Commit style, derived from branch commits and the actual diff.
-7. Push explicitly:
+   - `git log --oneline <base_ref>...HEAD`
+   - `git diff <base_ref>...HEAD` for the complete committed branch diff.
+   - `git diff` for unstaged changes.
+   - `git diff --cached` for staged changes.
+4. Do not commit `.context/`, `.agents/`, or local progress files.
+5. If uncommitted changes are materially unrelated to the intended PR, or the intended scope is ambiguous, stop for user direction. Otherwise commit the focused changes with Conventional Commits.
+6. Run the smallest relevant non-destructive validation supported by the repository. If none applies, record an honest reason in the PR's Testing section.
+7. Draft a Conventional Commit-style PR title from the branch commits and complete diff.
+8. Push explicitly:
    - Run `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`.
    - If no upstream exists, run `git push --set-upstream origin HEAD`.
    - Otherwise run `git push`.
-8. Draft the PR title from the actual diff and commits.
+9. Draft the PR body from the actual diff and validation results.
    - If `shipyard_manifest` is present, use its merged child issues, `final_check`, checks, known skips, child commits, and review gate status for the PR body.
    - Still inspect live git before creating the PR; the manifest is handoff state, not a replacement for repository state.
-9. Write multi-line PR body content to a temp file or heredoc.
-10. Use `gh` for GitHub or `glab` for GitLab.
-11. Create the PR against `base_branch`.
-12. If PR health is inspected after creation and the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, do not invoke repair skills; record `Pending external unavailable check: <check>` in caller/progress context while preserving the final user reply as only the PR URL.
-13. Compact `.context/progress.md`.
-14. If this workflow owns the memory boundary, invoke `$agent-memory distill` as the final guard before every terminal return, including early `Stop` and `Blocked` results. `memory_write=SKIPPED` is acceptable. If distillation fails, do not hide the PR URL; report `memory_write=FAILED` to the caller/progress context.
+10. Write multi-line PR body content to a temp file or heredoc.
+11. Use `gh` for GitHub or `glab` for GitLab.
+12. Create the PR against `base_branch`.
+13. If PR health is inspected after creation and the only non-green signal is a known unavailable external review check that the user or caller explicitly waived or replaced, do not invoke repair skills; record `Pending external unavailable check: <check>` in caller/progress context while preserving the final user reply as only the PR URL.
+14. Compact `.context/progress.md`.
+15. If this workflow owns the memory boundary, invoke `$agent-memory distill` as the final guard before every terminal return, including early `Stop` and `Blocked` results. `memory_write=SKIPPED` is acceptable. If distillation fails, do not hide the PR URL; report `memory_write=FAILED` to the caller/progress context.
 
 Always use this PR body template:
 
@@ -53,7 +56,7 @@ Always use this PR body template:
 ## Testing
 
 - <commands actually run>
-- <or "Not run (not requested)">
+- <or an honest reason no relevant validation was run>
 
 ## Close Issue
 

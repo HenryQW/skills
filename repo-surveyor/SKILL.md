@@ -28,54 +28,32 @@ Inspect source, tests, config, build scripts, docs, and architecture-relevant fi
    - Current = the problem is present in the current branch.
    - Solved = the problem appears addressed by current code, docs, or tests; report only to prevent duplicate issue creation.
    - Unclear = evidence is incomplete; label the missing check instead of guessing.
-6. Dedupe current findings against existing tracker issues before proposing issue slices:
+6. When the user requests issue planning or a full report, dedupe current findings against existing tracker issues before proposing issue slices:
    - List likely matching open issues with `gh issue list --search "<area or exact phrase>" --state open` when GitHub is available.
    - View plausible matches with `gh issue view <number>` before declaring a new issue.
    - Produce a duplicate matrix that maps each finding to `new`, `duplicate-of #N`, `overlaps #N`, or `solved-by #N`.
    - Do not create or recommend an issue for duplicate, solved, or cleanup-only findings.
-7. Score each new or overlapping current finding:
+7. When the user requests issue planning or a full report, score each current finding. For issue slices, retain only new or overlapping findings:
    - Impact: High = reduces bugs, complexity, onboarding time, or future change risk. Medium = noticeable localized maintainability gain. Low = cleanup or consistency.
    - Effort: Low = less than half a day. Medium = half a day to two days. High = multi-file design work, migration, or careful regression testing.
 8. Label assumptions. Do not speculate as fact. Do not recommend an abstraction unless it clearly removes duplication or complexity.
 
 ## Output
 
-Default to the compact output unless the user asks for a full maintainability report.
+Default output:
 
-Compact output:
+1. Lead with the conclusion and the highest-value findings.
+2. For each finding, include its `Current`, `Solved`, or `Unclear` classification, exact path-specific evidence, and the smallest credible recommendation.
+3. State material assumptions or caveats.
+4. End with the next action. Do not generate issue-planning artifacts unless requested.
 
-1. Executive summary with the top 3 improvement themes.
-2. Current vs solved classification:
+When the user requests issue planning or a full report, also include:
 
-| ID | Area | Classification | Evidence | Notes |
-|---|---|---|---|---|
+- A duplicate matrix mapping each finding to `new`, `duplicate-of #N`, `overlaps #N`, or `solved-by #N`.
+- Impact and effort for new or overlapping current findings.
+- Issue-blueprint handoff JSON using the closest valid shape from `issue-blueprint/references/issue-plan.md`. Include only `Current` findings whose duplicate decision is `new` or `overlaps #N`.
+- Dropped findings with reasons and the remaining work in implementation order.
 
-3. Duplicate matrix:
-
-| ID | Proposed issue slice | Existing issue check | Decision | Reason |
-|---|---|---|---|---|
-
-4. Impact-Effort Matrix using this table:
-
-| ID | Area | Finding | Recommendation | Impact | Effort | Evidence |
-|---|---|---|---|---|---|---|
-
-Group rows under:
-- High impact, low effort.
-- High impact, high effort.
-- Low impact, low effort.
-- Low impact, high effort.
-
-Place Medium-scored rows in the closest matching group and keep `Medium` in the table.
-
-5. Issue-blueprint handoff JSON for the remaining new work, using the closest valid shape from `issue-blueprint/references/issue-plan.md`. Include only findings whose duplicate-matrix decision is `new` or `overlaps #N` and whose current-vs-solved classification is `Current`.
-6. Dropped findings list with reason, including duplicate, solved, unclear, and cleanup-only items.
-7. Top 5 priorities in implementation order.
-8. Brief DRY opportunities.
-9. Brief SOLID observations.
-10. Brief test strategy improvements.
-11. Brief phased roadmap: quick wins, structural improvements, larger architecture changes.
-
-For a full maintainability report, expand items 8-11 with supporting evidence and phase details.
+When the user requests a full report, also include evidence-backed DRY, SOLID, and test-strategy sections; an impact-effort matrix; and a phased roadmap. Include only sections supported by material findings.
 
 Every recommendation must name specific paths, modules, classes, functions, or repeated patterns.

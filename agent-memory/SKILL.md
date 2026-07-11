@@ -26,9 +26,9 @@ Only when the invocation includes `--setup`, read and follow `references/setup.m
 
 ## Workflow Boundary
 
-- `$agent-memory load`: at a top-level workflow entry, load at most two exact approved topics relevant to the task. If memory is not configured or no topic matches, return `memory_load=SKIPPED` and continue.
+- `$agent-memory load`: at a top-level workflow entry, load exact approved topics relevant to the task. If memory is not configured or no topic matches, return `memory_load=SKIPPED` and continue.
 - While the workflow runs, append only durable decision candidates as described below.
-- `$agent-memory distill`: before a top-level workflow returns `Done`, `Stop`, or `Blocked`, preview conservative distillation. Apply only after explicit approval. If there are no new durable records, return `memory_write=SKIPPED` without asking.
+- `$agent-memory distill`: follow the Distill procedure before a top-level workflow returns `Done`, `Stop`, or `Blocked`. If there are no new durable records, return `memory_write=SKIPPED` without asking.
 - Nested skills do not distill. They preserve `.context/decisions.jsonl` for the top-level caller.
 - Memory failure must not replace or hide the caller's terminal result.
 
@@ -40,7 +40,7 @@ For `$agent-memory load`, select at most two exact topic IDs from the approved m
 python3 <agent_memory_dir>/scripts/memory_context.py --project-root /path/to/project --topic <topic-id> --out .context/memory-context.md
 ```
 
-The topic ID is the lowercase slug of an approved note filename linked from `Agent/Memory/index.md` and must be unique across Decisions and Guidance. Load at most two exact topics. The generated file is capped at 6,000 characters. Read it only when notes were loaded.
+The topic ID is the lowercase slug of an approved note filename linked from `Agent/Memory/index.md` and must be unique across Decisions and Guidance. The generated file is capped at 6,000 characters. Read it only when notes were loaded.
 
 ## Decision Capture
 
@@ -73,16 +73,4 @@ python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/pro
 ```
 
 Topic slugs map directly to staged filenames under `Agent/Memory/Decisions/Inbox/` or `Agent/Memory/Guidance/Inbox/`; note bodies are never searched to choose a target. Apply rejects source or staged-note drift after preview. The command must not create one note per PR, promote Inbox notes, or edit `Agent/Memory/index.md` unless explicitly approved.
-
-## Distill On Request
-
-When the user invokes `$agent-memory` for distillation or asks to distill progress, preview then apply after approval:
-
-```bash
-python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
-python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
-```
-
 Use `.context/progress.md` only to clarify already durable decisions. Follow `references/distill.md` for what qualifies.
-
-Reference: `references/distill.md`.

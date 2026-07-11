@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent AEO"
   short_description: "Expose websites to AI agents"
-  default_prompt: "Use $agent-aeo to add agent-friendly markdown, llms.txt, and discovery routes to this website."
+  default_prompt: "Use $agent-aeo to add or audit only the agent-facing surfaces appropriate for this website."

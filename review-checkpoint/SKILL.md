@@ -1,13 +1,13 @@
 ---
 name: review-checkpoint
-description: Run blocker-only Greptile review loops on the current branch, with subagent adversarial review fallback when Greptile is unavailable. Use when asked to run Greptile, run a Greptile review loop, apply Greptile feedback, or use Greptile as a final review gate for local branch changes.
+description: Run blocker-only Greptile branch reviews, with adversarial subagent fallback when Greptile is unavailable. Direct review requests are read-only; explicit fix loops and coordinating workflows may apply deterministic in-scope fixes.
 ---
 
 # review-checkpoint
 
 ## Goal
 
-Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use subagent adversarial review. Fix only deterministic, in-scope blockers.
+Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use subagent adversarial review. Review without changing code unless an explicit fix loop or coordinating workflow authorizes deterministic, in-scope fixes.
 
 ## Memory Boundary
 
@@ -18,6 +18,8 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 
 ## Inputs
 
+- `mode` is optional; supported values are `review_only` and `fix_loop`.
+- Direct review or run-Greptile requests default to `review_only`. Explicit apply/fix-loop requests and coordinating callers such as `issue-workbench` or Shipyard default to `fix_loop` unless they select `review_only`.
 - `max_iterations` is optional and defaults to `3`.
 - `review_base` is optional; use the caller-provided base ref when known.
 - `wait_mode` is optional and defaults to `block`; supported values are `block` and `defer`.
@@ -29,15 +31,14 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 ## Rules
 
 - Do not start a new review just to poll. Poll the same review ID.
-- Classify every finding before fixing:
+- Classify every finding before acting:
   - `spec_blocker`: violates explicit issue/spec acceptance or adds unrequested behavior.
   - `standards_blocker`: violates repo instructions, local patterns, or maintainability baseline.
   - `safety_blocker`: risks data loss, secrets, security, or forbidden paths.
   - `test_blocker`: changed behavior lacks a meaningful validation path or has misleading tests.
   - `non_actionable`: cosmetic, speculative, stale, broad cleanup, unclear, contradictory, or outside scope.
-- Fix only `spec_blocker`, `standards_blocker`, `safety_blocker`, and `test_blocker` findings. Record but do not fix `non_actionable` findings.
-- A finding is review-actionable only when it is a deterministic blocker in the branch diff, in scope, and fixable without a product decision.
-- Ignore broad cleanup, optional improvements, unclear requests, and anything outside the branch diff.
+- A finding is review-actionable only when it is a deterministic `spec_blocker`, `standards_blocker`, `safety_blocker`, or `test_blocker` in the branch diff, in scope, and fixable without a product decision. Classify broad cleanup, optional improvements, unclear requests, and anything outside the branch diff as `non_actionable`.
+- In `review_only`, never edit files or commit fixes. In `fix_loop`, fix only review-actionable findings and record but do not fix `non_actionable` findings.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
 - When `manifest_path` is provided, record review state there and keep `.context/progress.md` as a pointer to the manifest.
@@ -45,7 +46,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - If review history must survive handoff, append to one `.context/review-events.jsonl`; do not create per-review artifact folders.
 - Keep `.context/progress.md` to five fields: `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Each fix iteration must resolve or reduce the deterministic blocker set.
-- Do not start another review loop for optional, cosmetic, cleanup-only, speculative, stale, or non-blocking findings; record them as `non_actionable` and stop.
+- Do not start another review loop for `non_actionable` findings.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
 - Mark contradictory repeat findings as `non_actionable: contradictory semantics`; record the reason and do not keep fixing.
 
@@ -80,9 +81,6 @@ When Greptile is unavailable, delegate one adversarial review to a subagent:
 - Use a prompt that includes `working_directory=<absolute path>` as the first field.
 - Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
 - Prefer reproducible git references over files. If a file payload is required, overwrite `.context/review-payload.txt` and record that absolute path under `manifest_path` or `.context/progress.md` `artifacts`.
-- Ask the subagent to inspect that branch diff only.
-- Tell it to report deterministic, in-scope blockers with file/line evidence.
-- Tell it not to edit files, commit, push, or review broad cleanup.
 - Classify its output with the same review-actionable blocker rules as Greptile.
 - Close the completed subagent after collecting its result.
 
@@ -105,7 +103,7 @@ Treat the completed subagent review as the current review output. If fixes are c
 
 ## Loop
 
-Repeat up to `max_iterations`:
+Run one completed review in `review_only`; repeat up to `max_iterations` in `fix_loop`:
 
 ```bash
 greptile review --agent
@@ -150,6 +148,8 @@ Classify blockers from the full `show` output.
 
 If no review-actionable blockers remain, stop.
 
+If `mode=review_only` and review-actionable blockers remain, return `BLOCKED` with those findings without editing or committing.
+
 If a finding repeats after a targeted fix but now asks for the opposite behavior, classify it as `non_actionable: contradictory semantics`, record both review IDs, and stop fixing that finding.
 
 Fix the smallest set of files needed for review-actionable blockers, then inspect and validate:
@@ -169,8 +169,8 @@ git add <files>
 git commit -m "fix(scope): address greptile review"
 ```
 
-Start a new Greptile review, or fallback subagent review when Greptile is still unavailable, only after committing fixes for review-actionable blockers. The final gate is the latest completed review with no later commit.
+Start a new Greptile review, or fallback subagent review when Greptile is still unavailable, only after committing fixes for review-actionable blockers. Before every new Greptile review, including fix-loop iterations, repeat the pushed-head synchronization check in `Before review` and proceed only when local `HEAD` equals its upstream. The final gate is the latest completed review with no later commit.
 
 ## Output
 
-Report review IDs or fallback reviews, checks run, final status, and unresolved review-actionable blockers if any. For deferred reviews or block-mode wait timeout, return `PENDING_REVIEW` with the pending review state location.
+Report `mode`, review IDs or fallback reviews, checks run, final status, and unresolved review-actionable blockers if any. For deferred reviews or block-mode wait timeout, return `PENDING_REVIEW` with the pending review state location.

@@ -11,24 +11,17 @@ can discover, request, and cite without scraping rendered HTML.
 Keep the implementation boring: one content resolver, thin route or proxy entry
 points, explicit content types, and tests that exercise runtime behavior.
 
-Read these references when you need format-level detail:
-
-- `references/llms-txt.md`: structure and response rules for `llms.txt` and
-  `llms-full.txt`
-- `references/index-md.md`: structure and response rules for page-level
-  markdown views
-- `references/agent-json.md`: structure and response rules for
-  `/.well-known/agent.json`
-
-## Surfaces and formats
+## Surfaces and references
 
 Add only the surfaces that fit the site:
 
-- discovery metadata: `/.well-known/agent.json`; use `references/agent-json.md`
-- root text entry points: `/llms.txt` and `/llms-full.txt`; use `references/llms-txt.md`
+- discovery metadata: `/.well-known/agent.json`; read
+  `references/agent-json.md` for its response contract
+- root text entry points: `/llms.txt` and `/llms-full.txt`; read
+  `references/llms-txt.md` for their response contracts
 - page content: `/<path>/index.md`, `/<path>/llms.txt`, `?mode=agent`, and
-  `Accept: text/markdown`; use `references/index-md.md` and
-  `references/llms-txt.md`
+  `Accept: text/markdown`; read `references/index-md.md` and
+  `references/llms-txt.md` for their response contracts
 
 Every page-level response must include real body content plus enough site
 context for a deep link. Do not create a separate visual agent page when the
@@ -65,17 +58,6 @@ dynamic route, rewrite layer, or router parameter can handle all requests.
 
 If the framework supports rewrites, middleware, or edge routing, route agent
 surfaces through one central handler.
-
-Use a small resolver object instead of repeating inline branches:
-
-```ts
-type AgentRewrite = {
-  contentType: "text/markdown" | "text/plain";
-  locale?: string;
-  requestedPath: string;
-  varyAccept: boolean;
-};
-```
 
 The rewrite layer should:
 

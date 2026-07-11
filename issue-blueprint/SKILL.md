@@ -16,7 +16,7 @@ description: Turn a rough multi-issue plan into a user-approved spec and depende
 
 Run the smallest end-to-end path from a rough multi-issue plan to an approved GitHub issue graph.
 
-0. Lock intent before work. If the user asks to use `$issue-blueprint`, create issues, or avoid implementation, state the boundary in one line: no code changes, issue graph only. Do not start implementation prep.
+0. Lock intent before work. If the user asks to use `$issue-blueprint`, create issues, or avoid implementation, treat the request as issue-graph planning only and do not start implementation prep.
 1. Classify route before planning:
    - one known actionable GitHub issue → stop and route to `$issue-workbench #<issue>`;
    - clear multi-issue feature → continue;
@@ -46,7 +46,7 @@ python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .c
 5. Before publishing, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
 6. After zero blockers, show the user the spec path, issue titles and dependency waves, non-goals, target repository, and labels. Ask for explicit approval to publish this exact graph. Earlier plan approval is not publication approval.
 7. Publish only after that approval. If approval is withheld or the graph changes, return to drafting, rendering, and blocker review; never publish the unapproved graph.
-8. Run `publish_issue_plan.py --verify`; it creates children first, then the tracker, then updates children with real numbers. Treat `--verify` plus `.context/issues/numbers.json` as sufficient verification unless the command fails or the numbers file is missing.
+8. After approval, follow Issue Publishing.
 
 ## Reviewer Template
 
@@ -140,5 +140,3 @@ python3 /path/to/issue-blueprint/scripts/render_issue_plan.py --self-test
 python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py --self-test
 python3 /path/to/skill-creator/scripts/quick_validate.py /path/to/issue-blueprint  # if available
 ```
-
-For live publishing, run the `publish_issue_plan.py --verify` command above and report its execution block.

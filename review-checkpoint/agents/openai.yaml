@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Checkpoint"
   short_description: "Run Greptile or fallback branch review"
-  default_prompt: "Use $review-checkpoint to review this branch and fix actionable findings."
+  default_prompt: "Use $review-checkpoint in review_only mode to review this branch without changing code."

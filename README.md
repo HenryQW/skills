@@ -163,22 +163,22 @@ These tables are the canonical skill inventory: category, purpose, install comma
 
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
-| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-10 17:10 |
-| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 10:21 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-10 17:01 |
-| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-10 17:01 |
-| Planning | `repo-surveyor` | Audit a repo and return compact issue-ready maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-10 17:10 |
-| Review gate | `review-checkpoint` | Run blocker-only Greptile review, defer pending reviews, or fallback to adversarial review. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-10 17:10 |
-| PR cleanup | `review-repairbay` | Resolve actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-10 17:10 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-10 17:10 |
+| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-11 10:55 |
+| Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 10:56 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 10:57 |
+| PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-11 10:58 |
+| Planning | `repo-surveyor` | Review a repo and return concise evidence-backed maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-11 10:58 |
+| Review gate | `review-checkpoint` | Run read-only Greptile reviews or authorized blocker-fix loops, with adversarial review fallback. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 11:00 |
+| PR cleanup | `review-repairbay` | Inspect, fix selected, or clear all actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-11 11:00 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 11:01 |
 
 ### Supporting Skills
 
 | Category | Name | Purpose | Install | Last updated (UTC) |
 |---|---|---|---|---|
-| Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-04 06:23 |
-| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-10 17:01 |
-| Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-10 12:04 |
+| Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-11 10:54 |
+| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-11 10:55 |
+| Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-11 11:03 |
 
 ## 📄 License
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Blueprint"
   short_description: "Refine and approve multi-issue graphs"
-  default_prompt: "Use $issue-blueprint to draft the planning bundle, resolve factual blockers, ask me for unresolved product decisions until review passes, and request my explicit approval before publishing the dependency-aware issue graph."
+  default_prompt: "Use $issue-blueprint to turn my rough multi-issue plan into an approved dependency-aware issue graph. Do not publish until I explicitly approve the exact graph."

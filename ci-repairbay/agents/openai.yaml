@@ -1,6 +1,6 @@
 interface:
   display_name: "CI Repairbay"
-  short_description: "Debug failing GitHub Actions checks"
+  short_description: "Inspect or fix GitHub Actions checks"
   icon_small: "./assets/github-small.svg"
   icon_large: "./assets/github.png"
-  default_prompt: "Use $ci-repairbay to inspect the failing GitHub Actions checks on this PR, summarize the root cause, and propose the smallest viable fix."
+  default_prompt: "Use $ci-repairbay to inspect the failing GitHub Actions checks on this PR and report the root cause. If I explicitly ask to fix them, apply the smallest scoped local fix and validate it."

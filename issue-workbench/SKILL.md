@@ -58,7 +58,6 @@ Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create chi
 - Do not modify `.context/` except local uncommitted progress, review, memory context, decision, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
-- Return only the PR URL on success unless `handoff_mode=integration_branch`.
 - Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
 
 ## Procedure
@@ -185,21 +184,23 @@ Skip routine progress, passing checks, and ordinary implementation details.
 
 Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 
-If `handoff_mode=pull_request`, run `pr-launchpad` as a nested skill only after a completed review gate returns `PASS`; it must skip its memory boundary. After it returns, invoke `$agent-memory distill`, then return only the PR URL.
+Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the compact handoff JSON in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.
+
+If `handoff_mode=pull_request`, run `pr-launchpad` as a nested skill only after a completed review gate returns `PASS`; it must skip its memory boundary. After it returns, invoke `$agent-memory distill`.
 
 In pull-request mode, `$agent-memory distill` is the final guard before every terminal return, including early `Stop`, `Blocked`, and `PENDING_REVIEW` results. In integration mode, do not distill; preserve `.context/decisions.jsonl` for `$shipyard`.
 
 Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. Do not write a per-child handoff file. The response is the child handoff JSON.
 
-If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Return only the JSON object emitted by `integration_child.py finish`:
+If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Emit the output of:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-The JSON includes `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+Treat the helper output as the authoritative handoff schema; do not reconstruct or extend it. `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, return handoff JSON with `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review:"PENDING_REVIEW"`, `checks`, `known_skips`, `artifacts.progress_path`, and `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. Include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, use the helper's handoff field names and add `review:"PENDING_REVIEW"` plus `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. `pending_review` must include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
 For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
 
@@ -208,7 +209,3 @@ python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_ba
 ```
 
 An empty `diff_stat` with `commit` equal to the integration branch HEAD is the no-op completion signal for `$shipyard`.
-
-## Output
-
-Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the compact handoff JSON in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.

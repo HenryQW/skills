@@ -3,4 +3,4 @@ interface:
   short_description: "Address actionable PR feedback"
   icon_small: "./assets/github-small.svg"
   icon_large: "./assets/github.png"
-  default_prompt: "Use $review-repairbay to review unresolved pull request feedback, implement the selected fixes, and summarize what changed."
+  default_prompt: "Use $review-repairbay to inspect unresolved pull request feedback, fix selected threads, or clear all actionable threads according to my request."
