@@ -71,6 +71,7 @@ These tables are the canonical skill inventory: category, purpose, install comma
 |---|---|---|---|---|
 | Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-11 10:54 |
 | Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-11 10:55 |
+| Support | `identify-optimizations` | Read-only scan for five architecture improvements with before/after diagrams. | `npx skills install HenryQW/skills identify-optimizations -a codex -y` | 2026-07-11 20:52 |
 | Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-11 11:03 |
 
 ## 📄 License
