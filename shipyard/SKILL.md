@@ -96,12 +96,12 @@ Return only the compact child handoff JSON object.
 - Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
 - Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
 - Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, or the review value is not accepted.
-- If `needs_child_fix` is present, mark `needs_fix`, stop shipyard edits, and rerun or reuse `$issue-workbench` in that child worktree.
-- If `review` is `PENDING_REVIEW`, mark `pending_review`, record the evidence, do not merge the branch, and continue other runnable independent children when available.
-- Write each returned child handoff JSON object to a temp file and run `python3 <shipyard_dir>/scripts/manifest.py set-child --file <child_handoff_file> --status <returned|needs_fix|pending_review>`. Do not inline JSON in shell commands.
+- If `needs_child_fix` is present, stop shipyard edits and rerun or reuse `$issue-workbench` in that child worktree.
+- If `review` is `PENDING_REVIEW`, do not merge the branch and continue other runnable independent children when available.
+- Write each returned child handoff JSON object to a temp file and run `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`. The manifest derives and validates the child status; Shipyard does not select one. Do not inline JSON in shell commands.
 - Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
 - Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`.
-- After each successful merge, rerun `python3 <shipyard_dir>/scripts/manifest.py set-child --file <child_handoff_file> --status merged`.
+- After each successful merge, run `python3 <shipyard_dir>/scripts/manifest.py merge-child <child_issue> --commit <commit>`.
 - On conflict, stop and report child issue, branch, worktree, and conflicted files.
 - Run one manifest/branch check before merge, one smallest relevant validation after the merge or wave, and one final validation before PR. Do not repeat `git status`, manifest validation, or issue inspection after every manifest update.
 - Do not delete child worktrees automatically.

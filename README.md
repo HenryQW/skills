@@ -58,12 +58,12 @@ These tables are the canonical skill inventory: category, purpose, install comma
 |---|---|---|---|---|
 | PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-11 10:55 |
 | Planning | `issue-blueprint` | Interactively refine a rough multi-issue plan, then publish its approved dependency-aware issue graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 21:30 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 21:29 |
+| Execution | `issue-workbench` | Implement one issue with guarded diffs, deferred review gates, and JSON integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 21:50 |
 | PR publishing | `pr-launchpad` | Publish the current branch as a GitHub or GitLab pull request. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-11 10:58 |
 | Planning | `repo-surveyor` | Review a repo and return concise evidence-backed maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-11 10:58 |
-| Review gate | `review-checkpoint` | Run read-only Greptile reviews or authorized blocker-fix loops, with adversarial review fallback. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 11:00 |
+| Review gate | `review-checkpoint` | Run read-only Greptile reviews or authorized blocker-fix loops, with adversarial review fallback. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 21:50 |
 | PR cleanup | `review-repairbay` | Inspect, fix selected, or clear all actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-11 11:00 |
-| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 21:30 |
+| Execution | `shipyard` | Orchestrate a parent issue through branch reconciliation, child worktrees, pending review gates, and one final PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 21:50 |
 
 ### Supporting Skills
 

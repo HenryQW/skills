@@ -158,6 +158,8 @@ git commit -m "feat(auth): add token refresh handling"
 
 Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, blocker-only actionability rules, fix loops, and review-loop commits.
 
+In integration mode, do not pass Shipyard's shared manifest to `$review-checkpoint`. Each child records review state in its isolated worktree and returns it through the Issue Workbench handoff; Shipyard ingests handoffs serially.
+
 If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in final handoff.
 
 If it returns anything other than `PASS` or `PENDING_REVIEW`, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
@@ -199,6 +201,7 @@ python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_ba
 ```
 
 Treat the helper output as the authoritative handoff schema; do not reconstruct or extend it. `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+The handoff reports facts only; it does not select a Shipyard child status.
 
 If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, use the helper's handoff field names and add `review:"PENDING_REVIEW"` plus `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. `pending_review` must include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
 
