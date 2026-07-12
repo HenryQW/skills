@@ -101,7 +101,7 @@ Adds or audits public discovery files, Markdown routes, and headers so AI agents
 
 #### [`agent-memory`](agent-memory/)
 
-Loads only task-relevant project context with locally validated setup, loading, decision, and distillation commands, then saves durable results. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
+Loads task-relevant project context, then saves durable results through a transactional, observable write plan. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
 
 #### [`identify-optimizations`](identify-optimizations/)
 

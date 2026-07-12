@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -13,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from obsidian_project import resolve_memory_index, topic_slug, unsymlinked_path
+from trusted_write import WriteTarget, apply_write_plan, sha256_bytes
 
 DEFAULT_SOURCE = ".context/decisions.jsonl"
 DEFAULT_PREVIEW = ".context/memory-distill-preview.json"
@@ -106,15 +106,16 @@ def render_staged_note(existing: str | None, topic: str, rows: list[dict], kind:
     return update_frontmatter_date(text.rstrip() + "\n" + "\n".join(additions) + "\n", today)
 
 
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
 def file_hash(path: Path) -> str | None:
     return sha256_bytes(path.read_bytes()) if path.exists() else None
 
 
-def apply_preview(source: Path, router: Path, preview_path: Path) -> tuple[str, list[Path]]:
+def apply_preview(
+    source: Path,
+    router: Path,
+    preview_path: Path,
+    write_plan=apply_write_plan,
+) -> tuple[str, list[Path]]:
     if not preview_path.exists():
         raise SystemExit(f"distillation preview not found: {preview_path}; run preview first")
     try:
@@ -136,33 +137,33 @@ def apply_preview(source: Path, router: Path, preview_path: Path) -> tuple[str, 
         unsymlinked_path(memory_dir, "Decisions", "Inbox"),
         unsymlinked_path(memory_dir, "Guidance", "Inbox"),
     }
-    validated: list[tuple[Path, str]] = []
+    validated: list[WriteTarget] = []
     for change in changes:
         if not isinstance(change, dict) or not isinstance(change.get("target"), str) or not isinstance(change.get("content"), str):
             raise SystemExit(f"invalid distillation preview change: {preview_path}")
         relative = Path(change["target"])
         if relative.is_absolute():
             raise SystemExit(f"invalid distillation preview target: {change['target']}")
-        path = unsymlinked_path(memory_dir, *relative.parts)
+        path = memory_dir.joinpath(*relative.parts)
         rendered = change["content"]
         if path.parent not in approved_inboxes:
             raise SystemExit(f"invalid distillation preview target: {path}")
         if sha256_bytes(rendered.encode()) != change.get("rendered_sha256"):
             raise SystemExit(f"distillation preview content hash mismatch: {path}")
-        if file_hash(path) != change.get("baseline_sha256"):
-            raise SystemExit(f"staged memory changed after preview: {path}; preview again")
-        validated.append((path, rendered))
+        baseline = change.get("baseline_sha256")
+        if baseline is not None and not isinstance(baseline, str):
+            raise SystemExit(f"invalid distillation preview baseline: {path}")
+        validated.append(WriteTarget(path, baseline, rendered.encode()))
     if not validated:
         raise SystemExit(f"distillation preview has no changes: {preview_path}")
 
-    for path, rendered in validated:
-        path = unsymlinked_path(memory_dir, *path.relative_to(memory_dir).parts)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(rendered, encoding="utf-8")
-        if path.read_text(encoding="utf-8") != rendered:
-            raise SystemExit(f"memory write verification failed: {path}")
+    write_plan(
+        roots=(memory_dir,),
+        directories=(target.path.parent for target in validated),
+        targets=validated,
+    )
     preview_path.unlink()
-    paths = [path for path, _ in validated]
+    paths = [target.path for target in validated]
     relative = ",".join(path.relative_to(memory_dir).as_posix() for path in paths)
     return f"UPDATED files={relative}", paths
 
@@ -173,6 +174,7 @@ def distill(
     preview_path: Path,
     apply: bool = False,
     today: str | None = None,
+    write_plan=apply_write_plan,
 ) -> tuple[str, list[Path]]:
     source = source.resolve()
     router = router.resolve()
@@ -180,7 +182,7 @@ def distill(
     if not router.exists():
         raise SystemExit(f"agent memory index not found: {router}")
     if apply:
-        return apply_preview(source, router, preview_path)
+        return apply_preview(source, router, preview_path, write_plan)
 
     rows = load_records(source)
     if not rows:
@@ -289,14 +291,29 @@ def self_test() -> None:
         try:
             distill(source, index, preview_path, apply=True)
         except SystemExit as exc:
-            assert "changed after preview" in str(exc)
+            assert "changed after planning" in str(exc)
         else:
             raise AssertionError("applied preview over changed staged memory")
         staged.unlink()
 
-        status, paths = distill(source, index, preview_path, apply=True, today="2099-01-01")
+        recorded_plans = []
+
+        def recording_write_plan(**plan):
+            recorded_plans.append(plan)
+            return apply_write_plan(**plan)
+
+        status, paths = distill(
+            source,
+            index,
+            preview_path,
+            apply=True,
+            today="2099-01-01",
+            write_plan=recording_write_plan,
+        )
         assert status == "UPDATED files=Decisions/Inbox/issue-workbench.md"
         assert paths == [staged]
+        assert len(recorded_plans) == 1
+        assert [target.path for target in recorded_plans[0]["targets"]] == [staged]
         assert staged.read_text(encoding="utf-8") == rendered
         assert not preview_path.exists()
 
