@@ -130,6 +130,7 @@ def apply_write_plan(
     created_directories: list[Path] = []
     staged: dict[Path, Path] = {}
     baselines: dict[Path, bytes | None] = {}
+    contents = {target.path: target.content for target in targets}
     committed: list[Path] = []
     attempted: Path | None = None
     try:
@@ -182,6 +183,17 @@ def apply_write_plan(
         restored: list[Path] = []
         unresolved: list[Path] = []
         for path in reversed(committed):
+            try:
+                current = _state(path)
+            except BaseException:
+                unresolved.append(path)
+                continue
+            if current == baselines[path]:
+                restored.append(path)
+                continue
+            if current != contents[path]:
+                unresolved.append(path)
+                continue
             try:
                 rollback(path, baselines[path])
             except BaseException:
@@ -330,6 +342,19 @@ def self_test() -> None:
         else:
             raise AssertionError("accepted readback failure")
         assert a.read_bytes() == b"old-a" and b.read_bytes() == b"old-b"
+
+        def concurrent_readback(path: Path) -> bytes:
+            path.write_bytes(b"concurrent-a")
+            return b"mismatch"
+
+        try:
+            apply_write_plan(roots=(root,), directories=(), targets=targets(), readback=concurrent_readback)
+        except WritePlanError as exc:
+            assert exc.committed == (a,) and not exc.restored and exc.unresolved == (a,)
+        else:
+            raise AssertionError("overwrote a target changed before rollback")
+        assert a.read_bytes() == b"concurrent-a" and b.read_bytes() == b"old-b"
+        a.write_bytes(b"old-a")
 
         replace_count = 0
 
