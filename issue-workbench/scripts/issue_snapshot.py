@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from repository import CommandError, issue
+from repository import GITHUB, GitHubError
 
 
 def clip(text: str | None, limit: int) -> str:
@@ -36,10 +36,11 @@ def snapshot(argv: list[str]) -> int:
 
     fields = "number,title,state,url,labels,body,comments"
     try:
-        data = issue(args.issue_number, fields)
-    except CommandError as exc:
+        GITHUB.authenticate()
+        data = GITHUB.issue_json(args.issue_number, fields)
+    except (GitHubError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
-        return exc.returncode
+        return getattr(exc, "returncode", 2)
     labels = ", ".join(label.get("name", "") for label in data.get("labels", []) if label.get("name"))
 
     print(f"# Issue #{data.get('number')}: {str(data.get('title', '')).strip()}")
@@ -72,6 +73,8 @@ def self_test() -> int:
         fake_gh = Path(raw_tmp) / "gh"
         fake_gh.write_text(
             "#!/bin/sh\n"
+            "if [ \"$1\" = auth ]; then exit 0; fi\n"
+            "if [ \"$1\" = repo ]; then printf '%s\\n' '{\"nameWithOwner\":\"owner/repo\"}'; exit 0; fi\n"
             "if [ \"$3\" = 500 ]; then echo 'fake gh failure' >&2; exit 7; fi\n"
             "printf '%s\\n' '{\"number\":23,\"title\":\"Adapter\",\"state\":\"OPEN\",\"url\":\"https://example.invalid/23\",\"labels\":[{\"name\":\"enhancement\"}],\"body\":\"Body\",\"comments\":[]}'\n",
             encoding="utf-8",

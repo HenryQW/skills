@@ -8,6 +8,8 @@ import sys
 
 from repository import (
     CommandError,
+    GITHUB,
+    GitHubError,
     branch_name,
     integration_branch_name,
     integration_branch_name_from_title,
@@ -53,11 +55,15 @@ def integration_main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     try:
+        GITHUB.authenticate()
         print(integration_branch_name(args.parent_issue, args.repo))
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except CommandError as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.returncode
+    except GitHubError as exc:
         print(str(exc), file=sys.stderr)
         return exc.returncode
     return 0
