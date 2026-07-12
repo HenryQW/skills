@@ -13,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from obsidian_project import DECLARATION, resolve_obsidian_project, unsymlinked_path
+from trusted_write import WriteTarget, apply_write_plan, sha256_bytes
 
 
 GLOBAL_START = "<!-- agent-memory:start -->"
@@ -246,21 +247,24 @@ def confirmation_hash(directories: list[Path], changes: list[Change]) -> str:
     return hashlib.sha256(rendered.encode()).hexdigest()
 
 
-def apply_setup(directories: list[Path], changes: list[Change]) -> None:
-    for path in directories:
-        validate_directory_path(path)
-    for path, existed, before, _ in changes:
-        validate_directory_path(path.parent)
-        if file_state(path) != (existed, before):
-            raise SystemExit(f"setup target changed after planning: {path}")
-    for path in directories:
-        path.mkdir(parents=True, exist_ok=True)
-    for path, _, _, after in changes:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(after)
-        if read(path) != after:
-            raise SystemExit(f"setup write verification failed: {path}")
+def apply_setup(
+    roots: tuple[Path, ...],
+    directories: list[Path],
+    changes: list[Change],
+    write_plan=apply_write_plan,
+) -> None:
+    write_plan(
+        roots=roots,
+        directories=directories,
+        targets=tuple(
+            WriteTarget(
+                path,
+                sha256_bytes(before.encode()) if existed else None,
+                after.encode(),
+            )
+            for path, existed, before, after in changes
+        ),
+    )
 
 
 def self_test() -> int:
@@ -286,6 +290,7 @@ def self_test() -> int:
                 raise AssertionError("accepted missing OBSIDIAN_ROOT")
             os.environ["OBSIDIAN_ROOT"] = str(vault)
             obsidian_root = resolve_obsidian_root()
+            roots = (project.resolve(), obsidian_root, codex_home.resolve())
             parts = project_parts("Project_Name")
             directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
             assert directories and changes
@@ -297,7 +302,7 @@ def self_test() -> int:
             workflow.parent.mkdir()
             workflow.write_text("", encoding="utf-8")
             try:
-                apply_setup(directories, changes)
+                apply_setup(roots, directories, changes)
             except SystemExit as exc:
                 assert "changed after planning" in str(exc)
             else:
@@ -316,7 +321,7 @@ def self_test() -> int:
             gitignore = project / ".gitignore"
             gitignore.write_text("dist/\n.cache/\n", encoding="utf-8")
             try:
-                apply_setup(directories, changes)
+                apply_setup(roots, directories, changes)
             except SystemExit as exc:
                 assert "changed after planning" in str(exc)
             else:
@@ -324,7 +329,16 @@ def self_test() -> int:
             assert not (vault / "Project_Name").exists()
             gitignore.write_text("dist/\n", encoding="utf-8")
             directories, changes = plan_setup(project, obsidian_root, parts, codex_home)
-            apply_setup(directories, changes)
+            recorded_plans = []
+
+            def recording_write_plan(**plan):
+                recorded_plans.append(plan)
+                return apply_write_plan(**plan)
+
+            apply_setup(roots, directories, changes, write_plan=recording_write_plan)
+            assert len(recorded_plans) == 1
+            assert tuple(recorded_plans[0]["directories"]) == tuple(directories)
+            assert [target.path for target in recorded_plans[0]["targets"]] == [change[0] for change in changes]
             assert GLOBAL_BLOCK in read(codex_home / "AGENTS.md")
             assert "OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/Project_Name" in read(project / "AGENTS.md")
             assert resolve_obsidian_project(project) == (vault / "Project_Name").resolve()
@@ -427,7 +441,7 @@ def main() -> int:
         return 0
     if args.confirm != token:
         raise SystemExit("setup changed after preview; preview again")
-    apply_setup(directories, changes)
+    apply_setup((project_root, obsidian_root, codex_home), directories, changes)
     print(f"setup=APPLIED changes={len(directories) + len(changes)}")
     return 0
 
