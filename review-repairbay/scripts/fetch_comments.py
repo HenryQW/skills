@@ -18,9 +18,22 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import subprocess
+import os
+import sys
+from pathlib import Path
 from typing import Any
+
+
+SKILLS_ROOT = Path(os.environ.get("SKILLS_ROOT") or Path(__file__).resolve().parents[2])
+ADAPTER_SCRIPTS = SKILLS_ROOT / "github-adapter" / "scripts"
+if not ADAPTER_SCRIPTS.is_dir():
+    raise SystemExit(f"github-adapter not found: {ADAPTER_SCRIPTS}")
+sys.path.insert(0, str(ADAPTER_SCRIPTS))
+
+from github_adapter import GitHub, GitHubError  # noqa: E402
+
+
+GITHUB = GitHub()
 
 QUERY = """\
 query(
@@ -91,69 +104,7 @@ query(
 """
 
 
-def _run(cmd: list[str], stdin: str | None = None) -> str:
-    p = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
-    if p.returncode != 0:
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr}")
-    return p.stdout
-
-
-def _run_json(cmd: list[str], stdin: str | None = None) -> dict[str, Any]:
-    out = _run(cmd, stdin=stdin)
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Failed to parse JSON from command output: {e}\nRaw:\n{out}") from e
-
-
-def gh_pr_view_json(fields: str, pr: str | None = None, repo: str | None = None) -> dict[str, Any]:
-    cmd = ["gh", "pr", "view"]
-    if pr:
-        cmd.append(pr)
-    if repo:
-        cmd += ["--repo", repo]
-    cmd += ["--json", fields]
-    return _run_json(cmd)
-
-
-def split_repo(repo: str) -> tuple[str, str]:
-    parts = repo.split("/", 1)
-    if len(parts) != 2 or not all(parts):
-        raise ValueError("--repo must be OWNER/REPO")
-    return parts[0], parts[1]
-
-
-def parse_pr_url(value: str) -> tuple[str, int] | None:
-    match = re.fullmatch(r"https://github\.com/([^/]+/[^/]+)/pull/([1-9][0-9]*)", value)
-    if not match:
-        return None
-    return match.group(1), int(match.group(2))
-
-
-def resolve_pr_ref(pr_arg: str | None, repo_arg: str | None) -> tuple[str, str, int]:
-    if pr_arg:
-        url_ref = parse_pr_url(pr_arg)
-        if url_ref:
-            repo_arg, number = url_ref
-            owner, repo = split_repo(repo_arg)
-            return owner, repo, number
-        if not re.fullmatch(r"[1-9][0-9]*", pr_arg):
-            raise ValueError("--pr must be a PR number or GitHub pull request URL")
-        if not repo_arg:
-            raise ValueError("--repo is required when --pr is a number")
-        owner, repo = split_repo(repo_arg)
-        return owner, repo, int(pr_arg)
-
-    pr = gh_pr_view_json("number,url", repo=repo_arg)
-    url_ref = parse_pr_url(pr["url"])
-    if not url_ref:
-        raise ValueError("unable to resolve base repository from current branch PR URL")
-    repo_arg, number = url_ref
-    owner, repo = split_repo(repo_arg)
-    return owner, repo, number
-
-
-def gh_api_graphql(
+def fetch_page(
     owner: str,
     repo: str,
     number: int,
@@ -165,27 +116,17 @@ def gh_api_graphql(
     Call `gh api graphql` using -F variables, avoiding JSON blobs with nulls.
     Query is passed via stdin using query=@- to avoid shell newline/quoting issues.
     """
-    cmd = [
-        "gh",
-        "api",
-        "graphql",
-        "-F",
-        "query=@-",
-        "-F",
-        f"owner={owner}",
-        "-F",
-        f"repo={repo}",
-        "-F",
-        f"number={number}",
-    ]
-    if comments_cursor:
-        cmd += ["-F", f"commentsCursor={comments_cursor}"]
-    if reviews_cursor:
-        cmd += ["-F", f"reviewsCursor={reviews_cursor}"]
-    if threads_cursor:
-        cmd += ["-F", f"threadsCursor={threads_cursor}"]
-
-    return _run_json(cmd, stdin=QUERY)
+    return GITHUB.graphql(
+        QUERY,
+        {
+            "owner": owner,
+            "repo": repo,
+            "number": number,
+            "commentsCursor": comments_cursor,
+            "reviewsCursor": reviews_cursor,
+            "threadsCursor": threads_cursor,
+        },
+    )
 
 
 def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
@@ -203,7 +144,7 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
     pr_meta: dict[str, Any] | None = None
 
     while True:
-        payload = gh_api_graphql(
+        payload = fetch_page(
             owner=owner,
             repo=repo,
             number=number,
@@ -256,18 +197,6 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
 
 
 def self_test() -> None:
-    assert parse_pr_url("https://github.com/o/r/pull/12") == ("o/r", 12)
-    assert parse_pr_url("https://github.com/o/r/issues/12") is None
-    assert split_repo("owner/repo") == ("owner", "repo")
-    assert resolve_pr_ref("7", "owner/repo") == ("owner", "repo", 7)
-    assert resolve_pr_ref("https://github.com/owner/repo/pull/8", None) == ("owner", "repo", 8)
-    try:
-        resolve_pr_ref("7", None)
-    except ValueError as exc:
-        assert "--repo is required" in str(exc)
-    else:
-        raise AssertionError("numbered PR without repo should fail")
-
     page = lambda nodes, has_next, cursor: {"nodes": nodes, "pageInfo": {"hasNextPage": has_next, "endCursor": cursor}}
     calls = 0
 
@@ -282,12 +211,12 @@ def self_test() -> None:
             "reviewThreads": page([{"id": "t1"}], False, "t1"),
         }}}}
 
-    original_graphql = gh_api_graphql
+    original_fetch_page = fetch_page
     try:
-        globals()["gh_api_graphql"] = fake_graphql
+        globals()["fetch_page"] = fake_graphql
         fetched = fetch_all("o", "r", 1)
     finally:
-        globals()["gh_api_graphql"] = original_graphql
+        globals()["fetch_page"] = original_fetch_page
     assert [node["id"] for node in fetched["conversation_comments"]] == ["c1"]
     assert [node["id"] for node in fetched["reviews"]] == ["r1", "r2"]
     assert [node["id"] for node in fetched["review_threads"]] == ["t1"]
@@ -295,7 +224,7 @@ def self_test() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch GitHub PR comments, reviews, and review threads.")
-    parser.add_argument("--repo", help="Base repository as OWNER/REPO. Required when --pr is a number.")
+    parser.add_argument("--repo", help="Base repository as OWNER/REPO. Defaults to the current repository.")
     parser.add_argument("--pr", help="PR number or https://github.com/OWNER/REPO/pull/NUMBER URL.")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -304,13 +233,11 @@ def main() -> None:
         return
 
     try:
-        if args.pr:
-            owner, repo, number = resolve_pr_ref(args.pr, args.repo)
-        else:
-            owner, repo, number = resolve_pr_ref(None, args.repo)
-    except ValueError as exc:
+        GITHUB.authenticate()
+        reference = GITHUB.resolve_pr(args.pr, args.repo)
+    except (GitHubError, ValueError) as exc:
         raise SystemExit(str(exc)) from None
-    result = fetch_all(owner, repo, number)
+    result = fetch_all(reference.owner, reference.name, reference.number)
     print(json.dumps(result, separators=(",", ":")))
 
 

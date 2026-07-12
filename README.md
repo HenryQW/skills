@@ -63,7 +63,7 @@ Start with the smallest route that fits:
 
 #### [`ci-repairbay`](ci-repairbay/)
 
-Inspects failing GitHub Actions checks, validates its inspection tooling, then makes and verifies a focused fix only when asked. Inspection remains read-only.
+Inspects failing GitHub Actions checks through `github-adapter`, then makes and verifies a focused fix only when asked. Inspection remains read-only.
 
 #### [`issue-blueprint`](issue-blueprint/)
 
@@ -71,7 +71,7 @@ Turns a rough multi-issue plan into an approved GitHub issue graph, owning its e
 
 #### [`issue-workbench`](issue-workbench/)
 
-Takes one GitHub issue through scoped implementation and blocker review, then opens a PR or supplies inspected child facts to `shipyard` for a canonical integration handoff.
+Resolves one GitHub issue through `github-adapter`, implements it in a guarded branch, then opens a PR or supplies canonical child facts to `shipyard`.
 
 #### [`pr-launchpad`](pr-launchpad/)
 
@@ -87,11 +87,11 @@ Runs blocker-only review using Greptile or an independent fallback, records the 
 
 #### [`review-repairbay`](review-repairbay/)
 
-Clears unresolved PR feedback through locally validated comment inspection, focused fixes, replies, and thread resolution, then rechecks until none remain.
+Resolves PR context through `github-adapter`, then clears actionable feedback with focused fixes, replies, thread resolution, and a final recheck.
 
 #### [`shipyard`](shipyard/)
 
-Takes an Issue Blueprint parent graph to one integration PR while owning canonical child handoffs, lifecycle state, integration checks, review, and publication.
+Takes an Issue Blueprint parent graph to one integration PR while `github-adapter` supplies GitHub transport and Shipyard owns graph state, child handoffs, checks, review, and publication.
 
 ### 🧰 Supporting skills
 
@@ -102,6 +102,10 @@ Adds or audits public discovery files, Markdown routes, and headers so AI agents
 #### [`agent-memory`](agent-memory/)
 
 Loads task-relevant project context, then saves durable results through a transactional, observable write plan. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
+
+#### [`github-adapter`](github-adapter/)
+
+Gives installed workflow skills one authenticated GitHub CLI transport and canonical repository, issue, and pull request reference resolver.
 
 #### [`identify-optimizations`](identify-optimizations/)
 
