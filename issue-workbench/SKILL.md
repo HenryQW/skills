@@ -14,7 +14,7 @@ Implement one GitHub issue into a clean feature branch with the smallest intenti
 - `scripts/issue_snapshot.py`: compact issue text and comments.
 - `scripts/branch_name.py`: deterministic branch names.
 - `scripts/start_issue_branch.py`: branch and shipyard worktree setup.
-- `scripts/integration_child.py`: integration-mode start, finish, and merge glue.
+- `scripts/integration_child.py`: integration-mode Git and review fact collection for Shipyard's manifest-owned handoff, plus start and merge glue.
 - `scripts/diff_guard.py`: forbidden-path guard.
 
 Use `<issue_workbench_dir>` as the absolute path to this skill directory when running `diff_guard.py`.
@@ -141,7 +141,7 @@ git commit -m "feat(auth): add token refresh handling"
 
 Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. In integration mode, do not pass Shipyard's shared manifest: the child records isolated review state and returns it through this handoff.
 
-If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, run `integration_child.py finish --review PENDING_REVIEW`; it writes the pending state into the canonical handoff file.
+If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, run `integration_child.py finish --review PENDING_REVIEW`; it passes the saved review facts to Shipyard's manifest interface, which validates and writes the canonical handoff.
 
 Otherwise, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
 
@@ -169,7 +169,7 @@ Do not duplicate final branch, diff, or PR checks: `pr-launchpad` owns PR-mode i
 
 In `pull_request` mode, invoke nested `pr-launchpad` only after `PASS` (it skips its memory boundary), then `$agent-memory distill`. Distill before every terminal return, including `Stop`, `Blocked`, and `PENDING_REVIEW`; in integration mode, do not distill and preserve `.context/decisions.jsonl` for `$shipyard`.
 
-Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; detailed notes, output, review state, and resume hints are optional. `integration_child.py finish` writes canonical `.context/integration-handoff.json` and records its absolute path in `artifacts.handoff`.
+Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; detailed notes, output, review state, and resume hints are optional. `integration_child.py finish` supplies inspected facts to the installed Shipyard manifest CLI; that interface writes canonical `.context/integration-handoff.json`, after which Workbench records its absolute path in `artifacts.handoff`.
 
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Emit the output of:
 
@@ -179,7 +179,7 @@ python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_ba
 
 Return only the helper's absolute path. Its file is authoritative: do not reconstruct, copy, or extend its factual JSON or select a Shipyard child status.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, keep its evidence under `.context/progress.md` `artifacts.pending_review`. It must include `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`. Then run:
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, keep its evidence under `.context/progress.md` `artifacts.pending_review`; Shipyard's manifest interface owns and validates its required field set. Then run:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification skip:review-pending --review PENDING_REVIEW

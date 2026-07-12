@@ -71,7 +71,7 @@ Turns a rough multi-issue plan into an approved GitHub issue graph, owning its e
 
 #### [`issue-workbench`](issue-workbench/)
 
-Takes one GitHub issue through scoped implementation, locally validated branch and handoff tooling, and blocker review, then opens a PR or returns a `shipyard` handoff.
+Takes one GitHub issue through scoped implementation and blocker review, then opens a PR or supplies inspected child facts to `shipyard` for a canonical integration handoff.
 
 #### [`pr-launchpad`](pr-launchpad/)
 
@@ -91,7 +91,7 @@ Clears unresolved PR feedback through locally validated comment inspection, focu
 
 #### [`shipyard`](shipyard/)
 
-Takes an Issue Blueprint parent graph to one integration PR: inspect runnable work, merge child branches, verify, review, and publish.
+Takes an Issue Blueprint parent graph to one integration PR while owning canonical child handoffs, lifecycle state, integration checks, review, and publication.
 
 ### 🧰 Supporting skills
 
