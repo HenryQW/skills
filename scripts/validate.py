@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Validate the skill inventory, then run each skill's declared checks."""
+"""Validate the documented skills, then run each skill's declared checks."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 import re
 import subprocess
@@ -12,10 +11,9 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TABLES = ("Workflow Skills", "Supporting Skills")
-TABLE_HEADER = "| Category | Name | Purpose | Install | Last updated (UTC) |"
-TABLE_SEPARATOR = "|---|---|---|---|---|"
-TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+SECTIONS = ("🚀 Workflow skills", "🧰 Supporting skills")
+INSTALL_COMMAND = "npx skills add HenryQW/skills --skill '*' --agent codex -y"
+SKILL_HEADING = re.compile(r"#### \[`([^`]+)`\]\(([^)]+)\)")
 
 # Every discovered skill must be present, even when it has no local self-test.
 CHECKS_BY_SKILL: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
@@ -72,47 +70,35 @@ def discover_skills(root: Path) -> dict[str, Path]:
 
 def read_inventory(readme: Path) -> list[str]:
     lines = readme.read_text().splitlines()
-    rows: list[str] = []
-    for table in TABLES:
-        heading = f"### {table}"
+    if lines.count(INSTALL_COMMAND) != 1:
+        raise InventoryError("expected one canonical all-skills install command")
+
+    documented: list[str] = []
+    for title in SECTIONS:
+        heading = f"### {title}"
         indexes = [index for index, line in enumerate(lines) if line == heading]
         if len(indexes) != 1:
             raise InventoryError(f"expected one {heading} section, found {len(indexes)}")
         section = lines[indexes[0] + 1 :]
         next_heading = next((i for i, line in enumerate(section) if line.startswith("### ")), len(section))
         section = section[:next_heading]
-        try:
-            header_index = section.index(TABLE_HEADER)
-        except ValueError as error:
-            raise InventoryError(f"{table}: missing canonical table header") from error
-        if header_index + 1 >= len(section) or section[header_index + 1] != TABLE_SEPARATOR:
-            raise InventoryError(f"{table}: malformed table separator")
 
-        table_names: list[str] = []
-        for line in section[header_index + 2 :]:
-            if not line.startswith("|"):
-                break
-            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-            if len(cells) != 5:
-                raise InventoryError(f"{table}: malformed row: {line}")
-            name_match = re.fullmatch(r"`([^`]+)`", cells[1])
-            if not name_match:
-                raise InventoryError(f"{table}: malformed skill name: {cells[1]}")
-            name = name_match.group(1)
-            expected_install = f"`npx skills install HenryQW/skills {name} -a codex -y`"
-            if cells[3] != expected_install:
-                raise InventoryError(f"{name}: invalid install command")
-            if not TIMESTAMP.fullmatch(cells[4]):
-                raise InventoryError(f"{name}: malformed Last updated (UTC)")
-            try:
-                datetime.strptime(cells[4], "%Y-%m-%d %H:%M")
-            except ValueError as error:
-                raise InventoryError(f"{name}: invalid Last updated (UTC)") from error
-            table_names.append(name)
-        if table_names != sorted(table_names, key=str.casefold):
-            raise InventoryError(f"{table}: rows are not sorted A-Z by name")
-        rows.extend(table_names)
-    return rows
+        names: list[str] = []
+        for index, line in enumerate(section):
+            match = SKILL_HEADING.fullmatch(line)
+            if not match:
+                continue
+            name, target = match.groups()
+            if target != f"{name}/":
+                raise InventoryError(f"{name}: skill heading must link to {name}/")
+            next_content = next((item for item in section[index + 1 :] if item.strip()), "")
+            if not next_content or next_content.startswith("#"):
+                raise InventoryError(f"{name}: missing introduction")
+            names.append(name)
+        if names != sorted(names, key=str.casefold):
+            raise InventoryError(f"{title}: skills are not sorted A-Z by name")
+        documented.extend(names)
+    return documented
 
 
 def validate_inventory(root: Path, registry: dict[str, object]) -> list[str]:
@@ -136,14 +122,15 @@ def validate_inventory(root: Path, registry: dict[str, object]) -> list[str]:
 
 
 def fixture_readme(workflow: list[str], supporting: list[str]) -> str:
-    def table(title: str, names: list[str]) -> str:
-        rows = [
-            f"| Support | `{name}` | Fixture. | `npx skills install HenryQW/skills {name} -a codex -y` | 2026-01-02 03:04 |"
-            for name in names
-        ]
-        return "\n".join((f"### {title}", "", TABLE_HEADER, TABLE_SEPARATOR, *rows))
+    def section(title: str, names: list[str]) -> str:
+        entries = [f"#### [`{name}`]({name}/)\n\nFixture introduction." for name in names]
+        return "\n\n".join((f"### {title}", *entries))
 
-    return f"# Fixture\n\n{table(TABLES[0], workflow)}\n\n{table(TABLES[1], supporting)}\n"
+    return (
+        f"# Fixture\n\n## 📦 Installation\n\n```bash\n{INSTALL_COMMAND}\n```\n\n"
+        f"## 🤖 What each skill automates\n\n{section(SECTIONS[0], workflow)}\n\n"
+        f"{section(SECTIONS[1], supporting)}\n"
+    )
 
 
 def make_fixture(root: Path) -> dict[str, object]:
@@ -157,11 +144,14 @@ def make_fixture(root: Path) -> dict[str, object]:
 
 def self_test() -> None:
     cases = {
-        "missing inventory row": lambda root, registry: (root / "README.md").write_text(
+        "missing skill introduction": lambda root, registry: (root / "README.md").write_text(
             fixture_readme(["alpha", "beta"], [])
         ),
+        "empty skill introduction": lambda root, registry: (root / "README.md").write_text(
+            (root / "README.md").read_text().replace("\n\nFixture introduction.", "", 1)
+        ),
         "bad install command": lambda root, registry: (root / "README.md").write_text(
-            (root / "README.md").read_text().replace("skills alpha", "skills wrong", 1)
+            (root / "README.md").read_text().replace("--agent codex", "--agent wrong", 1)
         ),
         "duplicate metadata": lambda root, registry: (
             (root / "alpha" / "duplicate" / "agents").mkdir(parents=True),

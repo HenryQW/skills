@@ -1,17 +1,29 @@
 # Skills
 
-🚢 Composable agent workflows for planning, building, reviewing, and shipping.
+🚢 Automated engineering workflows for Codex.
 
-## Requirements
+Give an agent a plan, issue, branch, or pull request. These skills can carry it through analysis, implementation, checks, review, and publication while stopping for decisions and approvals that need a human.
+
+## 📦 Installation
+
+Install every skill for Codex:
+
+```bash
+npx skills add HenryQW/skills
+```
+
+## ✨ Why use them
+
+- Automate complete workflows instead of isolated coding steps.
+- Keep changes scoped with branches, worktrees, checks, and review gates.
+- Preserve evidence so later steps can reuse valid results instead of repeating work.
+
+## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
 - `greptile` is optional; `review-checkpoint` falls back to adversarial review when unavailable.
 
-## 🧠 Agent Memory
-
-For first-time setup, follow [`agent-memory` setup](agent-memory/references/setup.md).
-
-## 🧭 Workflow Map
+## 🧭 Choose a workflow
 
 ```mermaid
 flowchart TD
@@ -37,42 +49,67 @@ flowchart TD
   done --> distill
 ```
 
-Use the lowest-power route that fits the request.
+Start with the smallest route that fits:
 
-| Input | Route |
-|---|---|
-| One actionable GitHub issue | `issue-workbench #<issue>` |
-| Repo audit that should become issue work | `repo-surveyor` → `issue-blueprint` |
-| Rough multi-issue feature | `issue-blueprint` → `shipyard #<parent>` |
-| Existing PR blocked by CI or review | `ci-repairbay` / `review-repairbay` |
-| Current branch just needs a PR | `pr-launchpad` |
-| Missing product decision | Stop and ask |
+- One actionable issue: `issue-workbench #<issue>`
+- A repository audit: `repo-surveyor`, then `issue-blueprint` if you want issues created
+- A multi-issue feature: `issue-blueprint`, then `shipyard #<parent>`
+- A branch ready to publish: `pr-launchpad`
+- A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
 
-## 📦 Skill Reference
+## 🤖 What each skill automates
 
-These tables are the canonical skill inventory: category, purpose, install command, and last implementation update.
+### 🚀 Workflow skills
 
-### Workflow Skills
+#### [`ci-repairbay`](ci-repairbay/)
 
-| Category | Name | Purpose | Install | Last updated (UTC) |
-|---|---|---|---|---|
-| PR cleanup | `ci-repairbay` | Diagnose and fix failing GitHub Actions PR checks. | `npx skills install HenryQW/skills ci-repairbay -a codex -y` | 2026-07-11 10:55 |
-| Planning | `issue-blueprint` | Refine a multi-issue plan with acceptance-linked checks, then publish its approved dependency graph. | `npx skills install HenryQW/skills issue-blueprint -a codex -y` | 2026-07-11 23:46 |
-| Execution | `issue-workbench` | Implement one issue with guarded diffs, blocking review gates, and file-based integration handoff. | `npx skills install HenryQW/skills issue-workbench -a codex -y` | 2026-07-11 23:46 |
-| PR publishing | `pr-launchpad` | Publish a pull request while reusing current SHA-bound Shipyard validation. | `npx skills install HenryQW/skills pr-launchpad -a codex -y` | 2026-07-11 23:46 |
-| Planning | `repo-surveyor` | Review a repo and return concise evidence-backed maintainability findings. | `npx skills install HenryQW/skills repo-surveyor -a codex -y` | 2026-07-11 10:58 |
-| Review gate | `review-checkpoint` | Run blocker-only reviews and record passing integration evidence against the reviewed SHA. | `npx skills install HenryQW/skills review-checkpoint -a codex -y` | 2026-07-11 23:46 |
-| PR cleanup | `review-repairbay` | Inspect, fix selected, or clear all actionable GitHub PR review feedback. | `npx skills install HenryQW/skills review-repairbay -a codex -y` | 2026-07-11 11:00 |
-| Execution | `shipyard` | Orchestrate minimal-context child worktrees, direct final verification, one integration review, and one PR. | `npx skills install HenryQW/skills shipyard -a codex -y` | 2026-07-11 23:58 |
+Takes a failing GitHub Actions check from log inspection to a verified fix. Inspection is read-only; when asked to fix, it changes only the affected code and reruns the relevant checks.
 
-### Supporting Skills
+#### [`issue-blueprint`](issue-blueprint/)
 
-| Category | Name | Purpose | Install | Last updated (UTC) |
-|---|---|---|---|---|
-| Support | `agent-aeo` | Add or audit public website access patterns for AI agents. | `npx skills install HenryQW/skills agent-aeo -a codex -y` | 2026-07-11 10:54 |
-| Support | `agent-memory` | Load and distill deterministic project memory; bootstrap only with `--setup`. | `npx skills install HenryQW/skills agent-memory -a codex -y` | 2026-07-11 10:55 |
-| Support | `identify-optimizations` | Read-only scan for five architecture improvements with browser-checked before/after Mermaid diagrams. | `npx skills install HenryQW/skills identify-optimizations -a codex -y` | 2026-07-11 23:51 |
-| Support | `skill-optimizer` | Optimize existing skills from evidence, apply the smallest root-cause change, and verify behavior. | `npx skills install HenryQW/skills skill-optimizer -a codex -y` | 2026-07-11 11:03 |
+Turns a rough multi-issue plan into an approved GitHub issue graph. It sharpens the scope, links every acceptance criterion to a concrete check, maps dependencies, and creates the issues after approval.
+
+#### [`issue-workbench`](issue-workbench/)
+
+Takes one GitHub issue through implementation, checks, and blocker review in an isolated branch. It then opens a pull request or returns a structured handoff to `shipyard`.
+
+#### [`pr-launchpad`](pr-launchpad/)
+
+Takes a finished branch to a published pull request. It inspects the diff, validates the current commit, commits pending work, pushes the branch, and creates a consistent PR title and description.
+
+#### [`repo-surveyor`](repo-surveyor/)
+
+Scans a repository for maintainability risks and returns ranked findings with file-level evidence. It is read-only and does not modify code.
+
+#### [`review-checkpoint`](review-checkpoint/)
+
+Runs a blocker-only code review using Greptile or an independent fallback reviewer. It records the result for the exact commit and only applies fixes when the workflow authorizes them.
+
+#### [`review-repairbay`](review-repairbay/)
+
+Takes unresolved pull request feedback through inspection, focused fixes, replies, and thread resolution. It rechecks GitHub until no actionable review threads remain.
+
+#### [`shipyard`](shipyard/)
+
+Takes a parent issue to one integration pull request. It runs dependency-ready child issues in parallel worktrees, merges their branches, performs final verification and review, then publishes the combined change.
+
+### 🧰 Supporting skills
+
+#### [`agent-aeo`](agent-aeo/)
+
+Adds or audits the public files, routes, and headers that let AI agents read a website reliably. It covers agent discovery files, clean Markdown views, and content negotiation.
+
+#### [`agent-memory`](agent-memory/)
+
+Loads only the project context needed for the current task, then saves durable decisions and results for future work. Obsidian is recommended, but any folder that stores Markdown (`.md`) files can provide the memory layer; connect it with the [`agent-memory` setup guide](agent-memory/references/setup.md).
+
+#### [`identify-optimizations`](identify-optimizations/)
+
+Scans a repository, ranks its five best architecture improvements, and generates a browser-checked HTML report with clear before-and-after diagrams. It does not run tests or edit application code.
+
+#### [`skill-optimizer`](skill-optimizer/)
+
+Finds wasted steps or unreliable behavior in an existing skill, applies the smallest root-cause improvement, and verifies representative use cases. It improves existing skills rather than creating new ones.
 
 ## 📄 License
 
