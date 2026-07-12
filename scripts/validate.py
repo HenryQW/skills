@@ -12,7 +12,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ("🚀 Workflow skills", "🧰 Supporting skills")
-INSTALL_COMMAND = "npx skills add HenryQW/skills --skill '*' --agent codex -y"
+INSTALL_COMMAND = "npx skills add HenryQW/skills"
 SKILL_HEADING = re.compile(r"#### \[`([^`]+)`\]\(([^)]+)\)")
 
 # Every discovered skill must be present, even when it has no local self-test.

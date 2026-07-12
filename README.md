@@ -105,7 +105,7 @@ Loads only the project context needed for the current task, then saves durable d
 
 #### [`identify-optimizations`](identify-optimizations/)
 
-Scans a repository, ranks its five best architecture improvements, and generates a browser-checked HTML report with clear before-and-after diagrams. It does not run tests or edit application code.
+Scans a repository, ranks its five best architecture improvements, and generates an HTML report with clear before-and-after diagrams. It does not run tests or edit application code.
 
 #### [`skill-optimizer`](skill-optimizer/)
 
