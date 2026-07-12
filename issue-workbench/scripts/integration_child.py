@@ -92,16 +92,23 @@ def ensure_local_progress_file() -> Path:
     return progress
 
 
-def record_handoff_progress(progress: Path, handoff: Path) -> Path:
-    result = json.loads(handoff.read_text(encoding="utf-8"))
+def record_handoff_progress(
+    progress: Path,
+    handoff: Path,
+    review: str,
+    checks: list[str],
+    known_skips: list[str],
+    needs_child_fix: str | None,
+) -> Path:
     blockers = []
-    if "needs_child_fix" in result:
-        blockers.append({"needs_child_fix": result["needs_child_fix"]})
-    validation = [str(check) for check in result["checks"]]
-    validation.extend(f"known_skip:{skip}" for skip in result["known_skips"])
+    if needs_child_fix:
+        blockers.append({"needs_child_fix": needs_child_fix})
+    validation = list(checks)
+    validation.extend(f"known_skip:{skip}" for skip in known_skips)
     artifacts: dict[str, object] = {"handoff": os.fspath(handoff.resolve())}
-    if "pending_review" in result:
-        artifacts["pending_review"] = result["pending_review"]
+    if review == "PENDING_REVIEW":
+        current = json.loads(progress.read_text(encoding="utf-8"))
+        artifacts["pending_review"] = current["artifacts"]["pending_review"]
     write_progress(
         progress,
         "issue-workbench integration child",
@@ -167,7 +174,7 @@ def write_handoff(
     if needs_child_fix:
         command.extend(("--needs-child-fix", needs_child_fix))
     run(command)
-    return record_handoff_progress(progress, handoff)
+    return record_handoff_progress(progress, handoff, review, checks, known_skips, needs_child_fix)
 
 
 def finish_child(
