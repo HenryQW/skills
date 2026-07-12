@@ -1,4 +1,4 @@
 interface:
   display_name: "Repo Surveyor"
-  short_description: "Audit a repository for maintainability"
-  default_prompt: "Use $repo-surveyor to return a concise, evidence-backed maintainability review of this repository."
+  short_description: "Audit maintainability in a visual report"
+  default_prompt: "Use $repo-surveyor for a read-only repository survey and open an HTML report with ranked findings and before-and-after Mermaid diagrams."

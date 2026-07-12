@@ -1,47 +1,64 @@
 ---
 name: repo-surveyor
-description: Review a repository without editing code and return evidence-backed maintainability findings. Use for repo scans covering readability, DRY, SOLID, tests, configs, scripts, docs, or architecture.
+description: Review a repository without editing code or running tests, then open an HTML report with ranked, evidence-backed maintainability findings and before-and-after Mermaid diagrams. Use when asked to scan, review, audit, simplify, optimize, or improve a codebase's architecture without implementing changes.
 ---
 
 # repo-surveyor
 
-Review only. Do not edit repository source or docs, create patches, rewrite code, commit, or push. Agent-memory may write ignored `.context/` artifacts.
+Review only. Do not edit repository source or docs, create patches, rewrite code, commit, push, or run tests, builds, linters, formatters, type checks, generators, installers, or application commands. Agent-memory may write ignored `.context/` artifacts; the temporary HTML report is the only other allowed write.
 
 ## Memory Boundary
 
 When invoked directly, call `$agent-memory load` before Step 1 and `$agent-memory distill` before every terminal return. A caller that owns the boundary skips both and retains `.context/decisions.jsonl`. Capture only established durable rules, constraints, or reusable root causes—not findings, scores, issue candidates, or routine observations. Memory failure must not replace the survey result or stop reason.
 
-## Scope
+## Survey
 
-Inspect source, tests, config, build scripts, docs, and architecture-relevant files; exclude generated/vendor/third-party files, lockfiles, build outputs, and binaries.
+1. Read repository instructions, branch state, root README, and manifests. Read relevant architecture docs, ADRs, and domain glossary when present; treat them as constraints. Inventory eligible files with `rg --files`, excluding generated, vendor, third-party, dependency, build, cache, binary, and lock files. Respect dirty worktree changes.
+2. Make one breadth pass over source, tests, config, scripts, docs, entry points, major modules, dependency direction, state ownership, and test seams. Explicitly assess:
+   - DRY: duplicated policy, orchestration, validation, config, or domain logic—not incidental syntax.
+   - SOLID: concrete responsibility, extension, substitutability, interface, or dependency-direction friction; do not score principles mechanically.
+   - Test strategy: behavior coverage, test seams, brittleness, and important untested risk.
+   - Architecture: module depth, boundaries, locality, state ownership, dependency leakage, and unnecessary abstraction.
+3. Use focused reads to prove candidates. Read every file needed for exact evidence, but do not read every file or delegate by default. Prefer changes that concentrate complexity behind smaller interfaces. Reject style-only, speculative, cleanup-only, or ADR-conflicting ideas unless current friction justifies reopening the decision.
+4. Classify evidence as `Current`, `Solved`, or `Unclear`. For `Unclear`, name the missing check instead of guessing. Stop after the main hotspots are sampled and up to five current candidates have survived verification.
+5. Label assumptions. Do not recommend an abstraction unless it clearly removes duplication or complexity.
 
-## Workflow
+Use repository domain terms. Use `module`, `interface`, `implementation`, `depth`, `seam`, `adapter`, `leverage`, and `locality` consistently when they clarify the evidence.
 
-1. Read repo instructions and branch state; inventory eligible files with `rg --files`.
-2. Search for repeated patterns and architecture signals. Before each finding, read every file needed for concrete evidence: duplicated logic, unclear boundaries, oversized functions/classes, inconsistent config, weak tests, brittle scripts, or unnecessary abstraction.
-3. Classify each finding:
-   - Current = the problem is present in the current branch.
-   - Solved = the problem appears addressed by current code, docs, or tests; report only to prevent duplicate issue creation.
-   - Unclear = evidence is incomplete; label the missing check instead of guessing.
-4. For requested issue planning or a full report, dedupe current findings before proposing slices: use `gh issue list --search "<area or exact phrase>" --state open` when available, then `gh issue view <number>` for plausible matches; map each finding to `new`, `duplicate-of #N`, `overlaps #N`, or `solved-by #N`. Do not recommend an issue for duplicate, solved, or cleanup-only findings. Score only new or overlapping current findings:
-   - Impact: High = reduces bugs, complexity, onboarding time, or future change risk. Medium = noticeable localized maintainability gain. Low = cleanup or consistency.
-   - Effort: Low = less than half a day. Medium = half a day to two days. High = multi-file design work, migration, or careful regression testing.
-5. Label assumptions; do not speculate as fact or recommend an abstraction unless it clearly removes duplication or complexity.
+## Rank
 
-## Output
+Rank current candidates by user impact, architectural leverage, confidence, and change size. Do not pad the list or force a priority level.
 
-Default output:
+- `P0`: active correctness, security, or data-integrity risk only.
+- `P1`: high-leverage maintainability problem.
+- `P2`: worthwhile improvement with lower urgency.
 
-1. Lead with the conclusion and highest-value findings.
-2. For each, include its `Current`, `Solved`, or `Unclear` classification, path-specific evidence, and smallest credible recommendation.
-3. State material assumptions/caveats and the next action. Do not generate issue-planning artifacts unless requested.
+Each candidate requires:
 
-When the user requests issue planning or a full report, also include:
+- `rank`, `title`, `priority`, and `Current` classification;
+- exact repo-relative `files` and 1–3 concrete `evidence` items;
+- a one-sentence `problem` and smallest credible `proposal`;
+- up to three concrete `benefits`;
+- `before` and `after` Mermaid diagrams, each with a short title and 2–5 concrete module, interface, service, or state-boundary nodes. Use `flowchart TB`, short labels, and evidence-backed dependency arrows.
 
-- The duplicate matrix and impact/effort for new or overlapping current findings.
-- Issue-blueprint handoff JSON using the closest valid shape from `issue-blueprint/references/issue-plan.md`, only for `Current` findings marked `new` or `overlaps #N`.
-- Dropped findings with reasons and the remaining work in implementation order.
+Use Mermaid only; do not add SVG, canvas, CSS arrows, HTML connectors, or detailed interfaces.
 
-When the user requests a full report, also include evidence-backed DRY, SOLID, and test-strategy sections; an impact-effort matrix; and a phased roadmap. Include only sections supported by material findings.
+## Issue-planning Handoff
 
-Every recommendation must name specific paths, modules, classes, functions, or repeated patterns.
+Hard boundary: a default invocation stops after opening the report. Do not call or hand off to issue-blueprint, dedupe issues, or create planning artifacts unless the user explicitly requested issue planning when invoking repo-surveyor.
+
+When issue planning was explicitly requested, dedupe current findings with `gh issue list --search "<area or exact phrase>" --state open` when available, then inspect plausible matches with `gh issue view <number>`. Map each candidate to `new`, `duplicate-of #N`, `overlaps #N`, or `solved-by #N`; do not propose issues for duplicate, solved, or cleanup-only findings.
+
+For `new` and `overlaps #N` candidates, include impact (`High`, `Medium`, or `Low`), effort (`Low`, `Medium`, or `High`), and issue-blueprint handoff JSON using the closest valid shape in `issue-blueprint/references/issue-plan.md`. Include the duplicate matrix, dropped findings with reasons, and remaining work in implementation order.
+
+## Render
+
+Resolve `assets/report.html` relative to this file. Every survey produces and opens an HTML report; do not substitute a chat-only review.
+
+1. Copy the template to `${TMPDIR:-/tmp}/repository-survey-<UTC timestamp>.html` (`%TEMP%` on Windows).
+2. Replace only the HTML between `REPORT_CONTENT_START` and `REPORT_CONTENT_END`. Keep the document shell, CSS, and Mermaid scripts unchanged. Escape repository-derived HTML; all report text must remain static HTML, and JavaScript may only render embedded Mermaid source.
+3. Include a header, concise conclusion, and explicit evidence-backed DRY, SOLID, test-strategy, and architecture coverage sections, including when a category has no material finding.
+4. Add one `<article id="candidate-<rank>">` per ranked candidate. Include its classification, priority, files, evidence, benefits, problem, proposal, and required diagrams in `.visual.before` and `.visual.after`, each containing one `<pre class="mermaid">`.
+5. If no current candidate survives, do not invent one. Instead include one unranked architecture overview with paired Mermaid diagrams showing the observed structure and the unchanged recommended structure, clearly stating that no structural change is recommended from sampled evidence.
+6. When issue planning was requested, add its duplicate matrix, impact/effort, handoff JSON, dropped findings, and implementation order to the static report.
+7. Confirm the required coverage sections, exact evidence paths, one paired Mermaid comparison per candidate, static visible text, and absolute output path. Open the report with the platform's local file opener and return the absolute path plus material caveats.
