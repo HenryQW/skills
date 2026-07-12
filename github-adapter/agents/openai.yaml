@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitHub Adapter"
-  short_description: "Resolve GitHub references and run gh"
-  default_prompt: "Use $github-adapter to execute authenticated GitHub CLI operations and resolve canonical repository, issue, or pull request references."

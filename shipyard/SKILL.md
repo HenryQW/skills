@@ -44,7 +44,6 @@ Infer everything else:
   them into lifecycle transitions, owns validation and review-event schemas,
   and rewrites `.context/progress.md` as its pointer.
 - `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees, supplies inspected Git and review facts to the installed Shipyard manifest interface, and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
-- `<github_adapter_dir>/scripts/github_adapter.py`: authenticates GitHub CLI access and resolves canonical repository and issue context.
 
 ## State Machine
 
@@ -52,7 +51,7 @@ Infer everything else:
 
 - If `--integration-worktree` is present, require an absolute path and `cd` there.
 - Compute the expected branch with `python3 <issue_workbench_dir>/scripts/branch_name.py integration <parent_issue>`.
-- Resolve the default branch with `python3 <github_adapter_dir>/scripts/github_adapter.py repository --default-branch`.
+- Resolve the default branch with `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`.
 - Ensure `git status --porcelain` is empty before changing branches; stop with dirty paths if not.
 - Run `git fetch --all --prune`.
 - If the current branch differs from the expected branch:
@@ -131,7 +130,7 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 
 ### 5. Route PR health
 
-- After PR creation, do one PR health snapshot with CI Repairbay's adapter-backed inspection script or the repository's normal check command. Do not sleep-and-recheck unless a repair skill changed branch or PR state.
+- After PR creation, do one PR health snapshot with `gh pr checks` or the repository's normal PR check command. Do not sleep-and-recheck unless a repair skill changed branch or PR state.
 - Read checks only to choose the first repair skill.
 - Invoke `$ci-repairbay` as a nested workflow with its memory boundary skipped for failing GitHub Actions checks.
 - Invoke `$review-repairbay` as a nested workflow with its memory boundary skipped for requested changes, unresolved threads, or inline comments. Execution mode is approval to fix/reply/resolve/re-fetch unless the user restricted GitHub writes.

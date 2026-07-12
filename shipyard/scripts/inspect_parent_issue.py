@@ -14,25 +14,35 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+ISSUE_REF_RE = re.compile(r"(?:https://github\.com/[^/\s]+/[^/\s]+/issues/|#)([1-9][0-9]*)")
 SKILLS_ROOT = Path(os.environ.get("SKILLS_ROOT") or Path(__file__).resolve().parents[2])
 BLUEPRINT_SCRIPTS = SKILLS_ROOT / "issue-blueprint" / "scripts"
-ADAPTER_SCRIPTS = SKILLS_ROOT / "github-adapter" / "scripts"
 if not BLUEPRINT_SCRIPTS.is_dir():
     raise SystemExit(f"issue-blueprint contract not found: {BLUEPRINT_SCRIPTS}")
-if not ADAPTER_SCRIPTS.is_dir():
-    raise SystemExit(f"github-adapter not found: {ADAPTER_SCRIPTS}")
 sys.path.insert(0, str(BLUEPRINT_SCRIPTS))
-sys.path.insert(0, str(ADAPTER_SCRIPTS))
 
 from issue_graph_contract import decode_embedded  # noqa: E402
-from github_adapter import GitHub, GitHubError  # noqa: E402
-
-
-GITHUB = GitHub()
 
 
 def run(command: list[str]) -> str:
     return subprocess.check_output(command, text=True).strip()
+
+
+def gh_json(args: list[str]) -> dict[str, Any]:
+    return json.loads(run(["gh", *args]))
+
+
+def repo_view_args(repo: str | None) -> list[str]:
+    return ["repo", "view", *([repo] if repo else []), "--json", "defaultBranchRef"]
+
+
+def issue_number(value: str) -> str:
+    if re.fullmatch(r"[1-9][0-9]*", value):
+        return value
+    match = ISSUE_REF_RE.search(value)
+    if not match:
+        raise SystemExit(f"could not parse issue number: {value}")
+    return match.group(1)
 
 
 def child_from_issue(issue: dict[str, Any], graph_issue: dict[str, Any]) -> dict[str, Any]:
@@ -139,27 +149,29 @@ def classify(children: list[dict[str, Any]], default_branch: str, local_done: se
 
 
 def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
-    parent_ref = GITHUB.resolve_issue(parent_issue, repo)
-    parent = GITHUB.issue_json(
-        parent_ref.number,
-        "number,title,url,body,state",
-        parent_ref.repository,
-    )
+    parent_number = issue_number(parent_issue)
+    repo_args = ["--repo", repo] if repo else []
+    parent = gh_json(["issue", "view", parent_number, *repo_args, "--json", "number,title,url,body,state"])
     graph = decode_embedded(parent.get("body") or "")
     if graph["tracker"] != parent["number"]:
         raise SystemExit(f"issue-plan-graph tracker #{graph['tracker']} does not match parent #{parent['number']}")
     children = [
         child_from_issue(
-            GITHUB.issue_json(
-                str(graph_issue["number"]),
-                "number,title,url,state,closedByPullRequestsReferences",
-                parent_ref.repository,
+            gh_json(
+                [
+                    "issue",
+                    "view",
+                    str(graph_issue["number"]),
+                    *repo_args,
+                    "--json",
+                    "number,title,url,state,closedByPullRequestsReferences",
+                ]
             ),
             graph_issue,
         )
         for graph_issue in graph["issues"]
     ]
-    default_branch = GITHUB.default_branch(parent_ref.repository)
+    default_branch = gh_json(repo_view_args(repo))["defaultBranchRef"]["name"]
     current_branch = run(["git", "branch", "--show-current"])
     if not current_branch:
         raise SystemExit("detached HEAD is not supported")
@@ -263,6 +275,8 @@ def self_test() -> None:
     assert local_done_numbers(classified, "integration", "integration", lambda number, branch: number == "11") == {"11"}
     assert classify([child_c], "main")[0]["status"] == "pending-pr"
     assert graph_errors(classified) == []
+    assert repo_view_args("OWNER/REPO") == ["repo", "view", "OWNER/REPO", "--json", "defaultBranchRef"]
+    assert repo_view_args(None) == ["repo", "view", "--json", "defaultBranchRef"]
     with tempfile.TemporaryDirectory() as tmp:
         old_cwd = os.getcwd()
         try:
@@ -292,12 +306,7 @@ def main() -> int:
     if not args.parent_issue:
         parser.error("parent_issue is required unless --self-test is used")
 
-    try:
-        GITHUB.authenticate()
-        plan = inspect(args.parent_issue, args.repo)
-    except (GitHubError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    plan = inspect(args.parent_issue, args.repo)
     errors = graph_errors(plan["children"])
     if errors:
         for error in errors:

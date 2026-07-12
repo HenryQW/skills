@@ -8,8 +8,8 @@ description: "Use when a user asks to inspect, diagnose, or fix failing GitHub P
 
 ## Overview
 
-Use this skill for failing GitHub Actions checks on a pull request. Its bundled
-script uses `github-adapter` for PR context, checks, and logs.
+Use this skill for failing GitHub Actions checks on a pull request. Use `gh` for
+PR metadata, changed files, checks, and logs.
 
 - Inspect, diagnose, explain, and review requests are read-only.
 - Explicit fix requests authorize the smallest scoped local fix and relevant
@@ -38,7 +38,7 @@ script uses `github-adapter` for PR context, checks, and logs.
 1. Resolve the PR: use a URL directly, resolve a number in `repo_path`, or use
    the current-branch PR when omitted. Fetch PR metadata and changed files.
 2. Inspect failing GitHub Actions checks.
-   - Run the bundled script from Quick start; it handles field drift and job-log fallbacks through `github-adapter`.
+   - Run the bundled script from Quick start; it handles `gh` field drift and job-log fallbacks.
 3. Scope non-GitHub Actions checks.
    - If the check URL is not a GitHub Actions run, label it as external and only report the URL.
    - Do not attempt Buildkite or other providers; keep the workflow lean.

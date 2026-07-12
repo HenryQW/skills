@@ -3,23 +3,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
-
-
-SKILLS_ROOT = Path(os.environ.get("SKILLS_ROOT") or Path(__file__).resolve().parents[2])
-ADAPTER_SCRIPTS = SKILLS_ROOT / "github-adapter" / "scripts"
-if not ADAPTER_SCRIPTS.is_dir():
-    raise SystemExit(f"github-adapter not found: {ADAPTER_SCRIPTS}")
-sys.path.insert(0, str(ADAPTER_SCRIPTS))
-
-from github_adapter import GitHub, GitHubError  # noqa: E402
-
-
-GITHUB = GitHub()
 
 
 class CommandError(RuntimeError):
@@ -57,7 +45,20 @@ def remote_branch_exists(name: str) -> bool:
 
 
 def default_branch() -> str:
-    return GITHUB.default_branch()
+    return run(["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"])
+
+
+def issue(number: str, fields: str, repo: str | None = None) -> dict[str, object]:
+    command = ["gh", "issue", "view", number, "--json", fields]
+    if repo:
+        command.extend(["--repo", repo])
+    try:
+        value = json.loads(run(command))
+    except json.JSONDecodeError as exc:
+        raise CommandError(f"invalid JSON from gh issue view: {exc}") from exc
+    if not isinstance(value, dict):
+        raise CommandError("gh issue view returned a non-object JSON value")
+    return value
 
 
 def normalize_slug(raw: str) -> str:
@@ -84,7 +85,9 @@ def integration_branch_name_from_title(title: str) -> str:
 
 
 def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
-    title = GITHUB.issue_json(parent_issue, "title", repo).get("title", "")
+    if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
+        raise ValueError("parent_issue must be a positive integer")
+    title = issue(parent_issue, "title", repo).get("title", "")
     return integration_branch_name_from_title(str(title))
 
 
@@ -140,8 +143,6 @@ def create_issue_branch(
 
     if integration_branch:
         raise RuntimeError("--integration-branch requires --worktree-path")
-    if not base_branch:
-        GITHUB.authenticate()
     base = base_branch or default_branch()
     run(["git", "checkout", "-b", name, f"origin/{base}"])
     return [f"branch={name}"]

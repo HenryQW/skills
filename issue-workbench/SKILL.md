@@ -16,7 +16,6 @@ Implement one GitHub issue into a clean feature branch with the smallest intenti
 - `scripts/start_issue_branch.py`: branch and shipyard worktree setup.
 - `scripts/integration_child.py`: integration-mode Git and review fact collection for Shipyard's manifest-owned handoff, plus start and merge glue.
 - `scripts/diff_guard.py`: forbidden-path guard.
-- `github-adapter`: required sibling skill for authenticated GitHub issue and repository resolution.
 
 Use `<issue_workbench_dir>` as the absolute path to this skill directory when running `diff_guard.py`.
 
@@ -42,7 +41,6 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
 - Do not add compatibility, migration, aliases, fallback paths, or future-proofing unless explicitly required; record sibling or newly discovered work as a blocker, follow-up, or decision candidate.
-- Stop clearly when `github-adapter` is unavailable or `gh` is unauthenticated; do not copy transport or reference parsing into Workbench.
 - Do not modify `.context/` except local uncommitted progress, review, memory context, decision, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - In integration mode, do not send interim status messages to Shipyard; return only the canonical handoff path.
 - Do not use `git add .` unless the full diff has been inspected.
