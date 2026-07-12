@@ -9,7 +9,7 @@ Give an agent a plan, issue, branch, or pull request. These skills can carry it 
 Install every skill for Codex:
 
 ```bash
-npx skills add HenryQW/skills
+npx skills add HenryQW/skills --skill '*' --agent codex -y
 ```
 
 ## ✨ Why use them
@@ -63,15 +63,15 @@ Start with the smallest route that fits:
 
 #### [`ci-repairbay`](ci-repairbay/)
 
-Inspects failing GitHub Actions checks, then makes and verifies a focused fix only when asked. Inspection remains read-only.
+Inspects failing GitHub Actions checks, validates its inspection tooling, then makes and verifies a focused fix only when asked. Inspection remains read-only.
 
 #### [`issue-blueprint`](issue-blueprint/)
 
-Turns a rough multi-issue plan into an approved GitHub issue graph with checks, dependencies, and a final verification issue.
+Turns a rough multi-issue plan into an approved GitHub issue graph, with local validation for rendering and publication behavior.
 
 #### [`issue-workbench`](issue-workbench/)
 
-Takes one GitHub issue through scoped implementation, checks, and blocker review, then opens a PR or returns a `shipyard` handoff.
+Takes one GitHub issue through scoped implementation, locally validated branch and handoff tooling, and blocker review, then opens a PR or returns a `shipyard` handoff.
 
 #### [`pr-launchpad`](pr-launchpad/)
 
@@ -87,11 +87,11 @@ Runs blocker-only review using Greptile or an independent fallback, records the 
 
 #### [`review-repairbay`](review-repairbay/)
 
-Clears unresolved PR feedback through inspection, focused fixes, replies, and thread resolution, then rechecks until none remain.
+Clears unresolved PR feedback through locally validated comment inspection, focused fixes, replies, and thread resolution, then rechecks until none remain.
 
 #### [`shipyard`](shipyard/)
 
-Takes a parent issue to one integration PR: run dependency-ready child worktrees, merge them, verify and review the result, then publish.
+Takes a parent issue to one integration PR with locally validated manifest and issue-graph tooling: run ready child worktrees, merge them, verify, review, and publish.
 
 ### 🧰 Supporting skills
 
@@ -101,7 +101,7 @@ Adds or audits public discovery files, Markdown routes, and headers so AI agents
 
 #### [`agent-memory`](agent-memory/)
 
-Loads only task-relevant project context, then saves durable decisions and results. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
+Loads only task-relevant project context with locally validated setup, loading, decision, and distillation commands, then saves durable results. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
 
 #### [`identify-optimizations`](identify-optimizations/)
 

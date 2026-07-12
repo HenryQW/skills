@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the documented skills, then run each skill's declared checks."""
+"""Validate the documented skills, then run skill-local validators."""
 
 from __future__ import annotations
 
@@ -12,45 +12,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ("🚀 Workflow skills", "🧰 Supporting skills")
-INSTALL_COMMAND = "npx skills add HenryQW/skills"
+INSTALL_COMMAND = "npx skills add HenryQW/skills --skill '*' --agent codex -y"
 SKILL_HEADING = re.compile(r"#### \[`([^`]+)`\]\(([^)]+)\)")
-
-# Every discovered skill must be present, even when it has no local self-test.
-CHECKS_BY_SKILL: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
-    "agent-aeo": (),
-    "agent-memory": (
-        ("setup", ("python3", "agent-memory/scripts/setup_agent_memory.py", "--self-test")),
-        ("context", ("python3", "agent-memory/scripts/memory_context.py", "--self-test")),
-        ("decision append", ("python3", "agent-memory/scripts/append_decision.py", "--self-test")),
-        ("distill", ("python3", "agent-memory/scripts/distill_memory.py", "--self-test")),
-    ),
-    "ci-repairbay": (
-        ("inspect checks help", ("python3", "ci-repairbay/scripts/inspect_pr_checks.py", "--help")),
-    ),
-    "identify-optimizations": (),
-    "issue-blueprint": (
-        ("render", ("python3", "issue-blueprint/scripts/render_issue_plan.py", "--self-test")),
-        ("publish", ("python3", "issue-blueprint/scripts/publish_issue_plan.py", "--self-test")),
-    ),
-    "issue-workbench": (
-        ("issue snapshot", ("python3", "issue-workbench/scripts/issue_snapshot.py", "--self-test")),
-        ("branch name", ("python3", "issue-workbench/scripts/branch_name.py", "123", "Add Thing!!")),
-        ("branch start", ("python3", "issue-workbench/scripts/start_issue_branch.py", "--self-test")),
-        ("integration child", ("python3", "issue-workbench/scripts/integration_child.py", "--self-test")),
-        ("diff guard", ("python3", "issue-workbench/scripts/diff_guard.py")),
-    ),
-    "pr-launchpad": (),
-    "repo-surveyor": (),
-    "review-checkpoint": (),
-    "review-repairbay": (
-        ("fetch comments", ("python3", "review-repairbay/scripts/fetch_comments.py", "--self-test")),
-    ),
-    "shipyard": (
-        ("manifest", ("python3", "shipyard/scripts/manifest.py", "--self-test")),
-        ("parent inspection", ("python3", "shipyard/scripts/inspect_parent_issue.py", "--self-test")),
-    ),
-    "skill-optimizer": (),
-}
 
 
 class InventoryError(ValueError):
@@ -101,7 +64,7 @@ def read_inventory(readme: Path) -> list[str]:
     return documented
 
 
-def validate_inventory(root: Path, registry: dict[str, object]) -> list[str]:
+def validate_inventory(root: Path) -> dict[str, Path]:
     skills = discover_skills(root)
     rows = read_inventory(root / "README.md")
     duplicates = sorted({name for name in rows if rows.count(name) > 1})
@@ -113,12 +76,19 @@ def validate_inventory(root: Path, registry: dict[str, object]) -> list[str]:
         missing = sorted(discovered - documented)
         stale = sorted(documented - discovered)
         raise InventoryError(f"README inventory mismatch; missing={missing}, stale={stale}")
-    declared = set(registry)
-    if discovered != declared:
-        undeclared = sorted(discovered - declared)
-        stale = sorted(declared - discovered)
-        raise InventoryError(f"self-test registry mismatch; undeclared={undeclared}, stale={stale}")
-    return sorted(discovered)
+    return skills
+
+
+def run_validators(root: Path, skills: dict[str, Path]) -> int:
+    for name, skill_dir in sorted(skills.items()):
+        validator = skill_dir / "scripts" / "validate.py"
+        if not validator.is_file():
+            continue
+        result = subprocess.run((sys.executable, str(validator)), cwd=root)
+        if result.returncode:
+            print(f"{name}: validator failed", file=sys.stderr)
+            return result.returncode
+    return 0
 
 
 def fixture_readme(workflow: list[str], supporting: list[str]) -> str:
@@ -133,47 +103,71 @@ def fixture_readme(workflow: list[str], supporting: list[str]) -> str:
     )
 
 
-def make_fixture(root: Path) -> dict[str, object]:
+def make_fixture(root: Path) -> None:
     for name in ("alpha", "beta", "gamma"):
         (root / name / "agents").mkdir(parents=True)
         (root / name / "SKILL.md").write_text(f"# {name}\n")
         (root / name / "agents" / "openai.yaml").write_text("interface: {}\n")
     (root / "README.md").write_text(fixture_readme(["alpha", "beta"], ["gamma"]))
-    return {"alpha": (), "beta": (), "gamma": ()}
 
 
 def self_test() -> None:
     cases = {
-        "missing skill introduction": lambda root, registry: (root / "README.md").write_text(
+        "missing skill introduction": lambda root: (root / "README.md").write_text(
             fixture_readme(["alpha", "beta"], [])
         ),
-        "empty skill introduction": lambda root, registry: (root / "README.md").write_text(
+        "empty skill introduction": lambda root: (root / "README.md").write_text(
             (root / "README.md").read_text().replace("\n\nFixture introduction.", "", 1)
         ),
-        "bad install command": lambda root, registry: (root / "README.md").write_text(
+        "bad install command": lambda root: (root / "README.md").write_text(
             (root / "README.md").read_text().replace("--agent codex", "--agent wrong", 1)
         ),
-        "duplicate metadata": lambda root, registry: (
+        "duplicate metadata": lambda root: (
             (root / "alpha" / "duplicate" / "agents").mkdir(parents=True),
             (root / "alpha" / "duplicate" / "agents" / "openai.yaml").write_text("interface: {}\n"),
         ),
-        "sort drift": lambda root, registry: (root / "README.md").write_text(
+        "sort drift": lambda root: (root / "README.md").write_text(
             fixture_readme(["beta", "alpha"], ["gamma"])
         ),
-        "undeclared skill": lambda root, registry: registry.pop("gamma"),
     }
     for name, mutate in cases.items():
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            registry = make_fixture(root)
-            validate_inventory(root, registry)
-            mutate(root, registry)
+            make_fixture(root)
+            validate_inventory(root)
+            mutate(root)
             try:
-                validate_inventory(root, registry)
+                validate_inventory(root)
             except InventoryError:
                 continue
             raise AssertionError(f"self-test did not reject {name}")
-    print(f"validate self-test ok: {len(cases)} fixtures")
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        make_fixture(root)
+        alpha_validator = root / "alpha" / "scripts" / "validate.py"
+        alpha_validator.parent.mkdir()
+        alpha_validator.write_text("from pathlib import Path\nPath('alpha-ran').touch()\n")
+        stale = root / "stale" / "scripts"
+        stale.mkdir(parents=True)
+        (stale / "validate.py").write_text("raise SystemExit(9)\n")
+        assert run_validators(root, validate_inventory(root)) == 0
+        assert (root / "alpha-ran").is_file()
+
+        delta = root / "delta"
+        (delta / "agents").mkdir(parents=True)
+        (delta / "SKILL.md").write_text("# delta\n")
+        (delta / "agents" / "openai.yaml").write_text("interface: {}\n")
+        (root / "README.md").write_text(fixture_readme(["alpha", "beta", "delta"], ["gamma"]))
+        delta_validator = delta / "scripts" / "validate.py"
+        delta_validator.parent.mkdir()
+        delta_validator.write_text("from pathlib import Path\nPath('delta-ran').touch()\n")
+        assert run_validators(root, validate_inventory(root)) == 0
+        assert (root / "delta-ran").is_file()
+        delta_validator.write_text("raise SystemExit(7)\n")
+        assert run_validators(root, validate_inventory(root)) == 7
+
+    print(f"validate self-test ok: {len(cases) + 5} cases")
 
 
 def main(argv: list[str]) -> int:
@@ -184,21 +178,16 @@ def main(argv: list[str]) -> int:
         print("usage: validate.py [--self-test]", file=sys.stderr)
         return 2
     try:
-        skills = validate_inventory(ROOT, CHECKS_BY_SKILL)
+        skills = validate_inventory(ROOT)
     except (InventoryError, OSError) as error:
         print(f"inventory validation failed: {error}", file=sys.stderr)
         return 1
 
-    count = 0
-    for skill in skills:
-        for name, command in CHECKS_BY_SKILL[skill]:
-            count += 1
-            result = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if result.returncode != 0:
-                print(f"{skill}: {name} failed:", file=sys.stderr)
-                print(result.stdout, file=sys.stderr)
-                return result.returncode
-    print(f"validate ok: {count} declared checks across {len(skills)} skills")
+    result = run_validators(ROOT, skills)
+    if result:
+        return result
+    count = sum((path / "scripts" / "validate.py").is_file() for path in skills.values())
+    print(f"validate ok: {count} skill validators across {len(skills)} skills")
     return 0
 
 
