@@ -42,7 +42,8 @@ REQUIRED_CHILD = {
     "known_skips",
     "status",
 }
-REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"}
+REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"} | {"artifacts"}
+OPTIONAL_HANDOFF = {"needs_child_fix", "pending_review"}
 REQUIRED_PENDING_REVIEW = {
     "review_id",
     "branch",
@@ -197,10 +198,14 @@ def review_status_errors(child: dict[str, Any], prefix: str) -> list[str]:
 
 def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "FAIL":
+        if child.get("needs_child_fix") is not None:
+            return [f"{prefix} needs_child_fix requires review FAIL"]
         return []
     value = child.get("needs_child_fix")
-    if not isinstance(value, str) or not re.fullmatch(r"#[1-9][0-9]*", value.strip()):
+    if value is None:
         return [f"{prefix} review FAIL requires needs_child_fix"]
+    if not isinstance(value, str) or not re.fullmatch(r"#[1-9][0-9]*", value.strip()):
+        return [f"{prefix} needs_child_fix must look like #123"]
     return []
 
 
@@ -230,7 +235,32 @@ def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
         for field in sorted(REQUIRED_PENDING_REVIEW)
         if not isinstance(pending.get(field), str) or not pending[field].strip()
     ]
-    return [f"{prefix} pending_review missing/empty field: {field}" for field in missing]
+    errors = [f"{prefix} pending_review missing/empty field: {field}" for field in missing]
+    expected = {
+        "branch": child.get("branch"),
+        "local_head_sha": child.get("head_sha"),
+        "base_ref": child.get("base_ref"),
+        "base_sha": child.get("base_sha"),
+        "progress_path": child.get("artifacts", {}).get("progress_path"),
+    }
+    errors.extend(
+        f"{prefix} pending_review {field} must match handoff {field}"
+        for field, value in expected.items()
+        if pending.get(field) != value
+    )
+    return errors
+
+
+def pending_review_from_progress(path: Path) -> dict[str, Any]:
+    try:
+        progress = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"pending review progress not found: {path}") from None
+    artifacts = progress.get("artifacts") if isinstance(progress, dict) else None
+    pending = artifacts.get("pending_review") if isinstance(artifacts, dict) else None
+    if not isinstance(pending, dict):
+        raise SystemExit("PENDING_REVIEW requires artifacts.pending_review in progress")
+    return pending
 
 
 def handoff_status(child: dict[str, Any]) -> str:
@@ -255,16 +285,50 @@ def child_payload_errors(child: dict[str, Any]) -> list[str]:
     )
 
 
-def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
-    manifest = load_manifest(path)
+def decode_handoff(child: dict[str, Any]) -> dict[str, Any]:
     child = normalize_child(child)
     missing = REQUIRED_HANDOFF - set(child)
     if missing:
         raise SystemExit("child payload missing field(s): " + ", ".join(sorted(missing)))
+    unexpected = set(child) - REQUIRED_HANDOFF - OPTIONAL_HANDOFF
+    if unexpected:
+        raise SystemExit("child payload has unexpected field(s): " + ", ".join(sorted(unexpected)))
     child["status"] = handoff_status(child)
     errors = child_payload_errors(child)
     if errors:
         raise SystemExit("\n".join(errors))
+    return child
+
+
+def handoff_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    progress_path = facts.get("progress_path")
+    child = {
+        key: value
+        for key, value in facts.items()
+        if key in REQUIRED_HANDOFF - {"artifacts", "pending_review", "needs_child_fix"}
+    }
+    child["artifacts"] = {"progress_path": progress_path}
+    if facts.get("needs_child_fix") is not None:
+        child["needs_child_fix"] = facts["needs_child_fix"]
+    if facts.get("review") == "PENDING_REVIEW":
+        child["pending_review"] = pending_review_from_progress(Path(str(progress_path)))
+    return decode_handoff(child)
+
+
+def canonical_handoff_bytes(child: dict[str, Any]) -> bytes:
+    return (json.dumps(handoff_data(child), indent=2, sort_keys=True) + "\n").encode()
+
+
+def write_child_handoff(output: Path, facts: dict[str, Any]) -> Path:
+    content = canonical_handoff_bytes(handoff_from_facts(facts))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(content)
+    return output.resolve()
+
+
+def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
+    manifest = load_manifest(path)
+    child = decode_handoff(child)
     existing = next((item for item in manifest.get("children", []) if item.get("issue") == child["issue"]), None)
     if existing:
         if handoff_data(existing) == handoff_data(child):
@@ -454,12 +518,17 @@ def self_test() -> int:
                 "known_skips": [],
                 "artifacts": {"progress_path": "/tmp/child/.context/progress.md"},
             }
+            facts = dict(passed)
+            facts["progress_path"] = facts.pop("artifacts")["progress_path"]
+            handoff_path = Path("integration-handoff.json")
+            write_child_handoff(handoff_path, facts)
+            assert handoff_path.read_bytes() == canonical_handoff_bytes(decode_handoff(passed))
             missing_artifact = dict(passed)
             missing_artifact.pop("artifacts")
             try:
                 ingest_child(path, missing_artifact)
             except SystemExit as exc:
-                assert "artifacts.progress_path" in str(exc)
+                assert "artifacts" in str(exc)
             else:
                 raise AssertionError("expected handoff without progress artifact to fail")
             ingest_child(path, passed)
@@ -639,6 +708,24 @@ def main() -> int:
     child.add_argument("--json")
     child.add_argument("--file")
 
+    handoff = subparsers.add_parser("write-child-handoff")
+    handoff.add_argument("--output", required=True)
+    handoff.add_argument("--issue", required=True)
+    handoff.add_argument("--branch", required=True)
+    handoff.add_argument("--worktree", required=True)
+    handoff.add_argument("--base-ref", required=True)
+    handoff.add_argument("--base-sha", required=True)
+    handoff.add_argument("--commit", required=True)
+    handoff.add_argument("--head-sha", required=True)
+    handoff.add_argument("--changed-file", action="append", default=[])
+    handoff.add_argument("--diff-stat", required=True)
+    handoff.add_argument("--verification", required=True)
+    handoff.add_argument("--review", required=True)
+    handoff.add_argument("--check", action="append", default=[])
+    handoff.add_argument("--known-skip", action="append", default=[])
+    handoff.add_argument("--progress-path", required=True)
+    handoff.add_argument("--needs-child-fix")
+
     merged_child = subparsers.add_parser("merge-child")
     merged_child.add_argument("issue")
     merged_child.add_argument("--commit", required=True)
@@ -666,6 +753,25 @@ def main() -> int:
         return self_test()
     if args.command == "init":
         init_manifest(path, args.parent_issue, args.integration_branch, args.base_branch)
+    elif args.command == "write-child-handoff":
+        facts = {
+            "issue": args.issue,
+            "branch": args.branch,
+            "worktree": args.worktree,
+            "base_ref": args.base_ref,
+            "base_sha": args.base_sha,
+            "commit": args.commit,
+            "head_sha": args.head_sha,
+            "changed_files": args.changed_file,
+            "diff_stat": args.diff_stat,
+            "verification": args.verification,
+            "review": args.review,
+            "checks": args.check,
+            "known_skips": args.known_skip,
+            "progress_path": args.progress_path,
+            "needs_child_fix": args.needs_child_fix,
+        }
+        print(write_child_handoff(Path(args.output), facts))
     elif args.command == "ingest-child":
         ingest_child(path, read_json_arg(args.json, args.file))
     elif args.command == "merge-child":

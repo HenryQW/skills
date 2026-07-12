@@ -20,16 +20,6 @@ def emit(lines: list[str]) -> None:
 
 
 HANDOFF_NAME = "integration-handoff.json"
-REQUIRED_PENDING_REVIEW = {
-    "review_id",
-    "branch",
-    "local_head_sha",
-    "upstream_sha",
-    "base_ref",
-    "base_sha",
-    "poll_after_utc",
-    "progress_path",
-}
 
 
 def repo_requires_progress(root: Path) -> bool:
@@ -102,29 +92,23 @@ def ensure_local_progress_file() -> Path:
     return progress
 
 
-def pending_review_from_progress(progress: Path) -> dict[str, object]:
-    data = json.loads(progress.read_text(encoding="utf-8"))
-    artifacts = data.get("artifacts")
-    pending = artifacts.get("pending_review") if isinstance(artifacts, dict) else None
-    if not isinstance(pending, dict):
-        raise RuntimeError("PENDING_REVIEW requires artifacts.pending_review in .context/progress.md")
-    missing = [field for field in sorted(REQUIRED_PENDING_REVIEW) if not isinstance(pending.get(field), str) or not pending[field].strip()]
-    if missing:
-        raise RuntimeError("PENDING_REVIEW missing/empty field(s): " + ", ".join(missing))
-    return pending
-
-
-def write_handoff_record(progress: Path, result: dict[str, object]) -> Path:
-    handoff = progress.parent / HANDOFF_NAME
-    handoff.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def record_handoff_progress(
+    progress: Path,
+    handoff: Path,
+    review: str,
+    checks: list[str],
+    known_skips: list[str],
+    needs_child_fix: str | None,
+) -> Path:
     blockers = []
-    if "needs_child_fix" in result:
-        blockers.append({"needs_child_fix": result["needs_child_fix"]})
-    validation = [str(check) for check in result["checks"]]
-    validation.extend(f"known_skip:{skip}" for skip in result["known_skips"])
+    if needs_child_fix:
+        blockers.append({"needs_child_fix": needs_child_fix})
+    validation = list(checks)
+    validation.extend(f"known_skip:{skip}" for skip in known_skips)
     artifacts: dict[str, object] = {"handoff": os.fspath(handoff.resolve())}
-    if "pending_review" in result:
-        artifacts["pending_review"] = result["pending_review"]
+    if review == "PENDING_REVIEW":
+        current = json.loads(progress.read_text(encoding="utf-8"))
+        artifacts["pending_review"] = current["artifacts"]["pending_review"]
     write_progress(
         progress,
         "issue-workbench integration child",
@@ -136,6 +120,63 @@ def write_handoff_record(progress: Path, result: dict[str, object]) -> Path:
     return handoff.resolve()
 
 
+def write_handoff(
+    progress: Path,
+    review_base: str,
+    verification: str,
+    review: str,
+    checks: list[str],
+    known_skips: list[str],
+    needs_child_fix: str | None,
+    branch: str,
+    issue: str,
+    head_sha: str,
+    changed_files: list[str],
+    diff_stat: str,
+) -> Path:
+    handoff = progress.parent / HANDOFF_NAME
+    manifest = Path(__file__).resolve().parents[2] / "shipyard" / "scripts" / "manifest.py"
+    command = [
+        sys.executable,
+        os.fspath(manifest),
+        "write-child-handoff",
+        "--output",
+        os.fspath(handoff),
+        "--issue",
+        issue,
+        "--branch",
+        branch,
+        "--worktree",
+        os.fspath(Path.cwd()),
+        "--base-ref",
+        review_base,
+        "--base-sha",
+        revision(review_base),
+        "--commit",
+        head_sha,
+        "--head-sha",
+        head_sha,
+        "--diff-stat",
+        diff_stat,
+        "--verification",
+        verification,
+        "--review",
+        review,
+        "--progress-path",
+        os.fspath(progress),
+    ]
+    for value in changed_files:
+        command.extend(("--changed-file", value))
+    for value in checks:
+        command.extend(("--check", value))
+    for value in known_skips:
+        command.extend(("--known-skip", value))
+    if needs_child_fix:
+        command.extend(("--needs-child-fix", needs_child_fix))
+    run(command)
+    return record_handoff_progress(progress, handoff, review, checks, known_skips, needs_child_fix)
+
+
 def finish_child(
     review_base: str,
     verification: str,
@@ -144,16 +185,6 @@ def finish_child(
     known_skips: list[str] | None = None,
     needs_child_fix: str | None = None,
 ) -> Path:
-    if not (verification.startswith("pass:") or verification.startswith("skip:")):
-        raise RuntimeError("--verification must start with pass: or skip:")
-    if review not in {"PASS", "PENDING_REVIEW", "FAIL"}:
-        raise RuntimeError("--review must be PASS, PENDING_REVIEW, or FAIL")
-    if review == "FAIL" and not needs_child_fix:
-        raise RuntimeError("--review FAIL requires --needs-child-fix #123")
-    if review != "FAIL" and needs_child_fix:
-        raise RuntimeError("--needs-child-fix requires --review FAIL")
-    if needs_child_fix and not re.fullmatch(r"#[1-9][0-9]*", needs_child_fix):
-        raise RuntimeError("--needs-child-fix must look like #123")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
@@ -165,27 +196,20 @@ def finish_child(
         raise RuntimeError("integration child branch must look like issue-123 or issue-123-slug")
     head_sha = revision("HEAD")
     changed_files, diff_stat = diff_snapshot(review_base)
-    result: dict[str, object] = {
-        "issue": f"#{match.group(1)}",
-        "branch": branch,
-        "worktree": os.fspath(Path.cwd()),
-        "base_ref": review_base,
-        "base_sha": revision(review_base),
-        "commit": head_sha,
-        "head_sha": head_sha,
-        "changed_files": changed_files,
-        "diff_stat": diff_stat,
-        "verification": verification,
-        "review": review,
-        "checks": checks or [],
-        "known_skips": known_skips or [],
-        "artifacts": {"progress_path": os.fspath(progress)},
-    }
-    if needs_child_fix:
-        result["needs_child_fix"] = needs_child_fix
-    if review == "PENDING_REVIEW":
-        result["pending_review"] = pending_review_from_progress(progress)
-    return write_handoff_record(progress, result)
+    return write_handoff(
+        progress,
+        review_base,
+        verification,
+        review,
+        checks or [],
+        known_skips or [],
+        needs_child_fix,
+        branch,
+        f"#{match.group(1)}",
+        head_sha,
+        changed_files,
+        diff_stat,
+    )
 
 
 def merge_child(branch: str, integration_branch: str, expected_commit: str | None = None) -> None:
@@ -258,13 +282,14 @@ def self_test() -> int:
             assert_raises("uncommitted non-context", finish_child, "integration", "pass:demo", "PASS")
             Path("dirty.txt").unlink()
             assert_raises("PASS, PENDING_REVIEW, or FAIL", finish_child, "integration", "pass:demo", "MAYBE")
-            assert_raises("requires --needs-child-fix", finish_child, "integration", "skip:needs child fix", "FAIL")
+            assert_raises("requires needs_child_fix", finish_child, "integration", "skip:needs child fix", "FAIL")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "123")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#abc")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#123 extra")
             finish_path = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
             assert finish_path == (worktree / ".context" / HANDOFF_NAME).resolve()
             finish = json.loads(finish_path.read_text(encoding="utf-8"))
+            assert finish_path.read_bytes() == (json.dumps(finish, indent=2, sort_keys=True) + "\n").encode()
             assert finish["branch"] == "issue-123-child-slice"
             assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
             assert finish["issue"] == "#123"
@@ -281,6 +306,9 @@ def self_test() -> int:
             progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
             assert set(progress_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
             assert progress_data["artifacts"]["handoff"] == os.fspath(finish_path)
+            unchanged_handoff = finish_path.read_bytes()
+            assert_raises("verification", finish_child, "integration", "invalid", "PASS")
+            assert finish_path.read_bytes() == unchanged_handoff
             fail_path = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
             fail = json.loads(fail_path.read_text(encoding="utf-8"))
             assert fail["needs_child_fix"] == "#123"
@@ -342,7 +370,7 @@ def main() -> int:
     finish = subparsers.add_parser("finish")
     finish.add_argument("--review-base", required=True)
     finish.add_argument("--verification", required=True)
-    finish.add_argument("--review", required=True, choices=["PASS", "PENDING_REVIEW", "FAIL"])
+    finish.add_argument("--review", required=True)
     finish.add_argument("--check", action="append", default=[])
     finish.add_argument("--known-skip", action="append", default=[])
     finish.add_argument("--needs-child-fix")
