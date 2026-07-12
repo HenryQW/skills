@@ -40,9 +40,10 @@ Infer everything else:
 
 - `scripts/inspect_parent_issue.py`: resolves branch policy, parent issue, child issue dependencies, `final_check`, local merged children, and runnable children.
 - `scripts/manifest.py`: maintains `.context/shipyard-manifest.json`, the
-  trusted run artifact. It owns child-handoff, validation, and review-event
-  schemas and rewrites `.context/progress.md` as its pointer.
-- `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
+  trusted run artifact. It alone encodes and validates child handoffs, maps
+  them into lifecycle transitions, owns validation and review-event schemas,
+  and rewrites `.context/progress.md` as its pointer.
+- `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees, supplies inspected Git and review facts to the installed Shipyard manifest interface, and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
 ## State Machine
 
@@ -89,8 +90,9 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 
 - Do not send status probes to running children. Wait for completion notifications and keep user updates phase-level.
 - Read the returned handoff and ingest it with `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`.
-  `manifest.py` validates required fields, review state, and transitions; stop
-  on its error rather than copying or reconstructing JSON.
+  The same manifest interface encoded the canonical bytes and now decodes the
+  handoff into its child lifecycle transition. Stop on its error rather than
+  copying, reconstructing, or validating the JSON elsewhere.
 - If the child worktree has `.context/decisions.jsonl`, re-append each durable record to the Shipyard root with `<agent_memory_dir>/scripts/append_decision.py`; stable IDs deduplicate repeats. Do not write Obsidian or ask `pr-launchpad` to distill.
 - If `needs_child_fix` is present, stop shipyard edits and rerun or reuse `$issue-workbench` in that child worktree.
 - If `review` is `PENDING_REVIEW`, do not merge the branch and continue other runnable independent children when available.
