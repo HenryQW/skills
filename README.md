@@ -27,8 +27,9 @@ npx skills add HenryQW/skills --skill '*' --agent codex -y
 
 ```mermaid
 flowchart TD
-  request["Request"] --> load["agent-memory load"]
-  load --> route{"Select route"}
+  request["Request"] --> route{"Select route"}
+  route -->|Project context needed| load["agent-memory load"]
+  load --> route
   route -->|Repo audit| survey["repo-surveyor"]
   survey --> blueprint["issue-blueprint"]
   route -->|Multi-issue plan| blueprint
@@ -87,7 +88,7 @@ Runs blocker-only review using Greptile or an independent fallback, records the 
 
 #### [`review-repairbay`](review-repairbay/)
 
-Clears unresolved PR feedback through locally validated comment inspection, focused fixes, replies, and thread resolution, then rechecks until none remain.
+Fixes exact supplied PR feedback directly, or fetches thread state when discovery, replies, or resolution are required.
 
 #### [`shipyard`](shipyard/)
 
