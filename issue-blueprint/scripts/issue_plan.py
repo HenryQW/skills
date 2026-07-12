@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 
 
-GRAPH_VERSION = 1
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -150,37 +149,3 @@ def final_check(plan: dict) -> dict:
     if len(matches) != 1:
         raise SystemExit("exactly one issue must have role final_check")
     return matches[0]
-
-
-def graph_payload(plan: dict, numbers: dict[str, str]) -> dict:
-    validate(plan)
-    required = {"tracker", *(issue["id"] for issue in plan["issues"])}
-    missing = required - set(numbers)
-    if missing:
-        raise SystemExit(f"graph payload missing issue numbers: {sorted(missing)}")
-
-    def number(issue_id: str) -> int:
-        value = numbers[issue_id]
-        if not isinstance(value, str) or not re.fullmatch(r"#[1-9][0-9]*", value):
-            raise SystemExit(f"invalid issue number for {issue_id}: {value!r}")
-        return int(value[1:])
-
-    return {
-        "version": GRAPH_VERSION,
-        "tracker": number("tracker"),
-        "issues": [
-            {
-                "id": issue["id"],
-                "number": number(issue["id"]),
-                "role": issue.get("role", "implementation"),
-                "blocked_by": [number(item) for item in issue.get("blocked_by", [])],
-                "blocks": [number(item) for item in issue.get("blocks", [])],
-            }
-            for issue in ordered_issues(plan)
-        ],
-    }
-
-
-def embedded_graph(plan: dict, numbers: dict[str, str]) -> str:
-    payload = json.dumps(graph_payload(plan, numbers), separators=(",", ":"), sort_keys=True)
-    return f"<!-- issue-plan-graph\n{payload}\n-->"
