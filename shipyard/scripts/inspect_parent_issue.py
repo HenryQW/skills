@@ -15,8 +15,13 @@ from typing import Any, Callable
 
 
 ISSUE_REF_RE = re.compile(r"(?:https://github\.com/[^/\s]+/[^/\s]+/issues/|#)([1-9][0-9]*)")
-GRAPH_RE = re.compile(r"<!--\s*issue-plan-graph\s*\n(.*?)\n-->", re.DOTALL)
-GRAPH_VERSION = 1
+SKILLS_ROOT = Path(os.environ.get("SKILLS_ROOT") or Path(__file__).resolve().parents[2])
+BLUEPRINT_SCRIPTS = SKILLS_ROOT / "issue-blueprint" / "scripts"
+if not BLUEPRINT_SCRIPTS.is_dir():
+    raise SystemExit(f"issue-blueprint contract not found: {BLUEPRINT_SCRIPTS}")
+sys.path.insert(0, str(BLUEPRINT_SCRIPTS))
+
+from issue_graph_contract import decode_embedded  # noqa: E402
 
 
 def run(command: list[str]) -> str:
@@ -38,49 +43,6 @@ def issue_number(value: str) -> str:
     if not match:
         raise SystemExit(f"could not parse issue number: {value}")
     return match.group(1)
-
-
-def graph_from_body(body: str) -> dict[str, Any]:
-    match = GRAPH_RE.search(body or "")
-    if not match:
-        raise SystemExit("parent issue is missing issue-plan-graph payload")
-    try:
-        graph = json.loads(match.group(1))
-    except json.JSONDecodeError as error:
-        raise SystemExit(f"malformed issue-plan-graph payload: {error.msg}") from error
-    if not isinstance(graph, dict):
-        raise SystemExit("malformed issue-plan-graph payload: expected an object")
-    version = graph.get("version")
-    if version != GRAPH_VERSION:
-        raise SystemExit(f"unsupported issue-plan-graph version: {version!r}")
-    if not isinstance(graph.get("tracker"), int) or graph["tracker"] < 1:
-        raise SystemExit("malformed issue-plan-graph payload: tracker must be a positive integer")
-    issues = graph.get("issues")
-    if not isinstance(issues, list) or not issues:
-        raise SystemExit("malformed issue-plan-graph payload: issues must be a non-empty list")
-    numbers: set[int] = set()
-    ids: set[str] = set()
-    for index, issue in enumerate(issues):
-        if not isinstance(issue, dict):
-            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}] must be an object")
-        if not isinstance(issue.get("id"), str) or not issue["id"]:
-            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].id is required")
-        number = issue.get("number")
-        if not isinstance(number, int) or number < 1:
-            raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].number must be a positive integer")
-        if issue["id"] in ids or number in numbers:
-            raise SystemExit("malformed issue-plan-graph payload: duplicate issue id or number")
-        ids.add(issue["id"])
-        numbers.add(number)
-        for key in ("blocked_by", "blocks"):
-            refs = issue.get(key)
-            if not isinstance(refs, list) or any(not isinstance(ref, int) or ref < 1 for ref in refs):
-                raise SystemExit(f"malformed issue-plan-graph payload: issues[{index}].{key} must contain positive integers")
-    for issue in issues:
-        unknown = (set(issue["blocked_by"]) | set(issue["blocks"])) - numbers
-        if unknown:
-            raise SystemExit(f"malformed issue-plan-graph payload: unknown issue references {sorted(unknown)}")
-    return graph
 
 
 def child_from_issue(issue: dict[str, Any], graph_issue: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +152,7 @@ def inspect(parent_issue: str, repo: str | None) -> dict[str, Any]:
     parent_number = issue_number(parent_issue)
     repo_args = ["--repo", repo] if repo else []
     parent = gh_json(["issue", "view", parent_number, *repo_args, "--json", "number,title,url,body,state"])
-    graph = graph_from_body(parent.get("body") or "")
+    graph = decode_embedded(parent.get("body") or "")
     if graph["tracker"] != parent["number"]:
         raise SystemExit(f"issue-plan-graph tracker #{graph['tracker']} does not match parent #{parent['number']}")
     children = [
@@ -250,8 +212,18 @@ def print_text(plan: dict[str, Any]) -> None:
 
 
 def self_test() -> None:
-    parent_body = '<!-- issue-plan-graph\n{"version":1,"tracker":10,"issues":[{"id":"a","number":11,"role":"implementation","blocked_by":[],"blocks":[12]},{"id":"b","number":12,"role":"final_check","blocked_by":[11],"blocks":[]}]}\n-->'
-    graph = graph_from_body(parent_body)
+    from render_issue_plan import tracker_body
+
+    source_plan = {
+        "tracker": {"title": "T", "goal": "G", "constraints": [], "non_goals": [], "definition_of_done": []},
+        "issues": [
+            {"id": "a", "title": "A", "purpose": "A.", "acceptance": ["A."], "testing": {"seam": "API", "validation": "python test.py", "do_not_test": "internals"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
+            {"id": "b", "title": "B", "role": "final_check", "purpose": "B.", "acceptance": ["B."], "testing": {"seam": "integration", "validation": "python test.py", "do_not_test": "internals"}, "blocked_by": ["a"], "blocks": [], "parallelism": "Last."},
+        ],
+        "waves": [{"name": "First", "items": ["a"]}, {"name": "Last", "items": ["b"]}],
+    }
+    parent_body = tracker_body(source_plan, {"tracker": "#10", "a": "#11", "b": "#12"})
+    graph = decode_embedded(parent_body)
     child_a = child_from_issue(
         {"number": 11, "title": "foundation", "state": "OPEN", "url": ""},
         graph["issues"][0],
@@ -283,7 +255,7 @@ def self_test() -> None:
         ('<!-- issue-plan-graph\n{"version":1,"tracker":10,"issues":{}}\n-->', "issues must be a non-empty list"),
     ):
         try:
-            graph_from_body(body)
+            decode_embedded(body)
         except SystemExit as error:
             assert expected in str(error)
         else:

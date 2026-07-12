@@ -67,7 +67,7 @@ Inspects failing GitHub Actions checks, validates its inspection tooling, then m
 
 #### [`issue-blueprint`](issue-blueprint/)
 
-Turns a rough multi-issue plan into an approved GitHub issue graph, with local validation for rendering and publication behavior.
+Turns a rough multi-issue plan into an approved GitHub issue graph, owning its embedded contract, rendering, and publication behavior.
 
 #### [`issue-workbench`](issue-workbench/)
 
@@ -91,7 +91,7 @@ Clears unresolved PR feedback through locally validated comment inspection, focu
 
 #### [`shipyard`](shipyard/)
 
-Takes a parent issue to one integration PR with locally validated manifest and issue-graph tooling: run ready child worktrees, merge them, verify, review, and publish.
+Takes an Issue Blueprint parent graph to one integration PR: inspect runnable work, merge child branches, verify, review, and publish.
 
 ### 🧰 Supporting skills
 

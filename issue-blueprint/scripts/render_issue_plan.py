@@ -9,7 +9,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from issue_plan import embedded_graph, final_check, graph_payload, load_plan, ordered_issues, validate
+from issue_graph_contract import embed, graph_payload
+from issue_plan import final_check, load_plan, ordered_issues, validate
 
 
 def slug(text: str) -> str:
@@ -78,7 +79,7 @@ Context:
 
 def graph_section(plan: dict, numbers: dict[str, str]) -> str:
     required = {"tracker", *(issue["id"] for issue in plan["issues"])}
-    return f"\n\n{embedded_graph(plan, numbers)}" if required <= set(numbers) else ""
+    return f"\n\n{embed(plan, numbers)}" if required <= set(numbers) else ""
 
 
 def tracker_body(plan: dict, numbers: dict[str, str]) -> str:
