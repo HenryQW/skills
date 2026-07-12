@@ -31,7 +31,7 @@ flowchart TD
   route -->|Project context needed| load["agent-memory load"]
   load --> route
   route -->|Repo audit| survey["repo-surveyor"]
-  survey --> blueprint["issue-blueprint"]
+  survey -->|Issue planning requested| blueprint["issue-blueprint"]
   route -->|Multi-issue plan| blueprint
   blueprint -->|Approved issue graph| shipyard["shipyard"]
   shipyard --> workbench["issue-workbench"]
@@ -53,7 +53,7 @@ flowchart TD
 Start with the smallest route that fits:
 
 - One actionable issue: `issue-workbench #<issue>`
-- A repository audit: `repo-surveyor`, then `issue-blueprint` if you want issues created
+- A repository audit: `repo-surveyor`; request issue planning to hand off to `issue-blueprint`
 - A multi-issue feature: `issue-blueprint`, then `shipyard #<parent>`
 - A branch ready to publish: `pr-launchpad`
 - A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
@@ -80,7 +80,7 @@ Publishes a finished branch: inspect the diff, validate the current commit, comm
 
 #### [`repo-surveyor`](repo-surveyor/)
 
-Read-only repository maintainability audit with ranked, file-level findings.
+Read-only DRY, SOLID, test-strategy, and architecture audit with ranked, file-level findings in an HTML report with before-and-after diagrams.
 
 #### [`review-checkpoint`](review-checkpoint/)
 
@@ -103,10 +103,6 @@ Adds or audits public discovery files, Markdown routes, and headers so AI agents
 #### [`agent-memory`](agent-memory/)
 
 Loads task-relevant project context, then saves durable results through a transactional, observable write plan. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
-
-#### [`identify-optimizations`](identify-optimizations/)
-
-Read-only architecture audit that ranks up to five improvements in an HTML report with before-and-after diagrams.
 
 #### [`skill-optimizer`](skill-optimizer/)
 
