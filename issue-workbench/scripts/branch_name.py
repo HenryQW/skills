@@ -4,49 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import re
-import subprocess
 import sys
 
-
-def normalize_slug(raw: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)
-    return slug
-
-
-def branch_name(issue_number: str, branch_slug: str | None = None) -> str:
-    if not re.fullmatch(r"[1-9][0-9]*", issue_number):
-        raise ValueError("issue_number must be a positive integer")
-
-    if not branch_slug:
-        return f"issue-{issue_number}"
-
-    slug = normalize_slug(branch_slug)
-    if not slug:
-        raise ValueError("branch_slug must contain at least one letter or digit")
-
-    return f"issue-{issue_number}-{slug}"
-
-
-def integration_branch_name_from_title(title: str) -> str:
-    slug = normalize_slug(title)
-    if not slug:
-        raise ValueError("parent issue title must contain at least one letter or digit")
-    return f"feat/{slug}"
-
-
-def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
-    if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
-        raise ValueError("parent_issue must be a positive integer")
-    command = ["gh", "issue", "view", parent_issue, "--json", "title", "--jq", ".title"]
-    if repo:
-        command.extend(["--repo", repo])
-    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(detail or "gh issue view failed")
-    return integration_branch_name_from_title(result.stdout.strip())
+from repository import (
+    CommandError,
+    branch_name,
+    integration_branch_name,
+    integration_branch_name_from_title,
+    normalize_slug,
+)
 
 
 def self_test() -> int:
@@ -91,9 +57,9 @@ def integration_main(argv: list[str]) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    except RuntimeError as exc:
+    except CommandError as exc:
         print(str(exc), file=sys.stderr)
-        return 1
+        return exc.returncode
     return 0
 
 

@@ -41,7 +41,7 @@ Each candidate needs:
 - up to three concrete `benefits`;
 - `before` and `after` Mermaid architecture diagrams, each with a short `title` and 2–5 concrete module, interface, service, or state-boundary nodes. Use `flowchart TB`, short node labels, and only evidence-backed dependency arrows.
 
-Do not propose detailed interfaces.
+Mermaid is the only diagram mechanism. Do not add handwritten SVG, canvas, CSS arrows, or HTML connector elements. Do not propose detailed interfaces.
 
 ## Render
 
@@ -50,5 +50,6 @@ Resolve `assets/report.html` relative to this file.
 1. Copy it to `${TMPDIR:-/tmp}/architecture-review-<UTC timestamp>.html` (`%TEMP%` on Windows).
 2. Replace only the HTML between `REPORT_CONTENT_START` and `REPORT_CONTENT_END`; keep the document shell, CSS, and Mermaid scripts unchanged. Keep all report text in static HTML; JavaScript may only render embedded Mermaid source as SVG.
 3. Include one header and one `<article id="candidate-<rank>">` per candidate. Each article must show labeled `Before` and `After` diagrams using `.visual.before` and `.visual.after`, with one `<pre class="mermaid">flowchart TB ...</pre>` in each, followed by `Problem` and `Proposal`. Escape repository-derived HTML and keep Mermaid labels short. Keep prose terse; the diagrams and evidence should carry the report.
-4. Confirm the candidate count, ten Mermaid diagrams, the pinned `https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js` script, absence of other external scripts, exact repo-relative evidence paths, static visible report text, and absolute output path. Open the report with `open`, `xdg-open`, or `start`.
-5. Return the absolute report path. Stop there.
+4. Confirm one article and two Mermaid blocks per candidate, exact repo-relative evidence paths, static visible report text, and the absolute output path. The unchanged template owns the Mermaid script and document shell.
+5. Open the temporary report with `open`, `xdg-open`, or `start`, then claim its exposed tab in the built-in browser. Confirm that candidate text is visible, every Mermaid block rendered as SVG, and the console contains no Mermaid or JavaScript errors. If any check fails, repair only the temporary report content and inspect it once more. If the built-in browser is unavailable or exposes no report tab, report that browser validation is incomplete; do not imply it passed.
+6. Return the absolute report path. Stop there.

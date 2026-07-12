@@ -11,8 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from start_issue_branch import create_issue_branch
-from start_issue_branch import run
+from repository import create_issue_branch, current_branch, diff_snapshot, revision, run, status_lines
 
 
 def emit(lines: list[str]) -> None:
@@ -20,8 +19,17 @@ def emit(lines: list[str]) -> None:
         print(line)
 
 
-def emit_json(value: dict[str, object]) -> None:
-    print(json.dumps(value, sort_keys=True))
+HANDOFF_NAME = "integration-handoff.json"
+REQUIRED_PENDING_REVIEW = {
+    "review_id",
+    "branch",
+    "local_head_sha",
+    "upstream_sha",
+    "base_ref",
+    "base_sha",
+    "poll_after_utc",
+    "progress_path",
+}
 
 
 def repo_requires_progress(root: Path) -> bool:
@@ -84,8 +92,7 @@ def start_child(issue_number: str, worktree_path: str, integration_branch: str, 
 
 
 def changed_code_status() -> list[str]:
-    lines = run(["git", "status", "--short"]).splitlines()
-    return [line for line in lines if not line[3:].startswith(".context/")]
+    return [line for line in status_lines() if not line[3:].startswith(".context/")]
 
 
 def ensure_local_progress_file() -> Path:
@@ -95,36 +102,38 @@ def ensure_local_progress_file() -> Path:
     return progress
 
 
-def write_handoff_record(progress: Path, result: dict[str, object]) -> None:
-    record = {
-        "issue": result["issue"],
-        "branch": result["branch"],
-        "base_ref": result["base_ref"],
-        "base_sha": result["base_sha"],
-        "commit": result["commit"],
-        "head_sha": result["head_sha"],
-        "changed_files": result["changed_files"],
-        "diff_stat": result["diff_stat"],
-        "verification": result["verification"],
-        "review": result["review"],
-        "checks": result["checks"],
-        "known_skips": result["known_skips"],
-    }
-    if "needs_child_fix" in result:
-        record["needs_child_fix"] = result["needs_child_fix"]
+def pending_review_from_progress(progress: Path) -> dict[str, object]:
+    data = json.loads(progress.read_text(encoding="utf-8"))
+    artifacts = data.get("artifacts")
+    pending = artifacts.get("pending_review") if isinstance(artifacts, dict) else None
+    if not isinstance(pending, dict):
+        raise RuntimeError("PENDING_REVIEW requires artifacts.pending_review in .context/progress.md")
+    missing = [field for field in sorted(REQUIRED_PENDING_REVIEW) if not isinstance(pending.get(field), str) or not pending[field].strip()]
+    if missing:
+        raise RuntimeError("PENDING_REVIEW missing/empty field(s): " + ", ".join(missing))
+    return pending
+
+
+def write_handoff_record(progress: Path, result: dict[str, object]) -> Path:
+    handoff = progress.parent / HANDOFF_NAME
+    handoff.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     blockers = []
-    if "needs_child_fix" in record:
-        blockers.append({"needs_child_fix": record["needs_child_fix"]})
-    validation = [str(check) for check in record["checks"]]
-    validation.extend(f"known_skip:{skip}" for skip in record["known_skips"])
+    if "needs_child_fix" in result:
+        blockers.append({"needs_child_fix": result["needs_child_fix"]})
+    validation = [str(check) for check in result["checks"]]
+    validation.extend(f"known_skip:{skip}" for skip in result["known_skips"])
+    artifacts: dict[str, object] = {"handoff": os.fspath(handoff.resolve())}
+    if "pending_review" in result:
+        artifacts["pending_review"] = result["pending_review"]
     write_progress(
         progress,
         "issue-workbench integration child",
         "handoff ready",
-        {"handoff": "stdout"},
+        artifacts,
         blockers,
         validation,
     )
+    return handoff.resolve()
 
 
 def finish_child(
@@ -134,13 +143,15 @@ def finish_child(
     checks: list[str] | None = None,
     known_skips: list[str] | None = None,
     needs_child_fix: str | None = None,
-) -> dict[str, object]:
+) -> Path:
     if not (verification.startswith("pass:") or verification.startswith("skip:")):
         raise RuntimeError("--verification must start with pass: or skip:")
-    if review not in {"PASS", "FAIL"}:
-        raise RuntimeError("--review must be PASS or FAIL")
+    if review not in {"PASS", "PENDING_REVIEW", "FAIL"}:
+        raise RuntimeError("--review must be PASS, PENDING_REVIEW, or FAIL")
     if review == "FAIL" and not needs_child_fix:
         raise RuntimeError("--review FAIL requires --needs-child-fix #123")
+    if review != "FAIL" and needs_child_fix:
+        raise RuntimeError("--needs-child-fix requires --review FAIL")
     if needs_child_fix and not re.fullmatch(r"#[1-9][0-9]*", needs_child_fix):
         raise RuntimeError("--needs-child-fix must look like #123")
     dirty = changed_code_status()
@@ -148,21 +159,22 @@ def finish_child(
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     run(["git", "merge-base", "--is-ancestor", review_base, "HEAD"])
     progress = ensure_local_progress_file()
-    branch = run(["git", "branch", "--show-current"])
+    branch = current_branch()
     match = re.fullmatch(r"issue-([1-9][0-9]*)(?:-[a-z0-9][a-z0-9-]*)?", branch)
     if not match:
         raise RuntimeError("integration child branch must look like issue-123 or issue-123-slug")
-    head_sha = run(["git", "rev-parse", "HEAD"])
+    head_sha = revision("HEAD")
+    changed_files, diff_stat = diff_snapshot(review_base)
     result: dict[str, object] = {
         "issue": f"#{match.group(1)}",
         "branch": branch,
         "worktree": os.fspath(Path.cwd()),
         "base_ref": review_base,
-        "base_sha": run(["git", "rev-parse", review_base]),
+        "base_sha": revision(review_base),
         "commit": head_sha,
         "head_sha": head_sha,
-        "changed_files": run(["git", "diff", "--name-only", f"{review_base}...HEAD"]).splitlines(),
-        "diff_stat": run(["git", "diff", "--stat", f"{review_base}...HEAD"]).replace("\n", " | "),
+        "changed_files": changed_files,
+        "diff_stat": diff_stat,
         "verification": verification,
         "review": review,
         "checks": checks or [],
@@ -171,19 +183,20 @@ def finish_child(
     }
     if needs_child_fix:
         result["needs_child_fix"] = needs_child_fix
-    write_handoff_record(progress, result)
-    return result
+    if review == "PENDING_REVIEW":
+        result["pending_review"] = pending_review_from_progress(progress)
+    return write_handoff_record(progress, result)
 
 
 def merge_child(branch: str, integration_branch: str, expected_commit: str | None = None) -> None:
-    current = run(["git", "branch", "--show-current"])
+    current = current_branch()
     if current != integration_branch:
         raise RuntimeError(f"expected integration branch {integration_branch}, got {current}")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
     if expected_commit:
-        actual_commit = run(["git", "rev-parse", branch])
+        actual_commit = revision(branch)
         if actual_commit != expected_commit:
             raise RuntimeError(f"expected {branch} at {expected_commit}, got {actual_commit}")
     run(["git", "merge", "--no-ff", "--no-edit", branch])
@@ -244,12 +257,14 @@ def self_test() -> int:
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
             assert_raises("uncommitted non-context", finish_child, "integration", "pass:demo", "PASS")
             Path("dirty.txt").unlink()
-            assert_raises("PASS or FAIL", finish_child, "integration", "pass:demo", "MAYBE")
+            assert_raises("PASS, PENDING_REVIEW, or FAIL", finish_child, "integration", "pass:demo", "MAYBE")
             assert_raises("requires --needs-child-fix", finish_child, "integration", "skip:needs child fix", "FAIL")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "123")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#abc")
             assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#123 extra")
-            finish = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
+            finish_path = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
+            assert finish_path == (worktree / ".context" / HANDOFF_NAME).resolve()
+            finish = json.loads(finish_path.read_text(encoding="utf-8"))
             assert finish["branch"] == "issue-123-child-slice"
             assert Path(str(finish["worktree"])).resolve() == worktree.resolve()
             assert finish["issue"] == "#123"
@@ -265,10 +280,33 @@ def self_test() -> int:
             assert progress_path.resolve() == (worktree / ".context" / "progress.md").resolve()
             progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
             assert set(progress_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
-            assert progress_data["artifacts"]["handoff"] == "stdout"
-            assert not (worktree / ".context" / "integration-handoff.json").exists()
-            fail = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
+            assert progress_data["artifacts"]["handoff"] == os.fspath(finish_path)
+            fail_path = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
+            fail = json.loads(fail_path.read_text(encoding="utf-8"))
             assert fail["needs_child_fix"] == "#123"
+            write_progress(
+                progress_path,
+                "issue-workbench integration child",
+                "review pending",
+                {
+                    "pending_review": {
+                        "review_id": "review-1",
+                        "branch": finish["branch"],
+                        "local_head_sha": finish["head_sha"],
+                        "upstream_sha": finish["head_sha"],
+                        "base_ref": finish["base_ref"],
+                        "base_sha": finish["base_sha"],
+                        "poll_after_utc": "2026-01-01T00:00:00Z",
+                        "progress_path": os.fspath(progress_path),
+                    }
+                },
+            )
+            pending_path = finish_child("integration", "skip:review pending", "PENDING_REVIEW")
+            pending = json.loads(pending_path.read_text(encoding="utf-8"))
+            assert pending["review"] == "PENDING_REVIEW"
+            assert pending["pending_review"]["review_id"] == "review-1"
+            pending_progress = json.loads(progress_path.read_text(encoding="utf-8"))
+            assert pending_progress["artifacts"]["pending_review"] == pending["pending_review"]
             assert_raises("expected integration branch", merge_child, "issue-123-child-slice", "integration")
             os.chdir(repo)
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
@@ -304,7 +342,7 @@ def main() -> int:
     finish = subparsers.add_parser("finish")
     finish.add_argument("--review-base", required=True)
     finish.add_argument("--verification", required=True)
-    finish.add_argument("--review", required=True, choices=["PASS", "FAIL"])
+    finish.add_argument("--review", required=True, choices=["PASS", "PENDING_REVIEW", "FAIL"])
     finish.add_argument("--check", action="append", default=[])
     finish.add_argument("--known-skip", action="append", default=[])
     finish.add_argument("--needs-child-fix")
@@ -322,7 +360,7 @@ def main() -> int:
         if args.command == "start":
             emit(start_child(args.issue_number, args.worktree_path, args.integration_branch, args.branch_slug))
         elif args.command == "finish":
-            emit_json(
+            print(
                 finish_child(
                     args.review_base,
                     args.verification,

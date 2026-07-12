@@ -1,6 +1,6 @@
 ---
 name: issue-workbench
-description: Implement one GitHub issue in a guarded feature branch. Use when asked to build or fix one issue, run review-checkpoint, publish a PR, or return shipyard integration JSON.
+description: Implement one GitHub issue in a guarded feature branch. Use when asked to build or fix one issue, run review-checkpoint, publish a PR, or return a Shipyard integration handoff path.
 ---
 
 # issue-workbench
@@ -56,6 +56,7 @@ Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create chi
 - Do not add backward compatibility, migration layers, aliases, fallback paths, or future-proofing unless explicitly required by the issue, spec, or repo instructions.
 - Do not fix sibling or newly discovered work inside the current issue; record it as a blocker, follow-up, or decision candidate instead.
 - Do not modify `.context/` except local uncommitted progress, review, memory context, decision, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
+- In integration mode, do not send interim status messages to Shipyard; return only the canonical handoff path.
 - Do not use `git add .` unless the full diff has been inspected.
 - Use Conventional Commits.
 - Stop instead of guessing when the issue is not actionable, requires a product decision, or would require forbidden-path changes not explicitly required by the issue.
@@ -158,7 +159,9 @@ git commit -m "feat(auth): add token refresh handling"
 
 Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, blocker-only actionability rules, fix loops, and review-loop commits.
 
-If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, return pending handoff JSON in final handoff.
+In integration mode, do not pass Shipyard's shared manifest to `$review-checkpoint`. Each child records review state in its isolated worktree and returns it through the Issue Workbench handoff; Shipyard ingests handoffs serially.
+
+If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, run `integration_child.py finish --review PENDING_REVIEW`; it writes the pending state into the canonical handoff file.
 
 If it returns anything other than `PASS` or `PENDING_REVIEW`, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
 
@@ -184,13 +187,13 @@ Skip routine progress, passing checks, and ordinary implementation details.
 
 Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
 
-Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the compact handoff JSON in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.
+Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the absolute handoff path in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.
 
 If `handoff_mode=pull_request`, run `pr-launchpad` as a nested skill only after a completed review gate returns `PASS`; it must skip its memory boundary. After it returns, invoke `$agent-memory distill`.
 
 In pull-request mode, `$agent-memory distill` is the final guard before every terminal return, including early `Stop`, `Blocked`, and `PENDING_REVIEW` results. In integration mode, do not distill; preserve `.context/decisions.jsonl` for `$shipyard`.
 
-Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. Do not write a per-child handoff file. The response is the child handoff JSON.
+Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. `integration_child.py finish` writes the one canonical `.context/integration-handoff.json` and records its absolute path in `artifacts.handoff`.
 
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Emit the output of:
 
@@ -198,14 +201,17 @@ If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-Treat the helper output as the authoritative handoff schema; do not reconstruct or extend it. `review` must be `PASS` unless `pending_review` or `needs_child_fix:"#<issue>"` is present.
+Return only the absolute path printed by the helper. The file is the authoritative handoff schema; do not reconstruct, copy, or extend its JSON.
+The handoff reports facts only; it does not select a Shipyard child status.
 
-If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, use the helper's handoff field names and add `review:"PENDING_REVIEW"` plus `pending_review` copied from the five-field `.context/progress.md` object or an artifact it references. `pending_review` must include at least `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`; do not call `integration_child.py finish` or set `review` to `PASS`.
+If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, keep its evidence under `.context/progress.md` `artifacts.pending_review`. It must include `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`. Then run:
 
-For a verification-only `final_check` child, do not create an empty commit. It may fix only final-check-owned docs/tests. If it finds an implementation defect owned by a child issue, do not fix it there; return `review:"FAIL"` and `needs_child_fix:"#<issue>"` so `$shipyard` routes it back:
+```bash
+python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification skip:review-pending --review PENDING_REVIEW
+```
+
+If validation or review finds an implementation defect owned by another child issue, do not fix it here; run:
 
 ```bash
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification skip:needs-child-fix --review FAIL --needs-child-fix '#123'
 ```
-
-An empty `diff_stat` with `commit` equal to the integration branch HEAD is the no-op completion signal for `$shipyard`.

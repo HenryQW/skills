@@ -26,7 +26,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - Use `defer` only when the user or coordinating skill explicitly asks to start a review and resume later.
 - `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
 - `max_review_wait_minutes` is optional and defaults to `30`; in `block` mode, stop with `PENDING_REVIEW` when this wait budget is spent.
-- `manifest_path` is optional. When provided, write pending review state, fallback review events, and final review status into that shipyard manifest instead of making `.context/progress.md` the source of truth.
+- `manifest_path` is optional and reserved for Shipyard's single integration review. Child Issue Workbench reviews must keep state in their isolated worktrees and return it through their handoffs.
 
 ## Rules
 
@@ -41,7 +41,7 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 - In `review_only`, never edit files or commit fixes. In `fix_loop`, fix only review-actionable findings and record but do not fix `non_actionable` findings.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
 - Keep `.context/progress.md` local and uncommitted if used for pending review state.
-- When `manifest_path` is provided, record review state there and keep `.context/progress.md` as a pointer to the manifest.
+- When Shipyard provides `manifest_path` for the integration review, record review state there and keep `.context/progress.md` as a pointer to the manifest.
 - Write fallback review payloads and large diffs only when the reviewer cannot reproduce them from git. Use one overwriteable `.context/review-payload.txt` and record its path and SHA in the manifest or progress pointer.
 - If review history must survive handoff, append to one `.context/review-events.jsonl`; do not create per-review artifact folders.
 - Keep `.context/progress.md` to five fields: `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
@@ -143,6 +143,8 @@ review_event_file=$(mktemp)
 # write the review event JSON object to "$review_event_file"
 python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> set-review --file "$review_event_file"
 ```
+
+Every passing integration event must include `status:"PASS"`, the current `branch`, `base_sha`, and exact reviewed `head_sha`. Resolve both SHAs from git after the review completes, and do not return `PASS` unless `set-review` accepts the event.
 
 Classify blockers from the full `show` output.
 

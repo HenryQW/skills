@@ -16,15 +16,13 @@ OBSIDIAN_PROJECT=`${OBSIDIAN_ROOT}/projects/Skills`
 
 ## Root README Requirement
 
-The repository root `README.md` must include detailed skill information in the canonical skill inventory tables. Use exactly two inventory sections: `Workflow Skills` for skills used in the main workflow map, and `Supporting Skills` for the remaining skills. Each section has its own table with the same columns, sorted A-Z by `Name`. Do not add separate role tables, diagrams, or narrative sections that restate the same skill descriptions. Alternate views, such as Mermaid workflow diagrams or grouped lists, are allowed only when they explain selection or sequencing without repeating table fields.
+The repository root `README.md` must include:
 
-```md
-| Category | Name | Purpose | Install | Last updated (UTC) |
-|---|---|---|---|---|
-| Planning | `first-skill-name` | A short, plain-language purpose for the first skill. | `npx skills install HenryQW/skills first-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
-| Execution | `second-skill-name` | A short, plain-language purpose for the second skill. | `npx skills install HenryQW/skills second-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
-| Support | `nth-skill-name` | A short, plain-language purpose for the nth skill. | `npx skills install HenryQW/skills nth-skill-name -a codex -y` | YYYY-MM-DD HH:MM |
-```
+- One installation section near the top with `npx skills add HenryQW/skills --skill '*' --agent codex -y`.
+- One linked heading and short, plain-language introduction for every skill.
+- `Workflow skills` and `Supporting skills` groups, each sorted A-Z by skill name.
+
+Do not add inventory tables, per-skill install commands, update timestamps, or duplicate skill descriptions.
 
 ## Change Policy (Mandatory)
 
@@ -38,9 +36,8 @@ When updating skills in this repository, do not preserve backward compatibility 
 This rule applies to internal implementation APIs, not user-facing CLI or operational interfaces. CLI compatibility may be retained when required for safe rollout or existing workflows.
 
 At minimum, update the root `README.md`:
-- The `Install` column, with command `npx skills install HenryQW/skills <skill name> -a codex -y`.
-- Any changed purpose or description text.
-- The `Last updated` timestamp in UTC, only update when the skill's implementation changes, not for documentation-only updates.
+- Add, remove, rename, or revise the affected skill introduction.
+- Keep the skill in the correct group and preserve A-Z ordering.
 - Keep workflow guidance short and reference skill names instead of repeating each skill's role.
 
 Do not leave README updates for a later commit.

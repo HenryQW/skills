@@ -64,7 +64,7 @@ Rules:
 - `parallelism` must explain why the issue is safe in its wave and identify expected overlap in files, interfaces, or shared state with same-wave issues.
 - `testing` is required for every implementation child. It captures the public seam, existing similar tests, smallest validation command, and what not to test. Use `seam: none` only with a concrete alternative validation path.
 - `dropped_findings` is optional, but required when repo-surveyor or review findings were excluded before publish. Record the reason so the parent graph explains why duplicates were not sliced.
-- Exactly one issue must use `"role": "final_check"`; it must be blocked by every non-final child and block nothing.
+- Exactly one issue must use `"role": "final_check"`; it is verification-only, must name concrete integration commands, must be blocked by every non-final child, and must block nothing.
 - Keep bodies short enough to scan, but include enough context for an AFK agent.
 - Every issue must appear in exactly one explicit wave.
 - The renderer rejects missing required fields, invalid IDs, unknown dependencies, cycles, duplicate or invalid wave membership, and mismatched `blocks` / `blocked_by`.
