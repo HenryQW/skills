@@ -160,6 +160,10 @@ def apply_write_plan(
                 raise ValueError(f"write target changed after planning: {target.path}")
         for target in targets:
             _reject_symlinks(target.path)
+            current = _state(target.path)
+            current_hash = sha256_bytes(current) if current is not None else None
+            if current_hash != target.baseline_sha256:
+                raise ValueError(f"write target changed before replacement: {target.path}")
             attempted = target.path
             replace(staged[target.path], target.path)
             staged.pop(target.path, None)
@@ -301,6 +305,20 @@ def self_test() -> None:
         else:
             raise AssertionError("accepted replace failure")
         assert a.read_bytes() == b"old-a" and b.read_bytes() == b"old-b"
+
+        def drift_later_target(path: Path) -> bytes:
+            if path == a:
+                b.write_bytes(b"concurrent-b")
+            return path.read_bytes()
+
+        try:
+            apply_write_plan(roots=(root,), directories=(), targets=targets(), readback=drift_later_target)
+        except WritePlanError as exc:
+            assert exc.committed == (a,) and exc.restored == (a,) and not exc.unresolved
+        else:
+            raise AssertionError("overwrote a target changed during commit")
+        assert a.read_bytes() == b"old-a" and b.read_bytes() == b"concurrent-b"
+        b.write_bytes(b"old-b")
 
         def fail_readback(path: Path) -> bytes:
             raise OSError(f"injected readback failure: {path}")
