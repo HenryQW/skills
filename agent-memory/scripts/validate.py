@@ -8,6 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKS = (
+    ("agent-memory/scripts/trusted_write.py", "--self-test"),
     ("agent-memory/scripts/setup_agent_memory.py", "--self-test"),
     ("agent-memory/scripts/memory_context.py", "--self-test"),
     ("agent-memory/scripts/append_decision.py", "--self-test"),
