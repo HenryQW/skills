@@ -26,4 +26,4 @@ with tempfile.TemporaryDirectory() as directory:
     )
     if result.returncode == 0 or "github-adapter not found" not in result.stderr:
         raise SystemExit("ci-repairbay missing-adapter fixture did not fail clearly")
-raise SystemExit(subprocess.run((sys.executable, str(SCRIPT), "--help"), cwd=ROOT).returncode)
+raise SystemExit(subprocess.run((sys.executable, str(SCRIPT), "--self-test"), cwd=ROOT).returncode)

@@ -80,11 +80,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Include the full log tail in JSON output; the failure snippet is always included.",
     )
+    parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.self_test:
+        self_test()
+        return 0
     repo_root = find_git_root(Path(args.repo))
     if repo_root is None:
         print("Error: not inside a Git repository.", file=sys.stderr)
@@ -220,7 +224,7 @@ def analyze_check(
         base["note"] = "No GitHub Actions run id detected in detailsUrl."
         return base
 
-    metadata = fetch_run_metadata(run_id, repo_root)
+    metadata = fetch_run_metadata(run_id, repo_slug, repo_root)
     log_text, log_error, log_status = fetch_check_log(
         run_id=run_id,
         job_id=job_id,
@@ -273,7 +277,7 @@ def extract_job_id(url: str) -> str | None:
     return None
 
 
-def fetch_run_metadata(run_id: str, repo_root: Path) -> dict[str, Any] | None:
+def fetch_run_metadata(run_id: str, repo_slug: str, repo_root: Path) -> dict[str, Any] | None:
     fields = [
         "conclusion",
         "status",
@@ -284,7 +288,11 @@ def fetch_run_metadata(run_id: str, repo_root: Path) -> dict[str, Any] | None:
         "headSha",
         "url",
     ]
-    result = GITHUB.execute(["run", "view", run_id, "--json", ",".join(fields)], cwd=repo_root, check=False)
+    result = GITHUB.execute(
+        ["run", "view", run_id, "--repo", repo_slug, "--json", ",".join(fields)],
+        cwd=repo_root,
+        check=False,
+    )
     if result.returncode != 0:
         return None
     try:
@@ -302,7 +310,7 @@ def fetch_check_log(
     repo_root: Path,
     repo_slug: str,
 ) -> tuple[str, str, str]:
-    log_text, log_error = fetch_run_log(run_id, repo_root)
+    log_text, log_error = fetch_run_log(run_id, repo_slug, repo_root)
     if not log_error:
         return log_text, "", "ok"
 
@@ -322,12 +330,37 @@ def fetch_check_log(
     return "", log_error, "error"
 
 
-def fetch_run_log(run_id: str, repo_root: Path) -> tuple[str, str]:
-    result = GITHUB.execute(["run", "view", run_id, "--log"], cwd=repo_root, check=False)
+def fetch_run_log(run_id: str, repo_slug: str, repo_root: Path) -> tuple[str, str]:
+    result = GITHUB.execute(
+        ["run", "view", run_id, "--repo", repo_slug, "--log"],
+        cwd=repo_root,
+        check=False,
+    )
     if result.returncode != 0:
         error = result.message
         return "", error or "gh run view failed"
     return result.text, ""
+
+
+def self_test() -> None:
+    calls: list[list[str]] = []
+
+    def fake_runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[bytes]:
+        calls.append(command)
+        stdout = b'{"status":"completed"}' if "--json" in command else b"run log"
+        return subprocess.CompletedProcess(command, 0, stdout, b"")
+
+    global GITHUB
+    original = GITHUB
+    GITHUB = GitHub(fake_runner)
+    try:
+        assert fetch_run_metadata("123", "owner/repo", Path(".")) == {"status": "completed"}
+        assert fetch_run_log("123", "owner/repo", Path(".")) == ("run log", "")
+    finally:
+        GITHUB = original
+
+    assert len(calls) == 2
+    assert all(call[4:6] == ["--repo", "owner/repo"] for call in calls)
 
 
 def fetch_job_log(job_id: str, repo_slug: str, repo_root: Path) -> tuple[str, str]:
