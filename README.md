@@ -1,8 +1,8 @@
 # Skills
 
-🚢 Automated engineering workflows for Codex.
+🚢 Automated engineering harness for Codex.
 
-Give an agent a plan, issue, branch, or pull request. These skills can carry it through analysis, implementation, checks, review, and publication while stopping for decisions and approvals that need a human.
+Give an agent a plan, issue, branch, or pull request. These skills can carry it through analysis, implementation, checks, review-and-fix loops, and publication while stopping for decisions and approvals that need a human.
 
 ## 📦 Installation
 
@@ -92,7 +92,7 @@ Fixes exact supplied PR feedback directly, or fetches thread state when discover
 
 #### [`shipyard`](shipyard/)
 
-Takes an Issue Blueprint parent graph to one integration PR while owning canonical child handoffs, lifecycle state, integration checks, review, and publication.
+**Runs fully autonomously**, takes an Issue Blueprint parent graph to one integration PR while owning canonical child handoffs, lifecycle state, integration checks, review-and-fix loop, and publication.
 
 ### 🧰 Supporting skills
 
