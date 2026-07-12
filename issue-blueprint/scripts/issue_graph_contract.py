@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 
@@ -134,5 +135,13 @@ def self_test() -> None:
             raise AssertionError(f"expected graph error containing {expected!r}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--self-test", action="store_true")
+    if not parser.parse_args().self_test:
+        parser.error("--self-test is required")
     self_test()
+
+
+if __name__ == "__main__":
+    main()
