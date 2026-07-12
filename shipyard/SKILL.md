@@ -39,7 +39,9 @@ Infer everything else:
 ## Bundled Resources
 
 - `scripts/inspect_parent_issue.py`: resolves branch policy, parent issue, child issue dependencies, `final_check`, local merged children, and runnable children.
-- `scripts/manifest.py`: maintains `.context/shipyard-manifest.json`, the single trusted run artifact for child handoffs, validation, review state, blockers, and PR URL.
+- `scripts/manifest.py`: maintains `.context/shipyard-manifest.json`, the
+  trusted run artifact. It owns child-handoff, validation, and review-event
+  schemas and rewrites `.context/progress.md` as its pointer.
 - `<issue_workbench_dir>/scripts/integration_child.py`: starts child worktrees and merges returned child branches; resolve `<issue_workbench_dir>` from the loaded `issue-workbench` skill path.
 
 ## State Machine
@@ -63,7 +65,6 @@ Infer everything else:
 - Stop on `mode=default_branch_blocked`; report the default branch, current branch, and failed branch-reconciliation command.
 - Initialize `.context/shipyard-manifest.json` with `python3 <shipyard_dir>/scripts/manifest.py init <parent_issue> <current_branch> --base-branch <default_branch>`.
 - Do not launch the first child until manifest init succeeds.
-- Treat `.context/shipyard-manifest.json` as the only required run state. `.context/progress.md` is only a pointer to that manifest.
 - Read only issue-linked docs or named files needed to understand runnable children.
 
 ### 2. Run one wave
@@ -87,14 +88,12 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 ```
 
 - Do not send status probes to running children. Wait for completion notifications and keep user updates phase-level.
-- Read the returned handoff file and require `issue`, `branch`, `worktree`, `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, `diff_stat`, `verification`, `review`, `checks`, `known_skips`, and `artifacts.progress_path`; allow `needs_child_fix`.
+- Read the returned handoff and ingest it with `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`.
+  `manifest.py` validates required fields, review state, and transitions; stop
+  on its error rather than copying or reconstructing JSON.
 - If the child worktree has `.context/decisions.jsonl`, re-append each durable record to the Shipyard root with `<agent_memory_dir>/scripts/append_decision.py`; stable IDs deduplicate repeats. Do not write Obsidian or ask `pr-launchpad` to distill.
-- Accept only `review:"PASS"`, `review:"PENDING_REVIEW"`, or `review:"FAIL"` with `needs_child_fix`.
-- Accept `review:"PENDING_REVIEW"` only with `pending_review` evidence containing `review_id`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`.
-- Stop if a required field is missing, `verification` does not start with `pass:` or `skip:`, or the review value is not accepted.
 - If `needs_child_fix` is present, stop shipyard edits and rerun or reuse `$issue-workbench` in that child worktree.
 - If `review` is `PENDING_REVIEW`, do not merge the branch and continue other runnable independent children when available.
-- Ingest each returned path serially with `python3 <shipyard_dir>/scripts/manifest.py ingest-child --file <child_handoff_file>`. The manifest derives and validates child status; Shipyard does not copy or reconstruct JSON.
 - Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
 - Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`.
 - After each successful merge, run `python3 <shipyard_dir>/scripts/manifest.py merge-child <child_issue> --commit <commit>`.
@@ -102,12 +101,6 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 - Run one manifest/branch check before merge, one smallest relevant validation after the merge or wave, and one final validation before PR. Do not repeat `git status`, manifest validation, or issue inspection after every manifest update.
 - Do not delete child worktrees automatically.
 - Once multiple worktrees exist, use absolute paths for file-mutating commands.
-
-Keep `.context/progress.md` as a five-field pointer to the manifest after every child return or merge:
-
-```json
-{"goal":"shipyard #<parent>","current_step":"<next action>","artifacts":{"manifest":"/abs/path/.context/shipyard-manifest.json"},"blockers":[],"validation":["<command>"]}
-```
 
 ### 3. Finish integration
 
@@ -118,7 +111,7 @@ Keep `.context/progress.md` as a five-field pointer to the manifest after every 
 - Stop if the parent issue has no `final_check` child.
 - Treat `final_check` as verification-only. Read its named integration commands and run them directly on the clean integration branch after every non-final child is merged. Do not launch a child or review for it, and do not edit code.
 - If a command fails, route the defect to the child whose acceptance criterion owns it. Stop for user direction when ownership is unclear.
-- Record passing final-check evidence in one JSON file with `issue`, `status:"PASS"`, current `head_sha`, non-empty `checks` objects containing `command` and `result:"PASS"`, and `known_skips`; run `python3 <shipyard_dir>/scripts/manifest.py set-validation --file <event_file>`.
+- Record final-check evidence through `python3 <shipyard_dir>/scripts/manifest.py set-validation --file <event_file>`; `manifest.py` validates the SHA-bound event and checks.
 - On resume, skip `final_check` only when `validation_plan.final.issue` matches it and `validation_plan.final.head_sha` equals current `HEAD`.
 
 ### 4. Final review and PR
@@ -155,7 +148,8 @@ Keep `.context/progress.md` as a five-field pointer to the manifest after every 
 
 - The GitHub parent issue is the durable source of truth.
 - Child issue bodies define dependencies; PR state defines implementation progress.
-- `.context/shipyard-manifest.json` is the single trusted local run artifact. `.context/progress.md` is scratch and should only point at the manifest.
+- `.context/shipyard-manifest.json` is the single trusted local run artifact;
+  `.context/progress.md` only points to it.
 - A child is `done-local` for the current run only after its branch is merged into the shipyard branch. This clears its blocker for the run; do not run it again even if its issue remains open.
 - Durable completion requires the child's PR to merge or its issue to close. For `done-local` children, merging the final shipyard PR is the durable completion signal.
 

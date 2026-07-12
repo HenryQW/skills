@@ -90,6 +90,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-lines", type=int, default=DEFAULT_MAX_LINES)
     parser.add_argument("--context", type=int, default=DEFAULT_CONTEXT_LINES)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text output.")
+    parser.add_argument(
+        "--log-tail",
+        action="store_true",
+        help="Include the full log tail in JSON output; the failure snippet is always included.",
+    )
     return parser.parse_args()
 
 
@@ -124,6 +129,7 @@ def main() -> int:
                 repo_root=repo_root,
                 max_lines=max(1, args.max_lines),
                 context=max(1, args.context),
+                include_log_tail=args.log_tail,
             )
         )
 
@@ -240,6 +246,7 @@ def analyze_check(
     repo_root: Path,
     max_lines: int,
     context: int,
+    include_log_tail: bool,
 ) -> dict[str, Any]:
     url = check.get("detailsUrl") or check.get("link") or ""
     run_id = extract_run_id(url)
@@ -281,7 +288,8 @@ def analyze_check(
     base["status"] = "ok"
     base["run"] = metadata or {}
     base["logSnippet"] = snippet
-    base["logTail"] = tail_lines(log_text, max_lines)
+    if include_log_tail:
+        base["logTail"] = tail_lines(log_text, max_lines)
     return base
 
 

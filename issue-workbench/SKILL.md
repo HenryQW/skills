@@ -7,10 +7,7 @@ description: Implement one GitHub issue in a guarded feature branch. Use when as
 
 ## Goal
 
-Implement one GitHub issue into a clean feature branch with the smallest intentional diff.
-Child implementation and actionable review fixes belong here, not in `$shipyard`.
-Run `$review-checkpoint`; it owns Greptile, fallback review, blocker-only actionability rules, and contradictory-blocker handling.
-After the latest completed review gate passes with no later commit, hand off to `pr-launchpad` unless `handoff_mode=integration_branch`.
+Implement one GitHub issue into a clean feature branch with the smallest intentional diff. Child implementation and actionable review fixes belong here, not in `$shipyard`. `$review-checkpoint` owns review selection, blocker actionability, and contradictory-blocker handling; after its latest completed `PASS` with no later commit, hand off to `pr-launchpad` unless `handoff_mode=integration_branch`.
 
 ## Bundled resources
 
@@ -27,10 +24,7 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 - `issue_number` is required.
 - `base_branch` is optional and defaults to the repository default branch.
 - `branch_slug` is optional.
-- `max_iterations` is optional and passes through to `$review-checkpoint`.
-- `review_base` is optional and passes through to `$review-checkpoint`; default is the branch base selected during branch preparation.
-- `wait_mode` is optional and passes through to `$review-checkpoint`.
-- `poll_interval_seconds` is optional and passes through to `$review-checkpoint`.
+- `max_iterations`, `review_base`, `wait_mode`, and `poll_interval_seconds` pass through to `$review-checkpoint`; `review_base` defaults to the branch base selected during preparation.
 - `worktree_path` is optional. When set, create the issue branch in that new Git worktree instead of the caller worktree.
 - `handoff_mode` is optional and defaults to `pull_request`. The only other supported value is `integration_branch`.
 - `integration_branch` is required when `handoff_mode=integration_branch` and is the local branch that the issue branch will be merged back into by `$shipyard`.
@@ -39,22 +33,14 @@ Use `<issue_workbench_dir>` as the absolute path to this skill directory when ru
 
 ### Lite mode
 
-`$issue-workbench #<issue>` is the default path for one known actionable GitHub issue.
-
-Use lite mode when:
-- the issue already has enough acceptance criteria to implement,
-- no dependency graph or parallel child work is needed,
-- no integration branch is requested.
-
-Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create child issues, or create a `final_check` in lite mode. Stop only when the issue lacks actionable acceptance criteria, product behavior is unclear, repo state is dirty, or the requested change would require unrelated refactoring.
+`$issue-workbench #<issue>` is the default for an issue with actionable acceptance criteria, no dependency graph or parallel work, and no integration branch. Do not invoke `$issue-blueprint`, `$shipyard`, parent/child issues, or `final_check`. Stop when acceptance criteria or product behavior are unclear, repo state is dirty, or the change needs unrelated refactoring.
 
 ### Boundaries
 
 - Only modify files required by the issue.
 - Do not perform unrelated refactors.
 - Do not modify secrets, env files, generated files, lockfiles, `.agents/`, or infrastructure files unless the issue explicitly requires it or the review gate directly identifies a deterministic issue in that file.
-- Do not add backward compatibility, migration layers, aliases, fallback paths, or future-proofing unless explicitly required by the issue, spec, or repo instructions.
-- Do not fix sibling or newly discovered work inside the current issue; record it as a blocker, follow-up, or decision candidate instead.
+- Do not add compatibility, migration, aliases, fallback paths, or future-proofing unless explicitly required; record sibling or newly discovered work as a blocker, follow-up, or decision candidate.
 - Do not modify `.context/` except local uncommitted progress, review, memory context, decision, and handoff artifacts referenced from `.context/progress.md`; keep `.context/progress.md` to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
 - In integration mode, do not send interim status messages to Shipyard; return only the canonical handoff path.
 - Do not use `git add .` unless the full diff has been inspected.
@@ -65,7 +51,7 @@ Do not invoke `$issue-blueprint`, `$shipyard`, create a parent issue, create chi
 
 ### 1. Load memory context if configured
 
-When the user invoked this workflow directly, invoke `$agent-memory load` with the issue scope. Continue when it returns `memory_load=SKIPPED`; do not run setup. In integration mode, skip this step because `$shipyard` owns the memory boundary.
+When invoked directly, invoke `$agent-memory load` with the issue scope; continue on `memory_load=SKIPPED` and do not run setup. In integration mode, `$shipyard` owns this boundary.
 
 ### 2. Confirm clean working tree
 
@@ -83,13 +69,11 @@ Run:
 python3 <skill_dir>/scripts/issue_snapshot.py <issue_number>
 ```
 
-If truncation or omitted comments hide context needed to decide scope, rerun it with larger limits before implementing.
-
-Extract explicit requirements, acceptance criteria, constraints, named files, named modules, and named behavior. Use that as the implementation scope. Do not invent product behavior.
+If `[truncated]` or omitted comments hide scope, rerun with larger limits before implementing. Extract explicit requirements, acceptance criteria, constraints, named files/modules, and behavior; do not invent product behavior.
 
 ### 4. Prepare the branch
 
-Use the current worktree by default. In `handoff_mode=integration_branch`, require `worktree_path` and `integration_branch`, then use the integration helper.
+Use the current worktree by default. `handoff_mode=integration_branch` requires `worktree_path` and `integration_branch`.
 
 Use the helper for normal PR mode:
 
@@ -103,13 +87,13 @@ For `$shipyard` integration mode:
 python3 <skill_dir>/scripts/integration_child.py start <issue_number> --worktree-path <worktree_path> --integration-branch <integration_branch> [--branch-slug <branch_slug>]
 ```
 
-The child branch must start from `integration_branch`, not the repository default branch. After setup, `cd` into the returned worktree and keep the caller worktree branch unchanged.
+The child branch starts from `integration_branch`, not the repository default; `cd` into the returned worktree and leave the caller branch unchanged.
 
 Resolve `<review_base>` from the `review_base` input when provided; otherwise use `<integration_branch>` in integration mode and `origin/<base_branch>` in PR mode. If repo instructions require `.context/progress.md`, `integration_child.py start` initializes the five-field progress object and records any prior progress file under `artifacts.source_progress`; keep it uncommitted.
 
 ### 5. Inspect the repository before editing
 
-Identify the smallest relevant files or modules with `rg` or `rg --files`. Prefer existing patterns, tests, helpers, and conventions. Avoid new dependencies unless the issue requires them.
+Identify the smallest relevant files or modules with `rg`/`rg --files`; prefer existing patterns, tests, helpers, and conventions. Avoid dependencies unless required.
 
 ### 6. Select the testing seam
 
@@ -120,7 +104,7 @@ Before editing tests, identify the public behavior boundary:
 - Validation command: smallest meaningful command, or `none obvious`.
 - Do not test: internals, mocks, or implementation details that would couple the test to the chosen design.
 
-If no useful test seam exists, use another concrete validation path. Do not invent low-value tests.
+If no useful test seam exists, use another concrete validation path; do not invent low-value tests.
 
 ### 7. Implement
 
@@ -135,13 +119,11 @@ git diff
 python3 <issue_workbench_dir>/scripts/diff_guard.py --base <review_base>
 ```
 
-`diff_guard.py` includes untracked files. If a new file should appear in `git diff --stat` before staging, run `git add -N <path>` and rerun the diff/stat commands.
-
-If the issue explicitly requires a blocked path, verify that requirement in the issue text, then rerun the guard with `--base <review_base> --allow <path>`. Stop if any changed file or line cannot trace to the issue.
+`diff_guard.py` includes untracked files; use `git add -N <path>` to include a new file in diff/stat before staging. For an explicitly required blocked path, verify the issue text, then rerun with `--allow <path>`. Stop if any changed file or line cannot trace to the issue.
 
 ### 9. Run relevant local validation
 
-Run the smallest relevant validation command discoverable from nearby tests, `package.json`, `pyproject.toml`, `tox.ini`, `noxfile.py`, `pytest.ini`, or `Makefile`. If no command is obvious, continue without inventing tooling.
+Run the smallest relevant command discoverable from nearby tests or project config; if none is obvious, continue without inventing tooling.
 
 ### 10. Commit
 
@@ -157,13 +139,11 @@ git commit -m "feat(auth): add token refresh handling"
 
 ### 11. Review gate
 
-Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. It owns review provider selection, fallback review, blocker-only actionability rules, fix loops, and review-loop commits.
-
-In integration mode, do not pass Shipyard's shared manifest to `$review-checkpoint`. Each child records review state in its isolated worktree and returns it through the Issue Workbench handoff; Shipyard ingests handoffs serially.
+Run `$review-checkpoint` with the selected `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`. In integration mode, do not pass Shipyard's shared manifest: the child records isolated review state and returns it through this handoff.
 
 If it returns `PENDING_REVIEW`, do not treat it as `PASS`. In `handoff_mode=pull_request`, stop and report `PENDING_REVIEW` with the pending state location. In `handoff_mode=integration_branch`, run `integration_child.py finish --review PENDING_REVIEW`; it writes the pending state into the canonical handoff file.
 
-If it returns anything other than `PASS` or `PENDING_REVIEW`, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
+Otherwise, stop with its status and artifact path. Continue only after the latest completed review gate returns `PASS` with no later commit.
 
 After a `PASS`, rerun the path guard before handoff:
 
@@ -175,7 +155,7 @@ If the guard fails, stop unless the issue explicitly allows that path or `$revie
 
 ### 12. Record durable decisions
 
-If implementation created or confirmed a durable decision future agents need, append one structured candidate instead of writing Obsidian directly:
+For a durable decision future agents need, append one structured candidate instead of writing Obsidian directly:
 
 ```bash
 python3 <agent_memory_dir>/scripts/append_decision.py --project-root . --topic <topic> --decision "<decision>" --reason "<why>" --source "issue #<issue_number>"
@@ -185,15 +165,11 @@ Skip routine progress, passing checks, and ordinary implementation details.
 
 ### 13. Final handoff
 
-Do not duplicate final branch, diff, or PR checks. `pr-launchpad` owns PR-mode inspection, and `integration_child.py finish` owns integration-mode branch, clean-worktree, merge-base, commit, changed-files, and diff-stat reporting. `.context/progress.md` may remain local and uncommitted.
+Do not duplicate final branch, diff, or PR checks: `pr-launchpad` owns PR-mode inspection; `integration_child.py finish` owns integration-mode reporting. `.context/progress.md` may remain local and uncommitted. Return only the PR URL, deferred `PENDING_REVIEW` progress path, or integration handoff path—no markdown, logs, diffs, or summaries.
 
-Return only the PR URL in normal mode, `PENDING_REVIEW` with its progress path when normal mode is deferred, or the absolute handoff path in integration mode. Do not include markdown, logs, copied diffs, or extra summaries.
+In `pull_request` mode, invoke nested `pr-launchpad` only after `PASS` (it skips its memory boundary), then `$agent-memory distill`. Distill before every terminal return, including `Stop`, `Blocked`, and `PENDING_REVIEW`; in integration mode, do not distill and preserve `.context/decisions.jsonl` for `$shipyard`.
 
-If `handoff_mode=pull_request`, run `pr-launchpad` as a nested skill only after a completed review gate returns `PASS`; it must skip its memory boundary. After it returns, invoke `$agent-memory distill`.
-
-In pull-request mode, `$agent-memory distill` is the final guard before every terminal return, including early `Stop`, `Blocked`, and `PENDING_REVIEW` results. In integration mode, do not distill; preserve `.context/decisions.jsonl` for `$shipyard`.
-
-Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; store detailed notes, validation output, review state, and resume hints only when needed. `integration_child.py finish` writes the one canonical `.context/integration-handoff.json` and records its absolute path in `artifacts.handoff`.
+Before returning in integration mode, keep only `goal`, `current_step`, `artifacts`, `blockers`, and `validation` in `.context/progress.md`; detailed notes, output, review state, and resume hints are optional. `integration_child.py finish` writes canonical `.context/integration-handoff.json` and records its absolute path in `artifacts.handoff`.
 
 If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not run `pr-launchpad`. Emit the output of:
 
@@ -201,8 +177,7 @@ If `handoff_mode=integration_branch` and the review gate returned `PASS`, do not
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --verification pass:<summary> --review PASS --check "<cmd>" --known-skip "<reason>"
 ```
 
-Return only the absolute path printed by the helper. The file is the authoritative handoff schema; do not reconstruct, copy, or extend its JSON.
-The handoff reports facts only; it does not select a Shipyard child status.
+Return only the helper's absolute path. Its file is authoritative: do not reconstruct, copy, or extend its factual JSON or select a Shipyard child status.
 
 If `handoff_mode=integration_branch` and the review gate returned `PENDING_REVIEW`, keep its evidence under `.context/progress.md` `artifacts.pending_review`. It must include `review_id`, `branch`, `local_head_sha`, `upstream_sha`, `base_ref`, `base_sha`, `poll_after_utc`, and `progress_path`. Then run:
 

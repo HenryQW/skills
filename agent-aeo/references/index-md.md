@@ -24,21 +24,6 @@ Include these elements near the top:
 
 Then include the actual page body content.
 
-Recommended shape:
-
-```md
-# Page Title
-
-Site: Example Website
-Context: Example Website is a leading provider of widgets and widget-related services.
-Canonical URL: https://example.com/en-US/services/widget-management
-Locale: en-US
-
-## Section Heading
-
-Body content here.
-```
-
 ## Subpage context
 
 For subpages, include a consistent site context block before page-specific

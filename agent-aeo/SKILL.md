@@ -5,11 +5,9 @@ description: "Implement agent-oriented website access and AI crawler discovery f
 
 # Agent AEO
 
-Use this skill to expose a public website in machine-readable forms that agents
-can discover, request, and cite without scraping rendered HTML.
-
-Keep the implementation boring: one content resolver, thin route or proxy entry
-points, explicit content types, and tests that exercise runtime behavior.
+Expose public website content in machine-readable forms that agents can
+discover, request, and cite without scraping rendered HTML. Use one content
+resolver, thin route entry points, explicit content types, and runtime tests.
 
 ## Surfaces and references
 
@@ -30,11 +28,8 @@ same markdown can be returned through `index.md`, `?mode=agent`, or
 
 ## Recommended Architecture
 
-Centralize content generation in a single server-side module or handler layer.
-Framework-specific route files, controllers, handlers, or middleware should stay
-thin.
-
-Expose one content function that accepts:
+Centralize content generation in one server-side module or handler; keep
+framework routes, controllers, and middleware thin. Its content function accepts:
 
 - `path`: requested canonical path
 - `locale`: resolved locale when applicable
@@ -42,74 +37,59 @@ Expose one content function that accepts:
 
 That function should:
 
-- normalize `/index.md`, `/llms.txt`, and `?mode=agent` to the canonical page
-  path
+- normalize `/index.md`, `/llms.txt`, and `?mode=agent` to the canonical path
 - resolve page content from existing route registries, templates, Markdown
   sources, CMS exports, or static page data
 - render markdown first
 - down-convert to plain text only at the final response boundary when needed
 - return `404` for unsupported paths instead of placeholder content
 
-Keep per-page route duplication out of the codebase. Avoid one identical
-`index.md` or `llms.txt` route file per page folder when a shared proxy,
-dynamic route, rewrite layer, or router parameter can handle all requests.
+Use a shared proxy, dynamic route, rewrite, or router parameter instead of
+identical per-page `index.md` or `llms.txt` files.
 
 ## Rewrite Pattern
 
-If the framework supports rewrites, middleware, or edge routing, route agent
-surfaces through one central handler.
+If rewrites, middleware, or edge routing are available, route agent surfaces
+through one central handler; otherwise use one dynamic catch-all handler.
 
 The rewrite layer should:
 
-- detect `/index.md` and nested `*/index.md`
-- detect nested `*/llms.txt` and mark them plain text
-- detect `?mode=agent`
-- detect supported page URLs when `Accept` includes `text/markdown`
+- detect `/index.md` (including nested), nested `*/llms.txt` as plain text,
+  `?mode=agent`, and supported URLs whose `Accept` includes `text/markdown`
 - set `Vary: Accept` for content-negotiated responses
-- resolve the canonical `path` from `requestedPath` before calling the content
-  function: strip `/index.md`, `/llms.txt` suffixes, and `?mode=agent` to get
-  the bare page path (e.g. `requestedPath: "/services/index.md"` → `path:
-  "/services"`)
+- resolve the canonical `path` before calling the content function: strip
+  `/index.md`, `/llms.txt`, and `?mode=agent` (for example,
+  `/services/index.md` becomes `/services`)
 - pass the original requested path in a header and/or query parameter when the
   framework mutates URL state during rewrites
-- leave root `/llms.txt`, `/llms-full.txt`, and `/.well-known/agent.json`
-  owned by their root routes
-
-When the framework does not support rewrites cleanly, use one dynamic catch-all
-route or equivalent request handler instead.
+- leave root `/llms.txt`, `/llms-full.txt`, and `/.well-known/agent.json` to
+  their root routes
 
 ## Discovery Metadata
 
-Use `references/agent-json.md` for the response shape. Keep this file static
-when the site is static. Do not add auth, data fetching, or runtime
-dependencies only for discovery.
+Use `references/agent-json.md` for the response shape. Keep it static for
+static sites; do not add auth, data fetching, or runtime dependencies only for
+discovery.
 
 ## Tests
 
 Add or update tests that verify behavior, not source formatting:
 
-- `/.well-known/agent.json` returns JSON with the advertised URLs or patterns
+- `/.well-known/agent.json` returns JSON with advertised URLs or patterns
 - root `/llms.txt` and `/llms-full.txt` return plain text
 - `/path/index.md`, `/path?mode=agent`, and `Accept: text/markdown` return the
-  same markdown body for supported pages
-- `/path/llms.txt` returns the same page content as plain text
+  same supported-page Markdown body; `/path/llms.txt` returns it as plain text
 - nested deeper paths work, for example `/services/item/llms.txt`
 - article `index.md` and `llms.txt` include the real article body
 - root `/llms.txt` is not swallowed by the per-page `llms.txt` rewrite rule
 - content-negotiated rewrites set `Vary: Accept`
 
-Prefer request-level tests against handlers, routes, or middleware over source
-grepping.
+Prefer request-level handler, route, or middleware tests over source grepping.
 
 ## Validation
 
-Run the site's normal gates for route, rendering, or content changes:
-
-- route or handler tests for agent surfaces and rewrites
-- typecheck or production build
-- lint or format checks
-- a runtime smoke test against representative URLs when the rewrite layer
-  changed
+Run route or handler tests, typecheck or production build, and lint or format
+checks; smoke-test representative URLs when the rewrite layer changes.
 
 Report warnings separately from pass or fail status. Treat missing article
 bodies, placeholder content, and duplicated route files as defects.

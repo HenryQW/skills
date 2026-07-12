@@ -23,33 +23,6 @@ machine-readable surfaces:
 - page-level markdown access pattern
 - page-level plain-text access pattern
 
-Recommended shape:
-
-```json
-{
-  "siteName": "Example Website",
-  "origin": "https://example.com",
-  "defaultLocale": "en-US",
-  "locales": ["en-US", "zh-Hans", "zh-Hant"],
-  "discovery": {
-    "llmsTxt": "https://example.com/llms.txt",
-    "llmsFullTxt": "https://example.com/llms-full.txt"
-  },
-  "pageFormats": {
-    "markdown": [
-      "https://example.com/{path}/index.md",
-      "https://example.com/{path}?mode=agent"
-    ],
-    "plainText": [
-      "https://example.com/{path}/llms.txt"
-    ],
-    "negotiation": [
-      "Accept: text/markdown"
-    ]
-  }
-}
-```
-
 ## Field guidance
 
 - Keep URLs absolute.

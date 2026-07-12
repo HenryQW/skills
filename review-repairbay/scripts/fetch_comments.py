@@ -45,7 +45,6 @@ query(
           id
           body
           createdAt
-          updatedAt
           author { login }
         }
       }
@@ -76,13 +75,11 @@ query(
           startDiffSide
           originalLine
           originalStartLine
-          resolvedBy { login }
           comments(first: 100) {
             nodes {
               id
               body
               createdAt
-              updatedAt
               author { login }
             }
           }
@@ -199,6 +196,9 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
     comments_cursor: str | None = None
     reviews_cursor: str | None = None
     threads_cursor: str | None = None
+    comments_done = False
+    reviews_done = False
+    threads_done = False
 
     pr_meta: dict[str, Any] | None = None
 
@@ -230,15 +230,20 @@ def fetch_all(owner: str, repo: str, number: int) -> dict[str, Any]:
         r = pr["reviews"]
         t = pr["reviewThreads"]
 
-        conversation_comments.extend(c.get("nodes") or [])
-        reviews.extend(r.get("nodes") or [])
-        review_threads.extend(t.get("nodes") or [])
+        if not comments_done:
+            conversation_comments.extend(c.get("nodes") or [])
+            comments_done = not c["pageInfo"]["hasNextPage"]
+            comments_cursor = c["pageInfo"]["endCursor"]
+        if not reviews_done:
+            reviews.extend(r.get("nodes") or [])
+            reviews_done = not r["pageInfo"]["hasNextPage"]
+            reviews_cursor = r["pageInfo"]["endCursor"]
+        if not threads_done:
+            review_threads.extend(t.get("nodes") or [])
+            threads_done = not t["pageInfo"]["hasNextPage"]
+            threads_cursor = t["pageInfo"]["endCursor"]
 
-        comments_cursor = c["pageInfo"]["endCursor"] if c["pageInfo"]["hasNextPage"] else None
-        reviews_cursor = r["pageInfo"]["endCursor"] if r["pageInfo"]["hasNextPage"] else None
-        threads_cursor = t["pageInfo"]["endCursor"] if t["pageInfo"]["hasNextPage"] else None
-
-        if not (comments_cursor or reviews_cursor or threads_cursor):
+        if comments_done and reviews_done and threads_done:
             break
 
     assert pr_meta is not None
@@ -263,6 +268,30 @@ def self_test() -> None:
     else:
         raise AssertionError("numbered PR without repo should fail")
 
+    page = lambda nodes, has_next, cursor: {"nodes": nodes, "pageInfo": {"hasNextPage": has_next, "endCursor": cursor}}
+    calls = 0
+
+    def fake_graphql(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        review_nodes = [{"id": "r1"}] if calls == 1 else [{"id": "r2"}]
+        return {"data": {"repository": {"pullRequest": {
+            "number": 1, "url": "https://github.com/o/r/pull/1", "title": "PR", "state": "OPEN",
+            "comments": page([{"id": "c1"}], False, "c1"),
+            "reviews": page(review_nodes, calls == 1, f"r{calls}"),
+            "reviewThreads": page([{"id": "t1"}], False, "t1"),
+        }}}}
+
+    original_graphql = gh_api_graphql
+    try:
+        globals()["gh_api_graphql"] = fake_graphql
+        fetched = fetch_all("o", "r", 1)
+    finally:
+        globals()["gh_api_graphql"] = original_graphql
+    assert [node["id"] for node in fetched["conversation_comments"]] == ["c1"]
+    assert [node["id"] for node in fetched["reviews"]] == ["r1", "r2"]
+    assert [node["id"] for node in fetched["review_threads"]] == ["t1"]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch GitHub PR comments, reviews, and review threads.")
@@ -282,7 +311,7 @@ def main() -> None:
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
     result = fetch_all(owner, repo, number)
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result, separators=(",", ":")))
 
 
 if __name__ == "__main__":

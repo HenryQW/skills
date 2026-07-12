@@ -11,40 +11,44 @@ Use Greptile first as a branch-diff review gate. If Greptile is unavailable, use
 
 ## Memory Boundary
 
-- When the user invokes `review-checkpoint` directly, call `$agent-memory load` before `Before review` and `$agent-memory distill` as the final guard before every `PASS`, `BLOCKED`, or `PENDING_REVIEW` return.
-- When a caller such as `issue-workbench` or Shipyard owns the memory boundary, skip both calls and preserve `.context/decisions.jsonl` for that caller.
-- Capture only an accepted durable review rule or reusable root cause. Do not capture findings, review IDs, check state, or transient tooling failures.
-- Memory failure must not change the review status.
+- Direct invocation calls `$agent-memory load` before `Before review` and
+  `$agent-memory distill` before every `PASS`, `BLOCKED`, or `PENDING_REVIEW`.
+- Under `issue-workbench` or Shipyard, skip both calls and preserve
+  `.context/decisions.jsonl` for the caller. Capture only accepted durable
+  review rules or reusable root causes; memory failure never changes status.
 
 ## Inputs
 
-- `mode` is optional; supported values are `review_only` and `fix_loop`.
-- Direct review or run-Greptile requests default to `review_only`. Explicit apply/fix-loop requests and coordinating callers such as `issue-workbench` or Shipyard default to `fix_loop` unless they select `review_only`.
-- `max_iterations` is optional and defaults to `3`.
+- `mode`: `review_only` or `fix_loop`; direct review defaults to `review_only`,
+  while explicit apply/fix-loop and coordinating callers default to `fix_loop`.
+- `max_iterations`: optional, default `3`.
 - `review_base` is optional; use the caller-provided base ref when known.
-- `wait_mode` is optional and defaults to `block`; supported values are `block` and `defer`.
-- Use `defer` only when the user or coordinating skill explicitly asks to start a review and resume later.
-- `poll_interval_seconds` is optional and defaults to `300`; in `defer` mode it sets `poll_after_utc`, and in `block` mode it is the sleep duration.
-- `max_review_wait_minutes` is optional and defaults to `30`; in `block` mode, stop with `PENDING_REVIEW` when this wait budget is spent.
-- `manifest_path` is optional and reserved for Shipyard's single integration review. Child Issue Workbench reviews must keep state in their isolated worktrees and return it through their handoffs.
+- `wait_mode`: `block` (default) or `defer`; use `defer` only when explicitly
+  asked to start now and resume later. `poll_interval_seconds` defaults to 300;
+  it sets `poll_after_utc` when deferred and sleep duration when blocking.
+- `max_review_wait_minutes`: optional, default 30; blocking returns
+  `PENDING_REVIEW` when spent.
+- `manifest_path`: optional and only for Shipyard's integration review. Child
+  Issue Workbench reviews retain isolated-worktree state in their handoffs.
 
 ## Rules
 
 - Do not start a new review just to poll. Poll the same review ID.
-- Classify every finding before acting:
-  - `spec_blocker`: violates explicit issue/spec acceptance or adds unrequested behavior.
-  - `standards_blocker`: violates repo instructions, local patterns, or maintainability baseline.
-  - `safety_blocker`: risks data loss, secrets, security, or forbidden paths.
-  - `test_blocker`: changed behavior lacks a meaningful validation path or has misleading tests.
-  - `non_actionable`: cosmetic, speculative, stale, broad cleanup, unclear, contradictory, or outside scope.
-- A finding is review-actionable only when it is a deterministic `spec_blocker`, `standards_blocker`, `safety_blocker`, or `test_blocker` in the branch diff, in scope, and fixable without a product decision. Classify broad cleanup, optional improvements, unclear requests, and anything outside the branch diff as `non_actionable`.
+- Classify findings as `spec_blocker` (explicit acceptance or unrequested
+  behavior), `standards_blocker` (repo or local standards), `safety_blocker`
+  (data, secrets, security, or forbidden paths), `test_blocker` (missing or
+  misleading validation), or `non_actionable` (cosmetic, speculative, stale,
+  broad, unclear, contradictory, or out of scope).
+- Only deterministic in-scope blockers fixable without a product decision are
+  review-actionable; all others are `non_actionable`.
 - In `review_only`, never edit files or commit fixes. In `fix_loop`, fix only review-actionable findings and record but do not fix `non_actionable` findings.
 - If Greptile is unavailable, use one subagent adversarial branch-diff review as the review gate instead of stopping.
-- Keep `.context/progress.md` local and uncommitted if used for pending review state.
-- When Shipyard provides `manifest_path` for the integration review, record review state there and keep `.context/progress.md` as a pointer to the manifest.
-- Write fallback review payloads and large diffs only when the reviewer cannot reproduce them from git. Use one overwriteable `.context/review-payload.txt` and record its path and SHA in the manifest or progress pointer.
-- If review history must survive handoff, append to one `.context/review-events.jsonl`; do not create per-review artifact folders.
-- Keep `.context/progress.md` to five fields: `goal`, `current_step`, `artifacts`, `blockers`, and `validation`.
+- Keep pending `.context/progress.md` local and uncommitted, with only `goal`,
+  `current_step`, `artifacts`, `blockers`, and `validation`. With
+  `manifest_path`, record state in the manifest and use progress as its pointer.
+- Write fallback payloads or large diffs only when git cannot reproduce them:
+  overwrite `.context/review-payload.txt` and record its path and SHA. Append
+  handoff history to `.context/review-events.jsonl`; do not create folders.
 - Each fix iteration must resolve or reduce the deterministic blocker set.
 - Do not start another review loop for `non_actionable` findings.
 - Stop if the same finding repeats after a targeted fix, contradicts a prior accepted finding, or if the iteration budget is spent.
@@ -70,7 +74,12 @@ git rev-parse @{upstream}
 
 If no upstream exists, run `git push --set-upstream origin HEAD`. If `HEAD` differs from `@{upstream}`, run `git push`. Re-run the three commands above and start Greptile only when `git rev-parse HEAD` equals `git rev-parse @{upstream}`.
 
-On resume, if `manifest_path` contains a pending Greptile review, run `git fetch --all --prune`, compare its branch, local HEAD SHA, upstream SHA, and known base SHA with current `git branch --show-current`, `git rev-parse HEAD`, `git rev-parse @{upstream}`, and `git rev-parse <review_base>`, then poll that review ID only when recorded values match and current UTC is at or after its poll-after time. If no `manifest_path` is provided, use the same rule with pending state in `.context/progress.md`. If the poll-after time has not arrived, return `PENDING_REVIEW`. If any value differs, or if `base_ref` or `base_sha` is unknown, mark the pending review `stale` with the reason and start a new review after resolving the base.
+On resume, `git fetch --all --prune`; read pending state from `manifest_path` or
+`.context/progress.md`, and compare its branch, local HEAD, upstream, and base
+SHAs with current git values. Poll that ID only when all match and UTC is at or
+after `poll_after_utc`; otherwise return `PENDING_REVIEW` before that time, or
+mark it `stale` (including unknown `base_ref` or `base_sha`) and resolve the
+base before a new review.
 
 If the `greptile` command is missing, cannot start or show a review because of auth/service/plan availability, or returns no review ID, do not install or repair Greptile unless the user asked. Record the tooling error and run exactly one fallback review for that iteration. If fallback subagent capacity is unavailable, stop with `BLOCKED` unless the caller policy explicitly allows a local blocker-only review.
 
@@ -78,11 +87,10 @@ If the `greptile` command is missing, cannot start or show a review because of a
 
 When Greptile is unavailable, delegate one adversarial review to a subagent:
 
-- Use a prompt that includes `working_directory=<absolute path>` as the first field.
-- Collect the exact review payload yourself: `git branch --show-current`, review base if known, changed files, `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, and validation commands/results.
-- Prefer reproducible git references over files. If a file payload is required, overwrite `.context/review-payload.txt` and record that absolute path under `manifest_path` or `.context/progress.md` `artifacts`.
-- Classify its output with the same review-actionable blocker rules as Greptile.
-- Close the completed subagent after collecting its result.
+- Put `working_directory=<absolute path>` first. Collect the exact git and
+  validation payload in the template below; prefer reproducible refs, using
+  `.context/review-payload.txt` only when required. Classify output by the same
+  blocker rules and close the subagent after collecting its result.
 
 Prompt template:
 
@@ -115,7 +123,10 @@ Record the review ID. If none is returned, use the fallback.
 greptile review show <review_id> --agent
 ```
 
-If still running and `wait_mode=defer`, write pending state to the manifest when `manifest_path` is provided; otherwise write it to `.context/progress.md`. Return `PENDING_REVIEW` instead of sleeping. Keep `.context/progress.md` as a five-field pointer when a manifest is present; otherwise put the pending review object under `artifacts.pending_review` with at least:
+If still running with `wait_mode=defer`, write pending state to the manifest or
+progress file, return `PENDING_REVIEW` without sleeping, and use progress only
+as the five-field manifest pointer. Without a manifest, put this under
+`artifacts.pending_review`:
 
 ```text
 review_id=<review id>

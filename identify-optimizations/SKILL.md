@@ -5,17 +5,22 @@ description: Read a software repository without editing code or running tests, r
 
 # Identify Optimizations
 
-Find five changes that concentrate complexity behind smaller interfaces. Produce the report and stop; do not design or implement the changes.
+Find up to five changes that concentrate complexity behind smaller interfaces.
+Produce the report and stop; do not design or implement them.
 
 ## Boundaries
 
-- Treat the repository as read-only. Do not edit, create, delete, format, or generate repository files.
-- Do not run tests, builds, linters, formatters, type checks, generators, installers, or application commands.
-- Use only read-only inspection such as listing, searching, reading files, and checking version-control status. The temporary HTML report is the only allowed write.
+- Treat the repository as read-only: do not edit, create, delete, format, or
+  generate repository files, or run tests, builds, linters, formatters, type
+  checks, generators, installers, or application commands.
+- Use listing, searching, reading files, and version-control status only. The
+  temporary HTML report is the sole allowed write.
 
 ## Scan
 
-1. Read repository instructions, the root README, manifests, architecture docs, ADRs, and any domain glossary. Treat them as constraints, not suggestions.
+1. Read repository instructions, root README, and manifests; read architecture
+   docs, ADRs, and a domain glossary only when present and relevant. Treat them
+   as constraints.
 2. Exclude generated, vendored, build, cache, and dependency directories. Respect dirty worktree changes.
 3. Run one breadth pass over entry points, major modules, dependency direction, state ownership, and test seams, then use focused reads to prove candidates. Do not read every file or delegate by default. Stop when five candidates have concrete evidence and the main hotspots have been sampled.
 4. Look for:
@@ -39,9 +44,12 @@ Each candidate needs:
 - involved `files` and 1–3 short `evidence` items;
 - one-sentence `problem` and `proposal`;
 - up to three concrete `benefits`;
-- `before` and `after` Mermaid architecture diagrams, each with a short `title` and 2–5 concrete module, interface, service, or state-boundary nodes. Use `flowchart TB`, short node labels, and only evidence-backed dependency arrows.
+- `before` and `after` Mermaid diagrams, each with a short `title` and 2–5
+  concrete module, interface, service, or state-boundary nodes. Use `flowchart
+  TB`, short labels, and evidence-backed dependency arrows.
 
-Mermaid is the only diagram mechanism. Do not add handwritten SVG, canvas, CSS arrows, or HTML connector elements. Do not propose detailed interfaces.
+Use Mermaid only; do not add SVG, canvas, CSS arrows, HTML connectors, or
+detailed interfaces.
 
 ## Render
 
@@ -49,6 +57,9 @@ Resolve `assets/report.html` relative to this file.
 
 1. Copy it to `${TMPDIR:-/tmp}/architecture-review-<UTC timestamp>.html` (`%TEMP%` on Windows).
 2. Replace only the HTML between `REPORT_CONTENT_START` and `REPORT_CONTENT_END`; keep the document shell, CSS, and Mermaid scripts unchanged. Keep all report text in static HTML; JavaScript may only render embedded Mermaid source as SVG.
-3. Include one header and one `<article id="candidate-<rank>">` per candidate. Each article must show labeled `Before` and `After` diagrams using `.visual.before` and `.visual.after`, with one `<pre class="mermaid">flowchart TB ...</pre>` in each, followed by `Problem` and `Proposal`. Escape repository-derived HTML and keep Mermaid labels short. Keep prose terse; the diagrams and evidence should carry the report.
+3. Include one header and one `<article id="candidate-<rank>">` per candidate.
+   Put each required `Before` and `After` diagram in `.visual.before` and
+   `.visual.after` with one `<pre class="mermaid">` each, followed by `Problem`
+   and `Proposal`. Escape repository-derived HTML; keep labels and prose short.
 4. Confirm one article and two Mermaid blocks per candidate, exact repo-relative evidence paths, static visible report text, and the absolute output path. The unchanged template owns the Mermaid script and document shell.
 5. Return the absolute report path. Stop there.

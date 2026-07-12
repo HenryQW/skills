@@ -25,29 +25,6 @@ Include:
 - link to `llms-full.txt` when present
 - note about markdown access patterns when the site supports them
 
-Recommended shape:
-
-```text
-Example Website
-
-Example Website is a leading provider of widgets and widget-related services.
-
-Canonical URL: https://example.com
-Default locale: en-US
-Locales: en-US, zh-Hans, zh-Hant
-
-Primary resources:
-- Home: https://example.com/en-US
-- Services: https://example.com/en-US/services
-- Insights: https://example.com/en-US/insights
-- Full corpus: https://example.com/llms-full.txt
-
-Markdown access:
-- Add /index.md to a page URL
-- Add ?mode=agent to a page URL
-- Send Accept: text/markdown to supported page URLs
-```
-
 ## Root `llms-full.txt`
 
 Use root `llms-full.txt` for the fuller machine-readable map or corpus.
@@ -75,18 +52,6 @@ Include:
 - locale when relevant
 - source links and dates when they are meaningful
 - body content rendered as readable plain text
-
-Recommended shape:
-
-```text
-Page Title
-
-Site: Example Website
-Context: Example Website is a leading provider of widgets and widget-related services.
-Canonical URL: https://example.com/en-US/services/widget-management
-
-[Plain-text body content here]
-```
 
 For article pages, include the actual article body, not only summary metadata.
 

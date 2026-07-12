@@ -1,4 +1,4 @@
 interface:
   display_name: "Identify Optimizations"
   short_description: "Spot five architecture improvements"
-  default_prompt: "Use $identify-optimizations to scan this repository and open a ranked HTML report of its five strongest architecture improvements."
+  default_prompt: "Use $identify-optimizations for a read-only architecture review and return an HTML report with up to five evidence-backed improvements."

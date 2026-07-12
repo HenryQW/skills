@@ -28,18 +28,18 @@ Run the smallest end-to-end path from a rough multi-issue plan to an approved Gi
    - update the glossary only when terminology changed;
    - create an ADR only for a hard-to-reverse, surprising decision with a real trade-off;
    - draft the provisional issue plan JSON using `references/issue-plan.md` and preserve non-goals;
-   - render the provisional issue graph locally so the reviewer inspects the same bundle the user will approve.
-
-```bash
-python3 /path/to/issue-blueprint/scripts/render_issue_plan.py plan.json --out .context/issues
-```
+   - render the provisional issue graph locally so the reviewer inspects the
+     bundle the user will approve.
 
 4. Run interactive blocker rounds until the reviewer returns `PASS`:
    1. Delegate exactly one read-only adversarial reviewer for the round using the template below. The reviewer must not edit files or question the user.
-   2. Trace every acceptance criterion to a concrete testing command or inspection in that issue. Treat an unproven criterion as an untestability blocker. Keep only blockers that make the plan ambiguous, incorrect, unsafe, untestable, poorly sliced, unnecessarily interfering, or improperly sequenced. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives.
+   2. Trace every acceptance criterion to a concrete testing command or
+      inspection. Treat an unproven criterion as an untestability blocker.
    3. Resolve factual blockers from the user prompt, project instructions, repository, issues, specs, glossary, or other authoritative evidence. Do not ask the user for discoverable facts; report an inaccessible authoritative source as an access blocker instead of recasting it as a product decision.
    4. Update the spec and issue plan, then re-render the graph after every factual resolution.
-   5. Present unresolved product decisions in dependency order with context, a recommendation, and the consequences of each option. Ask dependent decisions one at a time. Batch at most five independent decisions and allow the user to accept all recommendations.
+   5. Present unresolved product decisions in dependency order with context,
+      recommendation, and consequences. Ask dependent decisions one at a time;
+      batch at most five independent decisions.
    6. Record each answer immediately in the spec and issue plan, then re-render the graph.
    7. Treat settled user decisions as authoritative. Reopen one only when new contradictory evidence is identified.
    8. Re-review only changed sections, unresolved blockers, and newly introduced contradictions. Start another round until no blocker remains.
@@ -64,7 +64,9 @@ Remain read-only. Do not edit files or question the user.
 Return PASS when there are no material blockers. Otherwise return at most five blockers, ordered by downstream dependency impact and then severity, using one line per blocker:
 severity | kind | evidence | issue | recommended resolution
 
-Only report ambiguity, incorrectness, unsafe behavior, untestability, poor slicing, avoidable interference, or improper sequencing. Treat micro-issues, separable mega-issues, and same-wave work with unnecessary shared surfaces as slicing blockers, not implementation preferences. Exclude cosmetic wording, optional cleanup, speculative future work, and preference-only implementation alternatives. Treat recorded user decisions as authoritative unless you cite new contradictory evidence.
+Report only material ambiguity, incorrectness, unsafe behavior, untestability,
+poor slicing, avoidable interference, or improper sequencing. Treat recorded
+user decisions as authoritative unless you cite contradictory evidence.
 For every acceptance criterion, identify the exact testing command or inspection that proves it. Report any criterion without concrete evidence as an untestability blocker.
 ```
 
@@ -90,28 +92,15 @@ gh label list --repo OWNER/REPO --limit 100
 python3 /path/to/issue-blueprint/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
 ```
 
-`--verify` runs renderer and publisher self-tests, renders the plan, publishes the graph, writes `numbers.json`, and prints the Shipyard execution block. Do not run extra `gh issue view` checks after a successful `--verify`; use a single fallback check only if `--verify` reports an incomplete result or `numbers.json` is missing or malformed.
+`--verify` runs renderer and publisher self-tests, renders and publishes the
+graph, writes `numbers.json`, and prints the Shipyard handoff. Do not run extra
+`gh issue view` checks after a successful `--verify`; use one fallback only if
+it reports an incomplete result or `numbers.json` is missing or malformed.
 
 The publisher checkpoints `numbers.json` after each created issue and binds `publish-state.json` to the approved plan and repository. If publication fails, fix the cause and rerun the same command with `--resume`; a normal rerun stops rather than duplicating recorded issues, and resume rejects a changed plan or repository.
 
-The publisher writes `.context/issues/numbers.json`:
-
-```json
-{"foundation":"#123","writer-boundary":"#124"}
-```
-
-It also prints the execution block to hand to Shipyard:
-
-```text
-execution:
-parent_issue=#125
-child_issues=#123 #124 #126
-final_check_issue=#126
-numbers_json=/absolute/repo/path/.context/issues/numbers.json
-shipyard_worktree=/absolute/repo/path
-shipyard_command=Use $shipyard #125
-repo=OWNER/REPO
-```
+The publisher writes `.context/issues/numbers.json` and prints the Shipyard
+handoff block.
 
 ## Slicing Rules
 
@@ -123,12 +112,11 @@ repo=OWNER/REPO
 - Do not add backward compatibility, migration layers, aliases, fallback paths, or future-proofing unless explicitly required by the issue, spec, or repo instructions.
 - `tracker` is the implementation tracker issue. Use a title like `<version/topic> implementation tracker`.
 - Default to the tight graph: tracker, the fewest cohesive, reasonably bounded, non-interfering implementation children, and one `final_check`.
-- Every child issue must include `Tracker`, `What to build`, `Acceptance criteria`, `Testing`, `Blocked by`, `Blocks`, and `Parallelism`.
-- Every child issue's `Parallelism` section must state why it is safe in its wave and identify any files, interfaces, or shared state expected to overlap with same-wave issues.
-- Every child issue's `Testing` section must name the public seam under test, existing similar tests if known, the smallest validation command, and what not to test. If no useful seam exists, say so and provide a concrete non-test validation path.
-- Exactly one child issue must have `"role": "final_check"`. It is strictly verification-only, blocks nothing, and is blocked by every other child issue. It must name concrete integration commands; reject generic validation such as `all checks pass`. Any implementation defect returns to the child that owns the failed acceptance criterion.
+- Every child issue must meet the `references/issue-plan.md` schema.
+- Exactly one child has `"role": "final_check"`: verification-only, blocked by
+  every other child, blocks nothing, and names concrete integration commands.
+  Return implementation defects to the child that owns the failed criterion.
 - The implementation tracker issue must include the full issue graph and explicit waves for parallel execution.
-- If findings were dropped before publish, record them in `dropped_findings`; the tracker will include a dropped-findings section.
 - Publish blockers before blocked work so the final graph can use real issue numbers. The renderer topologically sorts `create-order.tsv` from `blocked_by`.
 - Keep non-goals visible. They prevent compatibility paths and speculative scaffolding from sneaking back in.
 

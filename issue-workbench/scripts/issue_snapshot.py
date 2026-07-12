@@ -23,9 +23,9 @@ def clip(text: str | None, limit: int) -> str:
 def snapshot(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Compact a GitHub issue for implementation.")
     parser.add_argument("issue_number")
-    parser.add_argument("--body-chars", type=int, default=6000)
-    parser.add_argument("--comment-chars", type=int, default=1200)
-    parser.add_argument("--max-comments", type=int, default=8, help="Print only the last N comments")
+    parser.add_argument("--body-chars", type=int, default=4000)
+    parser.add_argument("--comment-chars", type=int, default=600)
+    parser.add_argument("--max-comments", type=int, default=5, help="Print only the last N comments")
     args = parser.parse_args(argv)
     if args.max_comments < 1:
         print("--max-comments must be a positive integer", file=sys.stderr)

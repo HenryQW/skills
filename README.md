@@ -63,53 +63,53 @@ Start with the smallest route that fits:
 
 #### [`ci-repairbay`](ci-repairbay/)
 
-Takes a failing GitHub Actions check from log inspection to a verified fix. Inspection is read-only; when asked to fix, it changes only the affected code and reruns the relevant checks.
+Inspects failing GitHub Actions checks, then makes and verifies a focused fix only when asked. Inspection remains read-only.
 
 #### [`issue-blueprint`](issue-blueprint/)
 
-Turns a rough multi-issue plan into an approved GitHub issue graph. It sharpens the scope, links every acceptance criterion to a concrete check, maps dependencies, and creates the issues after approval.
+Turns a rough multi-issue plan into an approved GitHub issue graph with checks, dependencies, and a final verification issue.
 
 #### [`issue-workbench`](issue-workbench/)
 
-Takes one GitHub issue through implementation, checks, and blocker review in an isolated branch. It then opens a pull request or returns a structured handoff to `shipyard`.
+Takes one GitHub issue through scoped implementation, checks, and blocker review, then opens a PR or returns a `shipyard` handoff.
 
 #### [`pr-launchpad`](pr-launchpad/)
 
-Takes a finished branch to a published pull request. It inspects the diff, validates the current commit, commits pending work, pushes the branch, and creates a consistent PR title and description.
+Publishes a finished branch: inspect the diff, validate the current commit, commit and push pending work, then create a consistent PR.
 
 #### [`repo-surveyor`](repo-surveyor/)
 
-Scans a repository for maintainability risks and returns ranked findings with file-level evidence. It is read-only and does not modify code.
+Read-only repository maintainability audit with ranked, file-level findings.
 
 #### [`review-checkpoint`](review-checkpoint/)
 
-Runs a blocker-only code review using Greptile or an independent fallback reviewer. It records the result for the exact commit and only applies fixes when the workflow authorizes them.
+Runs blocker-only review using Greptile or an independent fallback, records the exact commit result, and applies fixes only when authorized.
 
 #### [`review-repairbay`](review-repairbay/)
 
-Takes unresolved pull request feedback through inspection, focused fixes, replies, and thread resolution. It rechecks GitHub until no actionable review threads remain.
+Clears unresolved PR feedback through inspection, focused fixes, replies, and thread resolution, then rechecks until none remain.
 
 #### [`shipyard`](shipyard/)
 
-Takes a parent issue to one integration pull request. It runs dependency-ready child issues in parallel worktrees, merges their branches, performs final verification and review, then publishes the combined change.
+Takes a parent issue to one integration PR: run dependency-ready child worktrees, merge them, verify and review the result, then publish.
 
 ### 🧰 Supporting skills
 
 #### [`agent-aeo`](agent-aeo/)
 
-Adds or audits the public files, routes, and headers that let AI agents read a website reliably. It covers agent discovery files, clean Markdown views, and content negotiation.
+Adds or audits public discovery files, Markdown routes, and headers so AI agents can read a website reliably.
 
 #### [`agent-memory`](agent-memory/)
 
-Loads only the project context needed for the current task, then saves durable decisions and results for future work. Obsidian is recommended, but any folder that stores Markdown (`.md`) files can provide the memory layer; connect it with the [`agent-memory` setup guide](agent-memory/references/setup.md).
+Loads only task-relevant project context, then saves durable decisions and results. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
 
 #### [`identify-optimizations`](identify-optimizations/)
 
-Scans a repository, ranks its five best architecture improvements, and generates an HTML report with clear before-and-after diagrams. It does not run tests or edit application code.
+Read-only architecture audit that ranks up to five improvements in an HTML report with before-and-after diagrams.
 
 #### [`skill-optimizer`](skill-optimizer/)
 
-Finds wasted steps or unreliable behavior in an existing skill, applies the smallest root-cause improvement, and verifies representative use cases. It improves existing skills rather than creating new ones.
+Finds waste or unreliable behavior in an existing skill, applies the smallest root-cause improvement, and verifies representative cases.
 
 ## 📄 License
 

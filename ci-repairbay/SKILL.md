@@ -8,11 +8,14 @@ description: "Use when a user asks to inspect, diagnose, or fix failing GitHub P
 
 ## Overview
 
-Use this skill when the task is specifically about failing GitHub Actions checks on a pull request. Use `gh` for PR metadata, changed files, checks, and logs.
+Use this skill for failing GitHub Actions checks on a pull request. Use `gh` for
+PR metadata, changed files, checks, and logs.
 
-- For inspect, diagnose, explain, or review requests, inspect and report without modifying files or triggering external writes.
-- For explicit fix requests, implement the smallest scoped local fix and run relevant non-destructive validation without asking again.
-- Require confirmation before external writes, destructive actions, or a material expansion beyond the requested scope unless the user already authorized that action.
+- Inspect, diagnose, explain, and review requests are read-only.
+- Explicit fix requests authorize the smallest scoped local fix and relevant
+  non-destructive validation.
+- Require confirmation for external writes, destructive actions, or material
+  scope expansion unless already authorized.
 
 ## Memory Boundary
 
@@ -23,22 +26,18 @@ Use this skill when the task is specifically about failing GitHub Actions checks
 
 ## Inputs
 
-- `repo_path`: path inside the repo (default `.`); pass this to the script as `--repo`
-- `pr`: PR number or URL (optional; defaults to current branch PR)
+- `repo_path`: target-repository path (default `.`); pass as `--repo`
+- `pr`: optional PR number or URL; defaults to the current-branch PR
 
 ## Quick start
 
-- `python "<path-to-skill>/scripts/inspect_pr_checks.py" --repo "." --pr "<number-or-url>"` (add `--json` for machine-friendly output)
+- `python "<path-to-skill>/scripts/inspect_pr_checks.py" --repo "." --pr "<number-or-url>"` (add `--json`; add `--log-tail` only when the failure snippet is insufficient)
 
 ## Workflow
 
-1. Resolve the PR.
-   - Inputs: `repo_path` is a local path inside the target repository; `pr` is a PR number or GitHub pull request URL.
-   - If `pr` is a URL, use that URL directly with `gh`.
-   - If `pr` is a number, run from the target repository or pass the local path with `--repo`.
-   - If neither is provided, use the current branch PR with `gh pr view --json number,url`.
-   - Fetch PR metadata and changed files with `gh pr view`.
-2. Inspect failing checks (GitHub Actions only).
+1. Resolve the PR: use a URL directly, resolve a number in `repo_path`, or use
+   the current-branch PR when omitted. Fetch PR metadata and changed files.
+2. Inspect failing GitHub Actions checks.
    - Run the bundled script from Quick start; it handles `gh` field drift and job-log fallbacks.
 3. Scope non-GitHub Actions checks.
    - If the check URL is not a GitHub Actions run, label it as external and only report the URL.
@@ -47,11 +46,11 @@ Use this skill when the task is specifically about failing GitHub Actions checks
    - Provide the failing check name, run URL (if any), and a concise log snippet.
    - Call out missing logs explicitly and do not over-claim certainty.
    - For inspect or diagnose requests, stop after this report.
-5. For explicit fix requests, apply the smallest local change tied directly to the observed root cause.
-   - Run the most relevant non-destructive local verification available.
-   - Ask before pushing, triggering a rerun, mutating the PR, taking a destructive action, or expanding beyond the requested scope unless that action was already authorized.
+5. For an explicit fix request, apply the smallest local change tied to the
+   observed root cause and run the most relevant non-destructive verification.
 6. Recheck status and summarize residual risk.
-   - Rerun the bundled inspection script or the specific failed local check; do not also run `gh pr checks` when the script already returned current PR check state.
+   - Rerun the bundled script or failed local check; do not also run `gh pr checks`
+     when the script returned current PR state.
    - Report what is still unverified, what may still be flaky, and whether any failing checks were external and therefore not actionable here.
 
 ## Output
