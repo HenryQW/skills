@@ -7,13 +7,13 @@ Use one skill for a focused job, or connect them as a guarded harness: each skil
 ## 📦 Installation
 
 ```bash
-npx skills add HenryQW/skills --skill '*' --agent codex -y
+npx skills add HenryQW/skills
 ```
 
 ## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
-- `greptile` is optional; `review-checkpoint` falls back to adversarial review when unavailable.
+- `greptile` is optional; `review-checkpoint` falls back to local adversarial review when unavailable.
 
 ## 🧭 How the harness works
 
@@ -44,7 +44,7 @@ flowchart TD
   health -->|Review feedback| repair["review-repairbay"]
   repair --> health
   health -->|Yes| done["Merge-ready"]
-  done -->|Durable decisions only| distill["agent-memory distill"]
+  done -->|Approved engineering reasoning| distill["agent-memory distill"]
 ```
 
 When skills are nested, the outer workflow stays in charge. `shipyard` launches child work, ingests their handoffs, batches integration, and delegates PR repair without giving up ownership.
@@ -101,7 +101,7 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 #### [🧠 `agent-memory`](agent-memory/)
 
-Loads approved project context before work and distills durable decisions only after terminal completion; see the [setup guide](agent-memory/references/setup.md).
+Loads approved project context before work and distills the accepted reasoning behind code, architecture, and optimization choices after terminal completion; see the [setup guide](agent-memory/references/setup.md).
 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 

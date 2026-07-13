@@ -17,9 +17,18 @@ Only `--setup` reads `references/setup.md` or runs setup.
 
 - `$agent-memory load` runs at a top-level workflow entry. Missing configuration
   or matching topics returns `memory_load=SKIPPED` and does not stop the caller.
-- During work, capture only accepted decisions, reusable root causes, repository
-  traps or rules, non-obvious commands, and reviewed architecture context. Skip
-  routine progress, files changed, checks, transient state, and duplicates.
+- During work, capture accepted, non-obvious engineering decisions whose
+  rationale future agents would otherwise rediscover: why code is shaped a
+  certain way, why an architecture boundary exists, why an optimization or
+  tradeoff was chosen, plus reusable root causes and repository rules.
+- A decision is accepted when the user states it or approves a plan, design, or
+  implementation containing an agent-authored choice. Record why it was chosen,
+  material alternatives or tradeoffs, and expected impact. This qualifies the
+  decision for capture but does not authorize final `--apply`.
+- Skip routine progress, files changed, checks, transient state, code-obvious
+  mechanics, reversible local choices, and duplicates.
+- Memory should explain the project's engineering approach, not narrate task
+  history.
 - `$agent-memory distill` runs only when the top-level workflow is otherwise
   ready to return final `Done`, `Stop`, or `Blocked`. Resumable `PENDING` or
   `PENDING_REVIEW`, approval waits, handoffs, and nested skills preserve
@@ -41,7 +50,7 @@ Read the 6,000-character-capped output only when notes loaded.
 Append a durable candidate with:
 
 ```bash
-python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/project --topic issue-workbench --decision "Single known issues use issue-workbench directly" --reason "Avoid parent graph overhead" --source "issue #123"
+python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/project --topic order-processing --decision "Keep retry policy in the application service" --reason "All transports share one policy; centralizing it avoids divergent behavior. Rejected per-adapter retries." --source "approved architecture plan"
 ```
 
 Equivalent normalized decisions receive the same stable ID and are recorded once.
