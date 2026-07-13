@@ -1,22 +1,12 @@
 # Skills
 
-🚢 Automated engineering harness for Codex.
-
-Give an agent a plan, issue, branch, or pull request. These skills can carry it through analysis, implementation, checks, review-and-fix loops, and publication while stopping for decisions and approvals that need a human.
+Agent-run workflows for repository planning, implementation, review, and pull requests.
 
 ## 📦 Installation
-
-Install every skill for Codex:
 
 ```bash
 npx skills add HenryQW/skills --skill '*' --agent codex -y
 ```
-
-## ✨ Why use them
-
-- Automate complete workflows instead of isolated coding steps.
-- Keep changes scoped with branches, worktrees, checks, and review gates.
-- Preserve evidence so later steps can reuse valid results instead of repeating work.
 
 ## ⚙️ Requirements
 
@@ -64,49 +54,49 @@ Start with the smallest route that fits:
 
 #### [`ci-repairbay`](ci-repairbay/)
 
-Inspects failing GitHub Actions checks, validates its inspection tooling, then makes and verifies a focused fix only when asked. Inspection remains read-only.
+Inspects GitHub Actions failures read-only; an explicit fix request authorizes the smallest local fix and focused validation.
 
 #### [`issue-blueprint`](issue-blueprint/)
 
-Turns a rough multi-issue plan into an approved-and-published GitHub issue graph with child-isolated validation and one final integration check.
+Turns an approved multi-issue plan into a published dependency graph without implementing or committing provisional work.
 
 #### [`issue-workbench`](issue-workbench/)
 
-Takes one GitHub issue through scoped implementation and blocker review, then opens a PR or supplies inspected child facts to `shipyard` for a canonical integration handoff.
+Implements one issue on a guarded branch, then opens a PR or returns a validated handoff to `shipyard`.
 
 #### [`pr-launchpad`](pr-launchpad/)
 
-Publishes a finished branch: inspect the diff, validate the current commit, commit and push pending work, then create a consistent PR.
+Inspects and validates the current branch, commits and pushes scoped changes, then opens a consistently formatted PR.
 
 #### [`repo-surveyor`](repo-surveyor/)
 
-Read-only DRY, SOLID, test-strategy, and architecture audit with ranked, file-level findings in an HTML report with before-and-after diagrams.
+Produces a read-only HTML architecture audit; issue planning occurs only when requested at invocation.
 
 #### [`review-checkpoint`](review-checkpoint/)
 
-Runs blocker-only review through one authoritative Greptile session per commit, or one independent fallback when Greptile is unavailable.
+Runs one blocker-only Greptile review per commit, with one adversarial fallback only when Greptile cannot start.
 
 #### [`review-repairbay`](review-repairbay/)
 
-Fixes exact supplied PR feedback directly, or fetches thread state when discovery, replies, or resolution are required.
+Fixes selected PR feedback or clears actionable review threads with thread-aware verification.
 
 #### [`shipyard`](shipyard/)
 
-**Runs fully autonomously** through frozen parallel waves and batch integration, taking an Issue Blueprint parent graph to one reviewed integration PR.
+Runs an Issue Blueprint graph through frozen child waves, final validation, exact-head review, and one integration PR.
 
 ### 🧰 Supporting skills
 
 #### [`agent-aeo`](agent-aeo/)
 
-Adds or audits public discovery files, Markdown routes, and headers so AI agents can read a website reliably.
+Adds or audits shared discovery, Markdown, and plain-text routes for public website content.
 
 #### [`agent-memory`](agent-memory/)
 
-Loads task-relevant project context, then saves durable results through a transactional, observable write plan. Any Markdown folder can provide the memory layer; see the [`agent-memory` setup guide](agent-memory/references/setup.md).
+Loads approved project context and stages durable decisions through previewed, transactional writes; see the [setup guide](agent-memory/references/setup.md).
 
 #### [`skill-optimizer`](skill-optimizer/)
 
-Finds waste or unreliable behavior in an existing skill, applies the smallest root-cause improvement, and verifies representative cases.
+Diagnoses evidenced waste in an existing skill or applies and verifies the smallest root-cause fix.
 
 ## 📄 License
 

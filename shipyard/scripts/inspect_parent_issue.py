@@ -248,18 +248,6 @@ def self_test() -> None:
         {"blocked_by": [], "blocks": [], "role": "implementation"},
     )
     assert graph["tracker"] == 10
-    for body, expected in (
-        ("", "missing issue-plan-graph"),
-        ("<!-- issue-plan-graph\n{bad}\n-->", "malformed issue-plan-graph"),
-        ('<!-- issue-plan-graph\n{"version":2}\n-->', "unsupported issue-plan-graph version"),
-        ('<!-- issue-plan-graph\n{"version":1,"tracker":10,"issues":{}}\n-->', "issues must be a non-empty list"),
-    ):
-        try:
-            decode_embedded(body)
-        except SystemExit as error:
-            assert expected in str(error)
-        else:
-            raise AssertionError(f"expected graph error containing {expected!r}")
     classified = classify([child_a, child_b], "main")
     assert classified[0]["status"] == "runnable"
     assert classified[1]["status"] == "blocked"

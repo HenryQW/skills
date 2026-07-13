@@ -5,91 +5,41 @@ description: "Implement agent-oriented website access and AI crawler discovery f
 
 # Agent AEO
 
-Expose public website content in machine-readable forms that agents can
-discover, request, and cite without scraping rendered HTML. Use one content
-resolver, thin route entry points, explicit content types, and runtime tests.
+Expose public site content without scraping rendered HTML. Add only the
+surfaces the site needs:
 
-## Surfaces and references
+- `/.well-known/agent.json`: `application/json; charset=utf-8`; advertise only
+  implemented absolute URLs or patterns, locales, and canonical origin. Keep it
+  static when possible and never include secrets or user-specific data.
+- `/llms.txt` and optional `/llms-full.txt`: `text/plain; charset=utf-8` compact
+  and expanded site maps with absolute discovery links.
+- `/<path>/index.md`, `?mode=agent`, and `Accept: text/markdown`:
+  `text/markdown; charset=utf-8` representations of the same canonical page.
+- `/<path>/llms.txt`: the same page rendered as readable plain text.
 
-Add only the surfaces that fit the site:
+Use one server-side resolver accepting canonical `path`, optional `locale`, and
+output content type. Resolve existing route, Markdown, CMS, template, or static
+data; render Markdown first and convert to plain text only at the response
+boundary. Return `404` for unsupported paths. Page responses must include the
+real body, title, canonical URL, and enough site context for a deep link;
+articles must not stop at excerpts or metadata.
 
-- discovery metadata: `/.well-known/agent.json`; read
-  `references/agent-json.md` for its response contract
-- root text entry points: `/llms.txt` and `/llms-full.txt`; read
-  `references/llms-txt.md` for their response contracts
-- page content: `/<path>/index.md`, `/<path>/llms.txt`, `?mode=agent`, and
-  `Accept: text/markdown`; read `references/index-md.md` and
-  `references/llms-txt.md` for their response contracts
-
-Every page-level response must include real body content plus enough site
-context for a deep link. Do not create a separate visual agent page when the
-same markdown can be returned through `index.md`, `?mode=agent`, or
-`Accept: text/markdown`.
-
-## Recommended Architecture
-
-Centralize content generation in one server-side module or handler; keep
-framework routes, controllers, and middleware thin. Its content function accepts:
-
-- `path`: requested canonical path
-- `locale`: resolved locale when applicable
-- `contentType`: `text/markdown` or `text/plain`
-
-That function should:
-
-- normalize `/index.md`, `/llms.txt`, and `?mode=agent` to the canonical path
-- resolve page content from existing route registries, templates, Markdown
-  sources, CMS exports, or static page data
-- render markdown first
-- down-convert to plain text only at the final response boundary when needed
-- return `404` for unsupported paths instead of placeholder content
-
-Use a shared proxy, dynamic route, rewrite, or router parameter instead of
-identical per-page `index.md` or `llms.txt` files.
-
-## Rewrite Pattern
-
-If rewrites, middleware, or edge routing are available, route agent surfaces
-through one central handler; otherwise use one dynamic catch-all handler.
-
-The rewrite layer should:
-
-- detect `/index.md` (including nested), nested `*/llms.txt` as plain text,
-  `?mode=agent`, and supported URLs whose `Accept` includes `text/markdown`
-- set `Vary: Accept` for content-negotiated responses
-- resolve the canonical `path` before calling the content function: strip
-  `/index.md`, `/llms.txt`, and `?mode=agent` (for example,
-  `/services/index.md` becomes `/services`)
-- pass the original requested path in a header and/or query parameter when the
-  framework mutates URL state during rewrites
-- leave root `/llms.txt`, `/llms-full.txt`, and `/.well-known/agent.json` to
-  their root routes
-
-## Discovery Metadata
-
-Use `references/agent-json.md` for the response shape. Keep it static for
-static sites; do not add auth, data fetching, or runtime dependencies only for
-discovery.
+Route these surfaces through one dynamic handler, rewrite, proxy, or middleware
+path rather than per-page files. Normalize agent suffixes and `?mode=agent`
+before resolution, preserve the original path when a framework rewrite loses
+it, set `Vary: Accept` for negotiated responses, and keep root discovery routes
+out of page-level catch-alls. Do not create a separate visual agent page.
 
 ## Tests
 
-Add or update tests that verify behavior, not source formatting:
+Use request-level tests for behavior, not source formatting:
 
-- `/.well-known/agent.json` returns JSON with advertised URLs or patterns
-- root `/llms.txt` and `/llms-full.txt` return plain text
-- `/path/index.md`, `/path?mode=agent`, and `Accept: text/markdown` return the
-  same supported-page Markdown body; `/path/llms.txt` returns it as plain text
-- nested deeper paths work, for example `/services/item/llms.txt`
-- article `index.md` and `llms.txt` include the real article body
-- root `/llms.txt` is not swallowed by the per-page `llms.txt` rewrite rule
-- content-negotiated rewrites set `Vary: Accept`
+- advertised root routes return their declared content types;
+- Markdown variants share canonical content and plain text preserves it;
+- nested paths and article bodies work;
+- page catch-alls do not swallow root routes;
+- negotiated responses set `Vary: Accept`.
 
-Prefer request-level handler, route, or middleware tests over source grepping.
-
-## Validation
-
-Run route or handler tests, typecheck or production build, and lint or format
-checks; smoke-test representative URLs when the rewrite layer changes.
-
-Report warnings separately from pass or fail status. Treat missing article
-bodies, placeholder content, and duplicated route files as defects.
+Run the focused route tests plus the repository's typecheck/build and lint; smoke
+test representative URLs when routing changes. Missing bodies, placeholder
+content, or duplicated route files are defects, not warnings.

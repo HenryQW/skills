@@ -138,12 +138,9 @@ def render(plan_path: Path, out: Path, numbers_path: Path | None, tracker_issue:
     numbers = json.loads(numbers_path.read_text()) if numbers_path else {}
     out.mkdir(parents=True, exist_ok=True)
     (out / "00-tracker.md").write_text(tracker_body(plan, numbers))
-    rows = []
     for index, issue in enumerate(ordered_issues(plan), 1):
         file = out / f"{index:02d}-{slug(issue['id'])}.md"
         file.write_text(child_body(plan, issue, numbers, tracker_issue))
-        rows.append(f"{issue['id']}\t{issue['title']}\t{file}")
-    (out / "create-order.tsv").write_text("\n".join(rows) + "\n")
 
 
 def self_test() -> None:
@@ -202,7 +199,6 @@ def self_test() -> None:
         assert "#1" in (out / "00-tracker.md").read_text()
         assert "issue-plan-graph" not in (out / "00-tracker.md").read_text()
         assert "duplicate cleanup" in (out / "00-tracker.md").read_text()
-        assert "a\tA\t" in (out / "create-order.tsv").read_text()
         nums.write_text(json.dumps({"tracker": "#9", "a": "#1", "b": "#2"}))
         render(plan_path, out, nums, "#9")
         assert '"version":1' in (out / "00-tracker.md").read_text()

@@ -7,4 +7,4 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-raise SystemExit(subprocess.run((sys.executable, "ci-repairbay/scripts/inspect_pr_checks.py", "--help"), cwd=ROOT).returncode)
+raise SystemExit(subprocess.run((sys.executable, "ci-repairbay/scripts/inspect_pr_checks.py", "--self-test"), cwd=ROOT).returncode)

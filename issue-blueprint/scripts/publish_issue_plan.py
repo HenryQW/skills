@@ -50,12 +50,13 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
     if not state_path.exists():
         save(state_path, expected_state)
     label_args = [arg for label in labels for arg in ("--label", label)]
+    children = [(issue, out / f"{index:02d}-{issue['id']}.md") for index, issue in enumerate(ordered_issues(plan), 1)]
 
-    for row in (out / "create-order.tsv").read_text().splitlines():
-        issue_id, title, body_file = row.split("\t")
+    for issue, body_file in children:
+        issue_id = issue["id"]
         if issue_id in numbers:
             continue
-        url = run(["gh", "issue", "create", "--repo", repo, "--title", title, *label_args, "--body-file", body_file])
+        url = run(["gh", "issue", "create", "--repo", repo, "--title", issue["title"], *label_args, "--body-file", str(body_file)])
         numbers[issue_id] = f"#{url.rsplit('/', 1)[-1]}"
         save(numbers_path, numbers)
 
@@ -69,9 +70,8 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
     render(plan_path, out, numbers_path, numbers["tracker"])
     run(["gh", "issue", "edit", numbers["tracker"].lstrip("#"), "--repo", repo, "--body-file", str(out / "00-tracker.md")])
 
-    for row in (out / "create-order.tsv").read_text().splitlines():
-        issue_id, _, body_file = row.split("\t")
-        run(["gh", "issue", "edit", numbers[issue_id].lstrip("#"), "--repo", repo, "--body-file", body_file])
+    for issue, body_file in children:
+        run(["gh", "issue", "edit", numbers[issue["id"]].lstrip("#"), "--repo", repo, "--body-file", str(body_file)])
     return numbers
 
 
@@ -114,8 +114,8 @@ def self_test() -> None:
             plan = {
                 "tracker": {"title": "Tracker", "goal": "Goal.", "constraints": ["C."], "non_goals": ["N."], "definition_of_done": ["D."]},
                 "issues": [
-                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "testing": {"seam": "public API", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
                     {"id": "b", "title": "B", "role": "final_check", "purpose": "B.", "context": ["B."], "acceptance": ["B."], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": [], "parallelism": "Second."},
+                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "testing": {"seam": "public API", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
                 ],
                 "waves": [{"name": "Wave 0", "items": ["a"], "notes": "Start."}, {"name": "Wave 1", "items": ["b"], "notes": "End."}],
             }

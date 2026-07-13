@@ -10,13 +10,6 @@ from pathlib import Path
 from shutil import which
 from typing import Any, Iterable, Sequence
 
-FAILURE_CONCLUSIONS = {
-    "failure",
-    "cancelled",
-    "timed_out",
-    "action_required",
-}
-
 FAILURE_STATES = {
     "failure",
     "error",
@@ -24,8 +17,6 @@ FAILURE_STATES = {
     "timed_out",
     "action_required",
 }
-
-FAILURE_BUCKETS = {"fail"}
 
 FAILURE_MARKERS = (
     "error",
@@ -48,31 +39,13 @@ PENDING_LOG_MARKERS = (
 )
 
 
-class GhResult:
-    def __init__(self, returncode: int, stdout: str, stderr: str):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-
-def run_gh_command(args: Sequence[str], cwd: Path) -> GhResult:
-    process = subprocess.run(
+def run_gh_command(args: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["gh", *args],
         cwd=cwd,
         text=True,
         capture_output=True,
     )
-    return GhResult(process.returncode, process.stdout, process.stderr)
-
-
-def run_gh_command_raw(args: Sequence[str], cwd: Path) -> tuple[int, bytes, str]:
-    process = subprocess.run(
-        ["gh", *args],
-        cwd=cwd,
-        capture_output=True,
-    )
-    stderr = process.stderr.decode(errors="replace")
-    return process.returncode, process.stdout, stderr
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,11 +68,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Include the full log tail in JSON output; the failure snippet is always included.",
     )
+    parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.self_test:
+        self_test()
+        return 0
     repo_root = find_git_root(Path(args.repo))
     if repo_root is None:
         print("Error: not inside a Git repository.", file=sys.stderr)
@@ -186,59 +163,33 @@ def resolve_pr(pr_value: str | None, repo_root: Path) -> str | None:
 
 
 def fetch_checks(pr_value: str, repo_root: Path) -> list[dict[str, Any]] | None:
-    primary_fields = ["name", "state", "conclusion", "detailsUrl", "startedAt", "completedAt"]
     result = run_gh_command(
-        ["pr", "checks", pr_value, "--json", ",".join(primary_fields)],
+        ["pr", "checks", pr_value, "--json", "name,state,bucket,link"],
         cwd=repo_root,
     )
-    if result.returncode != 0:
-        message = "\n".join(filter(None, [result.stderr, result.stdout])).strip()
-        available_fields = parse_available_fields(message)
-        if available_fields:
-            fallback_fields = [
-                "name",
-                "state",
-                "bucket",
-                "link",
-                "startedAt",
-                "completedAt",
-                "workflow",
-            ]
-            selected_fields = [field for field in fallback_fields if field in available_fields]
-            if not selected_fields:
-                print("Error: no usable fields available for gh pr checks.", file=sys.stderr)
-                return None
-            result = run_gh_command(
-                ["pr", "checks", pr_value, "--json", ",".join(selected_fields)],
-                cwd=repo_root,
-            )
-            if result.returncode != 0:
-                message = (result.stderr or result.stdout or "").strip()
-                print(message or "Error: gh pr checks failed.", file=sys.stderr)
-                return None
-        else:
-            print(message or "Error: gh pr checks failed.", file=sys.stderr)
-            return None
+    if not result.stdout.strip():
+        message = (result.stderr or "").strip()
+        print(message or "Error: gh pr checks returned no JSON.", file=sys.stderr)
+        return None
     try:
-        data = json.loads(result.stdout or "[]")
+        data = json.loads(result.stdout)
     except json.JSONDecodeError:
-        print("Error: unable to parse checks JSON.", file=sys.stderr)
+        message = (result.stderr or "").strip()
+        print(message or "Error: unable to parse checks JSON.", file=sys.stderr)
         return None
     if not isinstance(data, list):
         print("Error: unexpected checks JSON shape.", file=sys.stderr)
+        return None
+    if result.returncode not in {0, 1, 8}:
+        message = (result.stderr or "").strip()
+        print(message or "Error: gh pr checks failed.", file=sys.stderr)
         return None
     return data
 
 
 def is_failing(check: dict[str, Any]) -> bool:
-    conclusion = normalize_field(check.get("conclusion"))
-    if conclusion in FAILURE_CONCLUSIONS:
-        return True
     state = normalize_field(check.get("state") or check.get("status"))
-    if state in FAILURE_STATES:
-        return True
-    bucket = normalize_field(check.get("bucket"))
-    return bucket in FAILURE_BUCKETS
+    return normalize_field(check.get("bucket")) == "fail" or state in FAILURE_STATES
 
 
 def analyze_check(
@@ -343,60 +294,16 @@ def fetch_check_log(
     job_id: str | None,
     repo_root: Path,
 ) -> tuple[str, str, str]:
-    log_text, log_error = fetch_run_log(run_id, repo_root)
-    if not log_error:
-        return log_text, "", "ok"
-
-    if is_log_pending_message(log_error) and job_id:
-        job_log, job_error = fetch_job_log(job_id, repo_root)
-        if job_log:
-            return job_log, "", "ok"
-        if job_error and is_log_pending_message(job_error):
-            return "", job_error, "pending"
-        if job_error:
-            return "", job_error, "error"
-        return "", log_error, "pending"
-
-    if is_log_pending_message(log_error):
-        return "", log_error, "pending"
-
-    return "", log_error, "error"
-
-
-def fetch_run_log(run_id: str, repo_root: Path) -> tuple[str, str]:
-    result = run_gh_command(["run", "view", run_id, "--log"], cwd=repo_root)
+    command = ["run", "view", run_id, "--log-failed"]
+    if job_id:
+        command.extend(("--job", job_id))
+    result = run_gh_command(command, cwd=repo_root)
     if result.returncode != 0:
         error = (result.stderr or result.stdout or "").strip()
-        return "", error or "gh run view failed"
-    return result.stdout, ""
-
-
-def fetch_job_log(job_id: str, repo_root: Path) -> tuple[str, str]:
-    repo_slug = fetch_repo_slug(repo_root)
-    if not repo_slug:
-        return "", "Error: unable to resolve repository name for job logs."
-    endpoint = f"/repos/{repo_slug}/actions/jobs/{job_id}/logs"
-    returncode, stdout_bytes, stderr = run_gh_command_raw(["api", endpoint], cwd=repo_root)
-    if returncode != 0:
-        message = (stderr or stdout_bytes.decode(errors="replace")).strip()
-        return "", message or "gh api job logs failed"
-    if is_zip_payload(stdout_bytes):
-        return "", "Job logs returned a zip archive; unable to parse."
-    return stdout_bytes.decode(errors="replace"), ""
-
-
-def fetch_repo_slug(repo_root: Path) -> str | None:
-    result = run_gh_command(["repo", "view", "--json", "nameWithOwner"], cwd=repo_root)
-    if result.returncode != 0:
-        return None
-    try:
-        data = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
-        return None
-    name_with_owner = data.get("nameWithOwner")
-    if not name_with_owner:
-        return None
-    return str(name_with_owner)
+        return "", error or "gh run view --log-failed failed", (
+            "pending" if is_log_pending_message(error) else "error"
+        )
+    return result.stdout, "", "ok"
 
 
 def normalize_field(value: Any) -> str:
@@ -405,31 +312,9 @@ def normalize_field(value: Any) -> str:
     return str(value).strip().lower()
 
 
-def parse_available_fields(message: str) -> list[str]:
-    if "Available fields:" not in message:
-        return []
-    fields: list[str] = []
-    collecting = False
-    for line in message.splitlines():
-        if "Available fields:" in line:
-            collecting = True
-            continue
-        if not collecting:
-            continue
-        field = line.strip()
-        if not field:
-            continue
-        fields.append(field)
-    return fields
-
-
 def is_log_pending_message(message: str) -> bool:
     lowered = message.lower()
     return any(marker in lowered for marker in PENDING_LOG_MARKERS)
-
-
-def is_zip_payload(payload: bytes) -> bool:
-    return payload.startswith(b"PK")
 
 
 def extract_failure_snippet(log_text: str, max_lines: int, context: int) -> str:
@@ -511,6 +396,33 @@ def render_results(pr_number: str, results: Iterable[dict[str, Any]]) -> None:
 
 def indent_block(text: str, prefix: str = "  ") -> str:
     return "\n".join(f"{prefix}{line}" for line in text.splitlines())
+
+
+def self_test() -> None:
+    assert is_failing({"bucket": "fail", "state": "FAILURE"})
+    assert not is_failing({"bucket": "pass", "state": "SUCCESS"})
+    assert extract_run_id("https://github.com/o/r/actions/runs/123/job/456") == "123"
+    assert extract_job_id("https://github.com/o/r/actions/runs/123/job/456") == "456"
+
+    original = globals()["run_gh_command"]
+
+    def fake_run(args: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["pr", "checks"]:
+            return subprocess.CompletedProcess(
+                ["gh", *args],
+                1,
+                '[{"bucket":"fail","state":"FAILURE"}]',
+                "",
+            )
+        assert args == ["run", "view", "123", "--log-failed", "--job", "456"]
+        return subprocess.CompletedProcess(["gh", *args], 0, "failure evidence", "")
+
+    try:
+        globals()["run_gh_command"] = fake_run
+        assert fetch_checks("1", Path.cwd()) == [{"bucket": "fail", "state": "FAILURE"}]
+        assert fetch_check_log("123", "456", Path.cwd()) == ("failure evidence", "", "ok")
+    finally:
+        globals()["run_gh_command"] = original
 
 
 if __name__ == "__main__":
