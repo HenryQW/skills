@@ -17,7 +17,21 @@ npx skills add HenryQW/skills
 
 ## 🧭 How the harness works
 
-Choose the smallest entry point that matches the work. Skills can run alone; the arrows show their explicit handoffs when they run together.
+Choose the smallest entry point that matches the work. Skills can run alone; the arrows below show their explicit handoffs when they run together.
+
+### Ⓜ️🅰️❎ Automation
+
+1. `issue-blueprint` turns a rough idea, feature, or bug into an issue graph.
+1. Approve or revise the plan.
+1. `shipyard` handles the rest while you sip coffee.
+1. Review and approve the PR.
+
+### Granular Routing
+
+- One actionable issue: `issue-workbench #<issue>`
+- A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
+- A branch ready to publish: `pr-launchpad`
+- A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
 
 ```mermaid
 flowchart TD
@@ -48,14 +62,6 @@ flowchart TD
 ```
 
 When skills are nested, the outer workflow stays in charge. `shipyard` launches child work, ingests their handoffs, batches integration, and delegates PR repair without giving up ownership.
-
-Common starting points:
-
-- One actionable issue: `issue-workbench #<issue>`
-- A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
-- A multi-issue feature: `issue-blueprint`, then `shipyard #<parent>`
-- A branch ready to publish: `pr-launchpad`
-- A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
 
 ## 🤖 Meet the skills
 
