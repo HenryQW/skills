@@ -30,11 +30,15 @@ Run the smallest end-to-end path from a rough multi-issue plan to an approved Gi
    - draft the provisional issue plan JSON using `references/issue-plan.md` and preserve non-goals;
    - render the provisional issue graph locally so the reviewer inspects the
      bundle the user will approve.
+   Keep this bundle provisional: do not prepare a Git branch, commit it, or run
+   target-repository validation against it. The caller or bootstrap workflow
+   owns branch preparation and the single planning commit after finalization.
 
 4. Run interactive blocker rounds until the reviewer returns `PASS`:
    1. Delegate exactly one read-only adversarial reviewer for the round using the template below. The reviewer must not edit files or question the user.
-   2. Trace every acceptance criterion to a concrete testing command or
-      inspection. Treat an unproven criterion as an untestability blocker.
+   2. In the first round, trace every acceptance criterion to a concrete testing
+      command or inspection using the child-isolation rules in the reviewer
+      template. Treat an unproven criterion as an untestability blocker.
    3. Resolve factual blockers from the user prompt, project instructions, repository, issues, specs, glossary, or other authoritative evidence. Do not ask the user for discoverable facts; report an inaccessible authoritative source as an access blocker instead of recasting it as a product decision.
    4. Update the spec and issue plan, then re-render the graph after every factual resolution.
    5. Present unresolved product decisions in dependency order with context,
@@ -45,7 +49,7 @@ Run the smallest end-to-end path from a rough multi-issue plan to an approved Gi
    8. Re-review only changed sections, unresolved blockers, and newly introduced contradictions. Start another round until no blocker remains.
 5. Before publishing, mark excluded findings in `dropped_findings` with a short reason such as duplicate, solved, unclear, cleanup-only, or out-of-scope.
 6. After zero blockers, show the user the spec path, issue titles and dependency waves, non-goals, target repository, and labels. Ask for explicit approval to publish this exact graph. Earlier plan approval is not publication approval.
-7. Publish only after that approval. If approval is withheld or the graph changes, return to drafting, rendering, and blocker review; never publish the unapproved graph.
+7. Publish only after that approval. If approval is withheld or the graph changes, return to drafting, rendering, and blocker review; never publish the unapproved graph or mark the spec final.
 8. After approval, follow Issue Publishing.
 
 ## Reviewer Template
@@ -68,6 +72,11 @@ Report only material ambiguity, incorrectness, unsafe behavior, untestability,
 poor slicing, avoidable interference, or improper sequencing. Treat recorded
 user decisions as authoritative unless you cite contradictory evidence.
 For every acceptance criterion, identify the exact testing command or inspection that proves it. Report any criterion without concrete evidence as an untestability blocker.
+Require every non-final child's validation to run with its declared predecessors
+plus that child only. If it requires a same-wave sibling, report a slicing
+blocker: add a real dependency and re-wave, or move a genuinely integrated
+command to `final_check`. Reserve multi-child and fully integrated commands for
+`final_check`.
 ```
 
 ## Token Discipline
@@ -102,6 +111,14 @@ The publisher checkpoints `numbers.json` after each created issue and binds `pub
 The publisher writes `.context/issues/numbers.json` and prints the Shipyard
 handoff block.
 
+Withheld approval or incomplete publication leaves the spec provisional. Resume
+incomplete publication from the publisher checkpoint. After complete
+publication, update an existing lifecycle marker in the implementation spec to
+exactly `Approved and published`; if none exists, do not invent one. If this
+local finalization fails, retry it without republishing. Only then may the
+caller or bootstrap workflow create its single planning commit; Issue Blueprint
+does not create or switch branches or commit files.
+
 ## Slicing Rules
 
 - Prefer vertical tracer-bullet issues over layer-only work.
@@ -119,6 +136,12 @@ handoff block.
 - The implementation tracker issue must include the full issue graph and explicit waves for parallel execution.
 - Publish blockers before blocked work so the final graph can use real issue numbers. The renderer topologically sorts `create-order.tsv` from `blocked_by`.
 - Keep non-goals visible. They prevent compatibility paths and speculative scaffolding from sneaking back in.
+- Each non-final child's validation may use only its declared predecessors and
+  its own output. If it needs a same-wave sibling, add a real dependency and
+  re-wave, or move a genuinely integrated command to `final_check`.
+- Reserve multi-child and fully integrated commands for `final_check`. Default
+  pytest validation to the project's existing runner with `pytest -q` and the
+  smallest child-owned test slice.
 
 ## Verification
 

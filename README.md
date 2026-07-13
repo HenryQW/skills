@@ -68,7 +68,7 @@ Inspects failing GitHub Actions checks, validates its inspection tooling, then m
 
 #### [`issue-blueprint`](issue-blueprint/)
 
-Turns a rough multi-issue plan into an approved GitHub issue graph, owning its embedded contract, rendering, and publication behavior.
+Turns a rough multi-issue plan into an approved-and-published GitHub issue graph with child-isolated validation and one final integration check.
 
 #### [`issue-workbench`](issue-workbench/)
 
@@ -84,7 +84,7 @@ Read-only DRY, SOLID, test-strategy, and architecture audit with ranked, file-le
 
 #### [`review-checkpoint`](review-checkpoint/)
 
-Runs blocker-only review using Greptile or an independent fallback, records the exact commit result, and applies fixes only when authorized.
+Runs blocker-only review through one authoritative Greptile session per commit, or one independent fallback when Greptile is unavailable.
 
 #### [`review-repairbay`](review-repairbay/)
 
@@ -92,7 +92,7 @@ Fixes exact supplied PR feedback directly, or fetches thread state when discover
 
 #### [`shipyard`](shipyard/)
 
-**Runs fully autonomously**, takes an Issue Blueprint parent graph to one integration PR while owning canonical child handoffs, lifecycle state, integration checks, review-and-fix loop, and publication.
+**Runs fully autonomously** through frozen parallel waves and batch integration, taking an Issue Blueprint parent graph to one reviewed integration PR.
 
 ### 🧰 Supporting skills
 

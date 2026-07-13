@@ -2,6 +2,17 @@
 
 Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
 
+## Bundle Lifecycle
+
+- Treat the spec, plan, and render as provisional until publication completes;
+  do not run target-repository validation or commit them.
+- Resume incomplete publication from the publisher checkpoint. After complete
+  publication, set any existing spec lifecycle marker to exactly
+  `Approved and published`; do not invent a marker when none exists. Retry a
+  failed local finalization without republishing.
+- Issue Blueprint owns neither branch preparation nor commits. The caller or
+  bootstrap workflow creates the single planning commit after finalization.
+
 ```json
 {
   "tracker": {
@@ -63,6 +74,13 @@ Rules:
 - Use `context` to justify an unusually small or large issue boundary.
 - `parallelism` must explain why the issue is safe in its wave and identify expected overlap in files, interfaces, or shared state with same-wave issues.
 - `testing` is required for every implementation child. It captures the public seam, existing similar tests, smallest validation command, and what not to test. Use `seam: none` only with a concrete alternative validation path.
+- Each non-final child's `testing.validation` must run with its declared
+  predecessors plus that child only. If it requires a same-wave sibling, add a
+  real dependency and re-wave, or move a genuinely integrated command to
+  `final_check`.
+- Reserve multi-child and fully integrated validation commands for
+  `final_check`. For pytest, preserve the project's runner, use `pytest -q`, and
+  select the smallest child-owned test slice by default.
 - `dropped_findings` is optional, but required when repo-surveyor or review findings were excluded before publish. Record the reason so the parent graph explains why duplicates were not sliced.
 - Exactly one issue must use `"role": "final_check"`; it is verification-only, must name concrete integration commands, must be blocked by every non-final child, and must block nothing.
 - Keep bodies short enough to scan, but include enough context for an AFK agent.

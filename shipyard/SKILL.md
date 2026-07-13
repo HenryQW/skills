@@ -73,6 +73,7 @@ Infer everything else:
 - Ensure the shipyard worktree is clean.
 - Use the current branch as the integration branch.
 - Run only current non-final children with status `runnable`; do not pre-create blocked children.
+- Before starting any child, capture `wave_base_sha=$(git rev-parse HEAD)` and the exact ascending set of issue numbers being launched. Keep both fixed until that wave is fully integrated; use the existing handoff and manifest fields rather than adding wave state.
 - Choose deterministic sibling worktree paths such as `../<repo>-shipyard-<parent_issue>-child-<child_issue>` and stop if a path already exists.
 - Start each child with `python3 <issue_workbench_dir>/scripts/integration_child.py start <child_issue> --worktree-path <absolute_child_worktree> --integration-branch <current_branch>`.
 - Spawn each child with `fork_turns=none`; the prompt below is its complete context. Launch a runnable wave in parallel, but use `wait_mode=block` for every child. Use `defer` only when the user explicitly requests resumable coordination; a block-mode timeout may still return `PENDING_REVIEW`.
@@ -94,30 +95,31 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
   handoff into its child lifecycle transition. Stop on its error rather than
   copying, reconstructing, or validating the JSON elsewhere.
 - If the child worktree has `.context/decisions.jsonl`, re-append each durable record to the Shipyard root with `<agent_memory_dir>/scripts/append_decision.py`; stable IDs deduplicate repeats. Do not write Obsidian or ask `pr-launchpad` to distill.
-- If `needs_child_fix` is present, stop shipyard edits and rerun or reuse `$issue-workbench` in that child worktree.
-- If `review` is `PENDING_REVIEW`, do not merge the branch and continue other runnable independent children when available.
-- Spot-check `diff_stat`; inspect the full child diff only for high-risk or surprising changes.
-- Merge returned branches with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`.
-- After each successful merge, run `python3 <shipyard_dir>/scripts/manifest.py merge-child <child_issue> --commit <commit>`.
-- On conflict, stop and report child issue, branch, worktree, and conflicted files.
-- Run one manifest/branch check before merge, one smallest relevant validation after the merge or wave, and one final validation before PR. Do not repeat `git status`, manifest validation, or issue inspection after every manifest update.
+- Treat the launched set as one barrier. Do not mutate the integration `HEAD`; ingest every returned handoff, but merge nothing until every launched issue has an ingested `review:"PASS"` handoff with no `needs_child_fix`. A manifest child in `pending_review` or `needs_fix` keeps the barrier closed.
+- If `needs_child_fix` is present, keep the wave open and rerun or reuse `$issue-workbench` in that child worktree. If `review` is `PENDING_REVIEW`, keep the wave open and resume that child at or after `poll_after_utc`. Passing siblings remain unmerged in both cases.
+- Trust complete child verification and review evidence. Inspect a full child diff only when that evidence is incomplete or surprising, or when resolving a merge conflict.
+- Before the first merge, require `git rev-parse HEAD` and every retained current-wave handoff `base_sha` to equal `wave_base_sha`. Stop on drift; do not refresh children or change the captured base.
+- Merge all passing branches consecutively in ascending issue order with `python3 <issue_workbench_dir>/scripts/integration_child.py merge <child_branch> --integration-branch <current_branch> --expected-commit <commit>`. After each successful merge, record it with `python3 <shipyard_dir>/scripts/manifest.py merge-child <child_issue> --commit <commit>`.
+- Between merges, do not validate, re-inspect issues or the manifest, reopen diffs, or print merge detail. Preserve partial successful merges if a later child conflicts; stop on the conflicting child and report its issue, branch, worktree, and conflicted files without rollback machinery.
+- After the batch, run one smallest relevant wave validation, then re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
 - Do not delete child worktrees automatically.
 - Once multiple worktrees exist, use absolute paths for file-mutating commands.
 
 ### 3. Finish integration
 
-- Re-inspect after every wave.
+- Re-inspect after every completed merge batch.
 - If new non-final children are runnable, repeat Step 2.
-- If non-final children have `pending_review`, resume those child worktrees at or after `poll_after_utc` and merge only after they return `review:"PASS"`.
+- If non-final children have `pending_review`, resume those child worktrees at or after `poll_after_utc`; do not merge any sibling from their open wave until all return `review:"PASS"`.
 - If non-final children remain blocked, pending, or missing and no independent child is runnable, stop and report blockers before `final_check`.
 - Stop if the parent issue has no `final_check` child.
-- Treat `final_check` as verification-only. Read its named integration commands and run them directly on the clean integration branch after every non-final child is merged. Do not launch a child or review for it, and do not edit code.
+- Treat `final_check` as verification-only. Read its named integration commands and run the complete integrated suite directly on the clean integration branch after every non-final child is merged. Do not launch a child or review for it, and do not edit code.
 - If a command fails, route the defect to the child whose acceptance criterion owns it. Stop for user direction when ownership is unclear.
 - Record final-check evidence through `python3 <shipyard_dir>/scripts/manifest.py set-validation --file <event_file>`; `manifest.py` validates the SHA-bound event and checks.
 - On resume, skip `final_check` only when `validation_plan.final.issue` matches it and `validation_plan.final.head_sha` equals current `HEAD`.
 
 ### 4. Final review and PR
 
+- Limit final integration inspection to structural guards, compact diff statistics, and merge topology. Do not reopen complete child diffs or print the full manifest unless retained evidence is incomplete or surprising.
 - Run exactly one mandatory review gate: `$review-checkpoint` as a nested workflow on the shipyard branch with `wait_mode=block`, `manifest_path=<absolute_path_to_.context/shipyard-manifest.json>`, and its memory boundary skipped.
 - Do not run `greptile review`, poll Greptile, or write manifest review events by hand; `$review-checkpoint` owns that loop.
 - If it returns blockers for Shipyard to route, classify each as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`.
@@ -141,6 +143,9 @@ handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
 ## Runtime Rules
 
 - Batch one runnable integration wave in parallel; re-inspect before the next wave.
+- Resolve and load each nested skill individually immediately before its first invocation. Retain its resolved contract for the run and do not reread an unchanged skill file.
+- For manifest coordination, query only `issue`, `commit`, `status`, and `verification`; compare current-wave `base_sha` values retained from ingested handoffs for the pre-merge drift gate. Do not dump the full manifest.
+- Default unspecified pytest execution to `uv run pytest -q`. If it fails, rerun only the failing slice with diagnostic verbosity.
 - Avoid broad final `pytest` when a known readiness hang exists. Run targeted suites and record known skips.
 - Do not apply patches for child-owned code from the shipyard worktree; route them to `$issue-workbench`.
 - Do not store full diffs by default. Store `base_ref`, `base_sha`, `commit`, `head_sha`, `changed_files`, and `diff_stat`; create `.context/review-payload.txt` only when a review subagent needs an artifact it cannot reproduce from git.
@@ -170,8 +175,8 @@ When executing, return:
 - Parent issue URL.
 - Child issues merged.
 - Final shipyard PR URL.
-- Integration branch and child worktree paths.
-- Child handoff evidence: issue, worktree, branch, base, commit, status, diff_stat, and verification.
+- Integration branch.
+- One compact line per normal child: issue, commit, status, and verification. Include branch, worktree, base, and diff details only for blockers or requested diagnostics.
 - Manifest path and PR URL when available.
 - CI/review routing performed.
 - Verification commands actually run.
