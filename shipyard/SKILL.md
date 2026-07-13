@@ -11,10 +11,11 @@ Execute an Issue Blueprint parent graph without duplicating child work. Workbenc
 
 - `parent_issue` is required as a GitHub issue number or URL.
 - `--integration-worktree` optionally selects an existing absolute worktree path.
-- Infer repository from the GitHub remote, base from the repository default, and the integration branch with `issue-workbench/scripts/branch_name.py integration <parent_issue>`.
+- Normalize `parent_issue` once to numeric `parent_id`, accepting `123`, `#123`, or a GitHub issue URL. Use only `parent_id` for branch naming, inspection, and manifest commands.
+- Infer repository from the GitHub remote, base from the repository default, and the integration branch with `issue-workbench/scripts/branch_name.py integration <parent_id>`.
 - Execute by default. Inspect-only behavior requires an explicit inspect, plan, dry-run, or report request.
 
-Direct invocation owns `$agent-memory load` and distillation before every terminal return. Nested skills skip their memory boundaries and preserve durable candidates for Shipyard; memory failure does not change Shipyard status.
+Direct invocation owns `$agent-memory load` and distills only on final `Done`, `Stop`, or `Blocked`, never pending, approval, or resumable returns. Nested skills skip their memory boundaries and preserve durable candidates for Shipyard; memory failure does not change Shipyard status.
 
 ## State and ownership
 
@@ -26,11 +27,11 @@ Direct invocation owns `$agent-memory load` and distillation before every termin
 ## 1. Preflight
 
 1. If provided, require an absolute integration worktree and enter it. Require a clean worktree, fetch remotes, and resolve the default and expected integration branches. Switch to an existing local/remote expected branch; otherwise rename a current non-default branch with no upstream, or create the expected branch from the remote/default base. Never rename the default branch.
-2. Run `scripts/inspect_parent_issue.py <parent_issue> --json`. Stop if it cannot resolve the parent, branch policy, graph, `final_check`, or runnable state; report `mode=default_branch_blocked` rather than executing on the default branch.
+2. Run `scripts/inspect_parent_issue.py <parent_id> --json`. Stop if it cannot resolve the parent, branch policy, graph, `final_check`, or runnable state; report `mode=default_branch_blocked` rather than executing on the default branch.
 3. Initialize the manifest before launching children:
 
    ```bash
-   python3 <shipyard_dir>/scripts/manifest.py init <parent_issue> <integration_branch> --base-branch <default_branch>
+   python3 <shipyard_dir>/scripts/manifest.py init <parent_id> <integration_branch> --base-branch <default_branch>
    ```
 
 Read only issue-linked or named material needed for runnable children.
@@ -47,15 +48,20 @@ Read only issue-linked or named material needed for runnable children.
    integration_branch=<integration_branch>
    review_base=<integration_branch>
    wait_mode=block
-   handoff_path=<absolute_child_worktree>/.context/integration-handoff.json
    ```
 
    Use `defer` only when explicitly requested. Do not probe running children or delete their worktrees automatically; use absolute paths for mutations once multiple worktrees exist.
-3. Ingest every returned handoff through `manifest.py ingest-child --file <path>`. Never reconstruct or separately validate its JSON. Re-append durable child decision records to the Shipyard root through Agent Memory's append helper.
-4. Treat the launched set as one barrier. Do not mutate integration `HEAD` or merge any child until every launched handoff has `review:"PASS"` and no `needs_child_fix`. Resume pending reviews after `poll_after_utc`; rerun the owning Workbench child for fixes. Passing siblings remain unmerged.
+3. Ingest every returned handoff directly into the canonical manifest through `manifest.py ingest-child --file <path>` as it returns. `manifest.py` validates it; never reconstruct or separately validate its JSON. Re-append durable child decisions through Agent Memory's append helper.
+4. Treat the launched set as one barrier. Do not mutate integration `HEAD` or merge any child until every launched handoff has `review:"PASS"` and no `needs_child_fix`. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. Passing siblings remain unmerged. If a defect belongs to a `done-local` predecessor, follow Repair waves.
 5. Before the first merge, require current `HEAD` and every retained wave `base_sha` to equal `wave_base_sha`. Stop on drift; never refresh the wave base or children.
 6. Merge all PASS branches consecutively in ascending issue order with `integration_child.py merge ... --expected-commit <commit>`, recording each success through `manifest.py merge-child`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
 7. After the batch, run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
+
+## Repair waves
+
+- Never reuse a worktree whose child has already merged. Group all child-owned findings from one completed review by issue, capture the current integration `HEAD` and issue set, then start one fresh `issue-<n>-repair-<short-head>` branch/worktree per issue from that HEAD using existing `branch_slug` and `worktree_path` inputs.
+- Treat the group as a frozen wave: run Workbench children in parallel, collect and validate all handoffs, and batch-merge in ascending issue order only after all return PASS. A new finding or pending child keeps the whole repair wave unmerged.
+- If an open implementation wave reports a defect owned by an already-merged predecessor, merge nothing from the open wave. Repair the predecessor in a fresh frozen repair wave, retire the old unmerged worktrees/handoffs without reusing them, and relaunch the entire invalidated wave from the new integration `HEAD` with fresh `branch_slug=retry-<short-head>` branches and worktrees.
 
 ## 3. Final check
 
@@ -69,8 +75,8 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 ## 4. Exact-head review and PR
 
 1. Inspect only structural guards, compact diff statistics, and merge topology.
-2. Run exactly one nested `$review-checkpoint` with `wait_mode=block`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs Greptile and writes review events.
-3. Route findings as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`. Child and final-check defects return to the owning Workbench; ingest repaired PASS handoffs, merge their recorded branches, and rerun relevant checks. Shipyard fixes only merge conflicts, PR body/progress, or final assembly. Do not loop on stale, non-actionable, or unavailable-tool findings.
+2. Shipyard owns pushing the initial integration `HEAD`; set its upstream when needed and require pushed parity. Run exactly one nested `$review-checkpoint` with `mode=review_only`, `wait_mode=block`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs Greptile and writes review events.
+3. Route findings as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`. Child and final-check defects use a fresh Repair wave; Shipyard fixes only merge conflicts, PR body/progress, or final assembly. After any code fix, rerun final check and this exact-head gate. Do not loop on stale, non-actionable, or unavailable-tool findings.
 4. `PENDING_REVIEW` stops publication. After any review-fix commit, rerun final-check commands and replace the SHA-bound validation event.
 5. Require manifest reuse at current `HEAD`, then invoke nested `$pr-launchpad` with `shipyard_manifest=<absolute manifest>` and memory skipped:
 
@@ -80,7 +86,11 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 
 ## 5. PR health
 
-Take one health snapshot after PR creation. Route failing GitHub Actions to nested `$ci-repairbay` and actionable review threads to nested `$review-repairbay`; execution authorizes its scoped fixes, replies, resolutions, and re-fetches unless the user restricted writes. Trust `status=PASS|BLOCKED|PENDING` unless missing or inconsistent, and recheck only after a repair changed state. Ignore resolved, outdated, informational, approval, summary, or waived unavailable checks; stop on human approval, merge permission, or external-provider blockers.
+1. Take one health snapshot after PR creation and choose exactly one repair owner. Before invoking it, capture `pre_repair_head=$(git rev-parse HEAD)` and the blocker set.
+2. For failing GitHub Actions, invoke nested `$ci-repairbay` with an explicit fix request and delegated authority to make scoped commits and push them. For actionable review threads, invoke nested `$review-repairbay` in `clear-all` mode with authority for scoped fixes, commits, pushes, replies, resolutions, and re-fetches. Skip nested memory boundaries and never run both owners concurrently.
+3. Trust `status=PASS|BLOCKED|PENDING` unless missing or inconsistent. Return pending work without distilling; stop if the same owner returns the same status for the same blocker set at unchanged `HEAD`.
+4. Compare current `HEAD` with `pre_repair_head`. Remote-only thread changes leave `HEAD` unchanged: do not rerun code gates; take a fresh snapshot only when remote state changed. If `HEAD` changed, require the repair owner to have committed and pushed it, rerun `final_check`, replace SHA-bound validation, rerun the exact-head `mode=review_only` gate until the manifest accepts PASS, push/confirm that reviewed `HEAD`, then take a fresh snapshot without recreating the PR.
+5. Continue one owner at a time until clear. Ignore resolved, outdated, informational, approval, summary, or waived unavailable checks; stop on unchanged repeated blockers, human approval, merge permission, or external-provider blockers.
 
 ## Output
 

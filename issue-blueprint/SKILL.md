@@ -9,7 +9,11 @@ Turn a rough multi-issue plan into an approved GitHub issue graph without implem
 
 ## Memory
 
-Direct invocation owns `$agent-memory load` and `$agent-memory distill` before every terminal return; nested invocation preserves `.context/decisions.jsonl` for its caller. Capture only accepted durable product, domain, or architecture decisions; memory failure does not change the result.
+Direct invocation owns `$agent-memory load`. Distill only on final `Done`, `Stop`,
+or `Blocked`; approval, publication-resume, `PENDING`, and `PENDING_REVIEW`
+returns preserve `.context/decisions.jsonl` without distilling. Nested invocation
+always preserves it for its caller. Capture only accepted durable product,
+domain, or architecture decisions; memory failure does not change the result.
 
 ## Workflow
 
@@ -18,7 +22,11 @@ Direct invocation owns `$agent-memory load` and `$agent-memory distill` before e
    - clear multi-issue feature -> continue;
    - standalone spec or glossary edit -> stop;
    - missing repository, spec location, or product behavior -> discover authoritative facts, then ask only for unresolved product decisions.
-2. Read only relevant project instructions, specs, glossary, repository state, and issue state. Use project terminology and test domain relationships with concrete scenarios.
+2. Read only relevant project instructions, specs, glossary, repository state,
+   issue state, and any supplied Repo Surveyor report. A Surveyor handoff is
+   evidence, not a plan: Issue Blueprint alone owns issue-plan JSON, slicing,
+   dependencies, child validation, adversarial review, and publication. Use
+   project terminology and test domain relationships with concrete scenarios.
 3. Draft the provisional bundle:
    - implementation handoff spec in the project's spec location;
    - glossary changes only for changed terms and an ADR only for a surprising, hard-to-reverse trade-off;
@@ -47,7 +55,10 @@ Check requested labels, then run:
 python3 <skill_dir>/scripts/publish_issue_plan.py plan.json --repo OWNER/REPO --label enhancement --label ready-for-agent --verify
 ```
 
-`--verify` self-tests, renders, publishes children then tracker, writes `.context/issues/numbers.json`, and prints the Shipyard handoff. Do not duplicate successful verification with `gh issue view`.
+`--verify` self-tests, renders, publishes children then tracker, writes
+`.context/issues/numbers.json`, and prints only the absolute working directory
+and `Use $shipyard #<parent>` handoff. Do not duplicate successful verification
+with `gh issue view`.
 
 The publisher checkpoints each issue and binds its state to the approved plan and repository. On partial failure, fix the cause and rerun the same command with `--resume`; never republish from a changed plan or repository.
 

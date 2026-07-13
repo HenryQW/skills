@@ -20,8 +20,10 @@ Only `--setup` reads `references/setup.md` or runs setup.
 - During work, capture only accepted decisions, reusable root causes, repository
   traps or rules, non-obvious commands, and reviewed architecture context. Skip
   routine progress, files changed, checks, transient state, and duplicates.
-- `$agent-memory distill` runs before a top-level `Done`, `Stop`, or `Blocked`.
-  Nested skills preserve `.context/decisions.jsonl` for their caller.
+- `$agent-memory distill` runs only when the top-level workflow is otherwise
+  ready to return final `Done`, `Stop`, or `Blocked`. Resumable `PENDING` or
+  `PENDING_REVIEW`, approval waits, handoffs, and nested skills preserve
+  `.context/decisions.jsonl` without preview or apply.
 - Memory failure never replaces or hides the caller's terminal result.
 
 ## Load
@@ -43,7 +45,7 @@ python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/pr
 ```
 
 Equivalent normalized decisions receive the same stable ID and are recorded once.
-Preview before final handoff or when requested:
+At the final top-level boundary, preview with:
 
 ```bash
 python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl

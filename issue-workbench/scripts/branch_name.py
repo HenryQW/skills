@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+import repository
 from repository import (
     CommandError,
     branch_name,
@@ -22,7 +23,16 @@ def self_test() -> int:
     assert integration_branch_name_from_title("V4 deterministic skill replacement MCP") == (
         "feat/v4-deterministic-skill-replacement-mcp"
     )
-    for call in (lambda: branch_name("0"), lambda: branch_name("123", "!!!"), lambda: integration_branch_name_from_title("!!!")):
+    original_issue = repository.issue
+    seen: list[str] = []
+    repository.issue = lambda number, fields, repo=None: seen.append(number) or {"title": "Parent"}
+    try:
+        for parent in ("123", "#123", "https://github.com/owner/repo/issues/123"):
+            assert integration_branch_name(parent) == "feat/parent"
+        assert seen == ["123", "123", "123"]
+    finally:
+        repository.issue = original_issue
+    for call in (lambda: branch_name("0"), lambda: branch_name("123", "!!!"), lambda: integration_branch_name("0"), lambda: integration_branch_name_from_title("!!!")):
         try:
             call()
         except ValueError:
@@ -48,7 +58,7 @@ def legacy_main(argv: list[str]) -> int:
 
 def integration_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Print a shipyard integration branch name.")
-    parser.add_argument("parent_issue", help="GitHub parent issue number")
+    parser.add_argument("parent_issue", help="GitHub parent issue number, #number, or issue URL")
     parser.add_argument("--repo", help="OWNER/REPO for gh issue lookup")
     args = parser.parse_args(argv)
 

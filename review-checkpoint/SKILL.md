@@ -19,7 +19,7 @@ Use Greptile as the branch-diff gate. Review is read-only unless `fix_loop` is e
 
 ## Memory
 
-Direct invocation owns `$agent-memory load` and distillation before every terminal status. Nested Workbench or Shipyard invocation skips both and preserves `.context/decisions.jsonl`. Capture only accepted durable review rules or reusable root causes; memory failure does not change status.
+Direct invocation owns `$agent-memory load` and distills only on final `PASS` or `BLOCKED`, never `PENDING_REVIEW` or resumable returns. Nested Workbench or Shipyard invocation skips both and preserves `.context/decisions.jsonl`. Capture only accepted durable review rules or reusable root causes; memory failure does not change status.
 
 ## Findings and authorization
 
@@ -30,7 +30,7 @@ Direct invocation owns `$agent-memory load` and distillation before every termin
 
 ## Review state machine
 
-1. Require a clean worktree except local `.context/progress.md`. Resolve `review_base`; ensure the branch has an upstream and local `HEAD` equals the pushed upstream before every new review.
+1. Require a clean worktree except local `.context/progress.md`. Resolve `review_base` and require an upstream equal to local `HEAD` before every new review. Missing or mismatched pushed state is `BLOCKED`: direct `review_only` never pushes, and `fix_loop` may commit or push only fixes it creates. Workbench or Shipyard pushes the initial reviewed `HEAD` before invoking this skill.
 2. On resume, fetch and compare saved branch, local HEAD, upstream, base ref, and base SHA with Git. Before `poll_after_utc`, matching state returns `PENDING_REVIEW` without invoking Greptile. Mark mismatches or unknown base values stale and resolve them, but never replace the review ID for unchanged `HEAD`.
 3. For a new `HEAD`, start exactly one process and record its review ID when emitted:
 

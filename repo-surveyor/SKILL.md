@@ -11,11 +11,12 @@ temporary HTML report is the only write besides ignored agent-memory artifacts.
 
 ## Memory
 
-Direct invocation calls `$agent-memory load` before surveying and
-`$agent-memory distill` before every terminal return. A caller that owns memory
-skips both and retains `.context/decisions.jsonl`. Capture only established
-durable rules, constraints, or reusable root causes—not findings, scores, issue
-candidates, or routine observations. Memory failure does not replace the result.
+Direct invocation calls `$agent-memory load` before surveying and distills only
+before final `Done`, `Stop`, or `Blocked`. Resumable pending states, approval
+waits, handoffs, and callers that own memory preserve `.context/decisions.jsonl`
+without preview or apply. Capture only established durable rules, constraints,
+or reusable root causes—not findings, scores, issue candidates, or routine
+observations. Memory failure does not replace the result.
 
 ## Survey
 
@@ -44,12 +45,13 @@ recommend abstractions without demonstrated complexity reduction.
 ## Optional Issue Planning
 
 Default invocation stops after the report. Only an issue-planning request made
-when invoking this skill permits issue deduplication or an `issue-blueprint`
-handoff. Then query plausible open issues with `gh`, classify each candidate as
-`new`, `duplicate-of #N`, `overlaps #N`, or `solved-by #N`, and omit duplicate,
-solved, or cleanup-only issues. For `new` and overlaps, include impact, effort,
-the closest valid `issue-blueprint/references/issue-plan.md` JSON, dropped
-reasons, duplicate matrix, and implementation order.
+when invoking this skill permits issue deduplication and an `issue-blueprint`
+handoff. Query plausible open issues with `gh`; classify candidates as `new`,
+`duplicate-of #N`, `overlaps #N`, or `solved-by #N`. Hand off the existing
+report path, ranked evidence-backed candidates, duplicate classifications,
+dropped reasons, and material constraints. Do not construct issue-plan JSON or
+a new planning artifact: Issue Blueprint alone owns issue slicing,
+dependencies, validation, graph JSON, approval, and publication.
 
 ## Report
 

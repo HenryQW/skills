@@ -12,10 +12,12 @@ complete thread model.
 
 Direct entry loads memory only when feedback depends on prior project decisions.
 Evidence-complete routine fixes skip it. If memory was loaded or a durable
-candidate recorded, distill before terminal status. `inspect-only` and callers
-such as Shipyard preserve `.context/decisions.jsonl` instead. Capture durable
-review decisions, repository rules, or reusable root causes—not comments,
-thread state, IDs, or routine fixes. Memory failure does not change status.
+candidate recorded, distill only before final `PASS` or `BLOCKED`; `PENDING`,
+`PENDING_REVIEW`, approval, and resume returns preserve
+`.context/decisions.jsonl`. `inspect-only` and callers such as Shipyard preserve
+it instead. Capture durable review decisions, repository rules, or reusable root
+causes—not comments, thread state, IDs, or routine fixes. Memory failure does not
+change status.
 
 ## Workflow
 
@@ -26,7 +28,11 @@ thread state, IDs, or routine fixes. Memory failure does not change status.
    expected behavior. Then `fix-selected` skips PR/thread discovery: inspect the
    named code, direct callers, and regression tests; make the smallest fix and run
    focused then required broader validation. Escalate only when evidence is
-   contradicted or insufficient. It does not authorize GitHub writes.
+   contradicted or insufficient. Direct fixes remain uncommitted and unpushed
+   unless the user requested publication. When nested Shipyard explicitly
+   delegates commit-and-push authority, inspect the final scoped code diff,
+   commit only those fixes, and push before returning; nesting alone is not
+   authority. `fix-selected` never authorizes GitHub thread writes.
 3. Otherwise derive repo and PR from a URL, require `--repo` with a number, or
    resolve the current branch. When discovery, inline context, replies, or
    resolution matter, run:
@@ -38,9 +44,11 @@ thread state, IDs, or routine fixes. Memory failure does not change status.
 4. Group by file or behavior; exclude informational, approved, resolved,
    outdated, and duplicate threads. Keep changes traceable and ask only about
    ambiguity, conflicts, or material product decisions.
-5. For `clear-all`, reply/resolve each addressed actionable thread and re-fetch
-   until unresolved actionable count is zero. Submitting a review or unrelated
-   external write still requires explicit authorization.
+5. Only explicit `clear-all` authorizes replies and resolutions. Reply/resolve
+   each addressed actionable thread and re-fetch until unresolved actionable
+   count is zero. No other mode or nested caller implies thread-write authority;
+   submitting a review or unrelated external write still requires explicit
+   authorization.
 
 Finish with:
 

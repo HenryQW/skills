@@ -1,6 +1,8 @@
-# Skills
+# 🛠️ Skills
 
-Agent-run workflows for repository planning, implementation, review, and pull requests.
+Composable, agent-run workflows for taking repository work from first look to merge-ready pull request.
+
+Use one skill for a focused job, or connect them as a guarded harness: each skill owns one stage, passes verified state forward, and stops when another skill should take over.
 
 ## 📦 Installation
 
@@ -13,90 +15,97 @@ npx skills add HenryQW/skills --skill '*' --agent codex -y
 - GitHub workflows require authenticated `gh`.
 - `greptile` is optional; `review-checkpoint` falls back to adversarial review when unavailable.
 
-## 🧭 Choose a workflow
+## 🧭 How the harness works
+
+Choose the smallest entry point that matches the work. Skills can run alone; the arrows show their explicit handoffs when they run together.
 
 ```mermaid
 flowchart TD
-  request["Request"] --> route{"Select route"}
-  route -->|Project context needed| load["agent-memory load"]
+  request["What needs doing?"] --> context{"Need project context?"}
+  context -->|Yes| load["agent-memory load"]
+  context -->|No| route{"Choose the smallest route"}
   load --> route
-  route -->|Repo audit| survey["repo-surveyor"]
-  survey -->|Issue planning requested| blueprint["issue-blueprint"]
-  route -->|Multi-issue plan| blueprint
-  blueprint -->|Approved issue graph| shipyard["shipyard"]
-  shipyard --> workbench["issue-workbench"]
-  route -->|One known issue| workbench
+  route -->|Audit a repository| survey["repo-surveyor"]
+  survey -->|Planning explicitly requested| blueprint["issue-blueprint"]
+  route -->|Plan multiple issues| blueprint
+  blueprint -->|Approved and published parent| shipyard["shipyard"]
+  route -->|Implement one issue| workbench["issue-workbench"]
+  shipyard -->|Launch frozen child wave| workbench
   workbench --> checkpoint["review-checkpoint"]
-  checkpoint --> launch["pr-launchpad"]
-  route -->|Current branch needs PR| launch
-  route -->|Existing PR| health{"PR health"}
+  checkpoint --> owner{"Who owns integration?"}
+  owner -->|Standalone branch| launch["pr-launchpad"]
+  owner -->|Shipyard child handoff| shipyard
+  shipyard -->|Integrated exact head passes| launch
+  route -->|Publish current branch| launch
+  route -->|Repair an existing PR| health
   launch --> health
-  health -->|CI failing| ci["ci-repairbay"]
+  health{"PR healthy?"} -->|CI failing| ci["ci-repairbay"]
   ci --> health
   health -->|Review feedback| repair["review-repairbay"]
   repair --> health
-  health -->|Clear| done["Mergeable"]
-  route -->|Missing decision| distill["agent-memory distill"]
-  done --> distill
+  health -->|Yes| done["Merge-ready"]
+  done -->|Durable decisions only| distill["agent-memory distill"]
 ```
 
-Start with the smallest route that fits:
+When skills are nested, the outer workflow stays in charge. `shipyard` launches child work, ingests their handoffs, batches integration, and delegates PR repair without giving up ownership.
+
+Common starting points:
 
 - One actionable issue: `issue-workbench #<issue>`
-- A repository audit: `repo-surveyor`; request issue planning to hand off to `issue-blueprint`
+- A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
 - A multi-issue feature: `issue-blueprint`, then `shipyard #<parent>`
 - A branch ready to publish: `pr-launchpad`
 - A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
 
-## 🤖 What each skill automates
+## 🤖 Meet the skills
 
 ### 🚀 Workflow skills
 
-#### [`ci-repairbay`](ci-repairbay/)
+#### [🧯 `ci-repairbay`](ci-repairbay/)
 
-Inspects GitHub Actions failures read-only; an explicit fix request authorizes the smallest local fix and focused validation.
+Reads failing GitHub Actions checks, applies a scoped fix only when asked, and returns the branch to its owning PR workflow.
 
-#### [`issue-blueprint`](issue-blueprint/)
+#### [🗺️ `issue-blueprint`](issue-blueprint/)
 
-Turns an approved multi-issue plan into a published dependency graph without implementing or committing provisional work.
+Turns a rough feature into an approved, dependency-aware issue graph whose published parent is ready for `shipyard`.
 
-#### [`issue-workbench`](issue-workbench/)
+#### [🔧 `issue-workbench`](issue-workbench/)
 
-Implements one issue on a guarded branch, then opens a PR or returns a validated handoff to `shipyard`.
+Implements and reviews one issue, then either publishes a standalone PR or returns a verified child handoff to `shipyard`.
 
-#### [`pr-launchpad`](pr-launchpad/)
+#### [🚀 `pr-launchpad`](pr-launchpad/)
 
-Inspects and validates the current branch, commits and pushes scoped changes, then opens a consistently formatted PR.
+Publishes the inspected branch as a consistently formatted PR, reusing a matching existing PR when safe.
 
-#### [`repo-surveyor`](repo-surveyor/)
+#### [🔭 `repo-surveyor`](repo-surveyor/)
 
-Produces a read-only HTML architecture audit; issue planning occurs only when requested at invocation.
+Audits a repository without editing it, produces an HTML/Mermaid report, and optionally hands evidence to `issue-blueprint`.
 
-#### [`review-checkpoint`](review-checkpoint/)
+#### [🛡️ `review-checkpoint`](review-checkpoint/)
 
-Runs one blocker-only Greptile review per commit, with one adversarial fallback only when Greptile cannot start.
+Runs one blocker-only review per commit through Greptile or one adversarial fallback, then returns pass, pending, or blockers.
 
-#### [`review-repairbay`](review-repairbay/)
+#### [🩹 `review-repairbay`](review-repairbay/)
 
-Fixes selected PR feedback or clears actionable review threads with thread-aware verification.
+Fixes selected review feedback or, when explicitly delegated, clears actionable threads and verifies none remain.
 
-#### [`shipyard`](shipyard/)
+#### [🚢 `shipyard`](shipyard/)
 
-Runs an Issue Blueprint graph through frozen child waves, final validation, exact-head review, and one integration PR.
+Runs an approved issue graph through frozen child waves, batch integration, final checks, one PR, and its repair loop.
 
 ### 🧰 Supporting skills
 
-#### [`agent-aeo`](agent-aeo/)
+#### [🌐 `agent-aeo`](agent-aeo/)
 
 Adds or audits shared discovery, Markdown, and plain-text routes for public website content.
 
-#### [`agent-memory`](agent-memory/)
+#### [🧠 `agent-memory`](agent-memory/)
 
-Loads approved project context and stages durable decisions through previewed, transactional writes; see the [setup guide](agent-memory/references/setup.md).
+Loads approved project context before work and distills durable decisions only after terminal completion; see the [setup guide](agent-memory/references/setup.md).
 
-#### [`skill-optimizer`](skill-optimizer/)
+#### [✂️ `skill-optimizer`](skill-optimizer/)
 
-Diagnoses evidenced waste in an existing skill or applies and verifies the smallest root-cause fix.
+Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
 
 ## 📄 License
 

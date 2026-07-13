@@ -14,8 +14,10 @@ Publish the current branch as a pull request.
 - `shipyard_manifest` supplies only close targets, child commits, checks/skips,
   and review status.
 
-Direct invocation owns `$agent-memory load` and distillation; nested invocation
-preserves `.context/decisions.jsonl` for `issue-workbench` or `shipyard`.
+Direct invocation owns `$agent-memory load`. Distill only on final `Done`,
+`Stop`, or `Blocked`; approval, resume, `PENDING`, and `PENDING_REVIEW` returns
+preserve `.context/decisions.jsonl`. Nested invocation preserves it for
+`issue-workbench` or `shipyard`.
 
 ## Procedure
 
@@ -34,12 +36,25 @@ preserves `.context/decisions.jsonl` for `issue-workbench` or `shipyard`.
    diff and validation. Manifest evidence never overrides git.
 5. Check `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`. Push with
    `git push --set-upstream origin HEAD` when absent, otherwise `git push`.
-6. Write the multiline body to a temporary file or heredoc, then create against
-   the base with `gh` or `glab`. An explicitly waived or replaced unavailable
-   external review check is recorded as `Pending external unavailable check:
-   <check>` in caller/progress context, not routed to repair skills.
-7. Compact `.context/progress.md`. When memory is owned, distill before every
-   terminal return; failure retains the PR URL and records `memory_write=FAILED`.
+6. Write the multiline body to a temporary file or heredoc. Before creating,
+   query open PRs/MRs whose source is the current branch (`gh pr list --head
+   <branch>` or the `glab` equivalent). Reuse exactly one only when its source
+   branch, resolved base, and issue/diff scope match; refresh its title/body to
+   the fixed values when needed. If multiple candidates exist, or a same-branch
+   request has a different base or scope, stop instead of creating a duplicate.
+   Otherwise create against the resolved base.
+7. After create or reuse, when `shipyard_manifest` is present, require:
+
+   ```bash
+   python3 <shipyard_dir>/scripts/manifest.py --manifest <shipyard_manifest> set-pr <url>
+   ```
+
+   An explicitly waived or replaced unavailable external review check is
+   recorded as `Pending external unavailable check: <check>` in caller/progress
+   context, not routed to repair skills.
+8. Compact `.context/progress.md`. When memory is owned, distill only on final
+   success or final stop/block. Memory failure does not suppress a created or
+   reused PR URL; record it in progress while the reply remains only that URL.
 
 ```markdown
 ## Summary

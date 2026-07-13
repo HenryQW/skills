@@ -14,11 +14,12 @@ still require authorization.
 ## Memory
 
 Direct invocation calls `$agent-memory load` before resolving the PR and
-`$agent-memory distill` immediately before the terminal status. A caller such
-as Shipyard owns both instead and retains `.context/decisions.jsonl`. Capture
-only confirmed reusable CI root causes, repository guardrails, or durable fix
-decisions—not status, logs, run IDs, or transient failures. Memory failure does
-not change repair status.
+distills only before final `PASS` or `BLOCKED`. `PENDING`, `PENDING_REVIEW`,
+approval, and resume returns preserve `.context/decisions.jsonl` without
+distilling. A caller such as Shipyard owns both instead. Capture only confirmed
+reusable CI root causes, repository guardrails, or durable fix decisions—not
+status, logs, run IDs, or transient failures. Memory failure does not change
+repair status.
 
 ## Inputs
 
@@ -40,8 +41,12 @@ not change repair status.
    overstating certainty. Non-GitHub Actions URLs are external and report-only.
    Inspection or diagnosis stops here.
 4. For an explicit fix, inspect the root cause, apply the smallest traceable
-   local change, and run the focused repository check. If failure is unrelated
-   to the diff, ask before expanding scope.
+   local change, and run the focused repository check. Direct fixes remain
+   uncommitted and unpushed unless the user requested publication. When nested
+   Shipyard explicitly delegates commit-and-push authority, inspect the final
+   scoped code diff, commit only those fixes, and push before returning. Nesting
+   alone is not authority. If failure is unrelated to the diff, ask before
+   expanding scope.
 5. Re-run the inspector or failed local check, not duplicate `gh pr checks`, and
    report remaining external, flaky, pending, or unverified risk.
 

@@ -17,7 +17,7 @@ Implement one actionable issue with the smallest intentional diff. `$review-chec
 
 ## Memory
 
-Direct invocation loads issue-scoped memory and distills before every terminal return. Integration mode skips both and preserves `.context/decisions.jsonl` for Shipyard. Memory skips or failures do not change implementation status.
+Direct invocation loads issue-scoped memory and distills only on final `Done`, `Stop`, or `Blocked`, never `PENDING_REVIEW`, approval, or resumable returns. Integration mode skips both and preserves `.context/decisions.jsonl` for Shipyard. Memory skips or failures do not change implementation status.
 
 ## Boundaries
 
@@ -61,15 +61,15 @@ Direct invocation loads issue-scoped memory and distills before every terminal r
    python3 <skill_dir>/scripts/diff_guard.py --base <review_base>
    ```
 
-   Use `git add -N` for new files. Allow a blocked path only after tracing it to an explicit issue requirement or verified review blocker. Run the smallest relevant validation, then commit inspected paths.
+   Use `git add -N` for new files. Allow a blocked path only after tracing it to an explicit issue requirement or verified review blocker. Run the smallest relevant validation, commit inspected paths, and push the initial review `HEAD` (`git push --set-upstream origin HEAD` when needed).
 
-5. Run `$review-checkpoint` with `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`; do not pass Shipyard's shared manifest from a child worktree. Return `BLOCKED` or `PENDING_REVIEW` with its artifact instead of treating either as PASS. Continue only after the latest completed review returns `PASS` with no later commit, then rerun `diff_guard.py`.
+5. Run `$review-checkpoint` with `mode=fix_loop`, `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`; do not pass Shipyard's shared manifest from a child worktree. Return `BLOCKED` or `PENDING_REVIEW` with its artifact instead of treating either as PASS. Continue only after the latest completed review returns `PASS` with no later commit, then rerun `diff_guard.py`.
 
 6. Finish according to mode.
 
 ## Handoff
 
-In pull-request mode, a `PENDING_REVIEW` returns its pending state path. After `PASS`, invoke nested `$pr-launchpad`, then distill memory and return only the PR URL.
+In pull-request mode, a `PENDING_REVIEW` returns its pending state path without distilling. After `PASS`, invoke nested `$pr-launchpad`; on final `Done`, distill memory and return only the PR URL.
 
 In integration mode, pass inspected facts to the helper; it writes the canonical `.context/integration-handoff.json` through Shipyard's manifest interface:
 

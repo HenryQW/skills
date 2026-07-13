@@ -9,6 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 CHECKS = (
     ("issue-workbench/scripts/issue_snapshot.py", "--self-test"),
+    ("issue-workbench/scripts/branch_name.py", "--self-test"),
     ("issue-workbench/scripts/branch_name.py", "123", "Add Thing!!"),
     ("issue-workbench/scripts/start_issue_branch.py", "--self-test"),
     ("issue-workbench/scripts/integration_child.py", "--self-test"),

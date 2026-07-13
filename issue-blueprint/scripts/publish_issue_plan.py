@@ -13,7 +13,7 @@ from pathlib import Path
 
 from render_issue_plan import self_test as render_self_test
 from render_issue_plan import render
-from issue_plan import final_check, load_plan, ordered_issues
+from issue_plan import load_plan, ordered_issues
 
 
 def run(cmd: list[str]) -> str:
@@ -75,21 +75,12 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
     return numbers
 
 
-def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path, numbers_path: Path) -> str:
-    plan = load_plan(plan_path)
-    children = [numbers[issue["id"]] for issue in ordered_issues(plan)]
-    final_check_number = numbers[final_check(plan)["id"]]
-    parent = numbers["tracker"]
+def execution_block(parent: str, working_directory: Path) -> str:
     return "\n".join(
         [
-            "execution:",
-            f"parent_issue={parent}",
-            f"child_issues={' '.join(children)}",
-            f"final_check_issue={final_check_number}",
-            f"numbers_json={numbers_path.resolve()}",
-            f"shipyard_worktree={worktree}",
-            f"shipyard_command=Use $shipyard {parent}",
-            f"repo={repo}",
+            "Shipyard handoff:",
+            f"working_directory={working_directory.resolve()}",
+            f"Use $shipyard {parent}",
         ]
     )
 
@@ -124,13 +115,9 @@ def self_test() -> None:
             numbers = publish(plan_path, "o/r", ["enhancement"], root / "out")
             assert numbers == {"a": "#1", "b": "#2", "tracker": "#3"}
             assert "#3" in (root / "out" / "01-a.md").read_text()
-            block = execution_block(plan_path, numbers, "o/r", root, root / "out" / "numbers.json")
-            assert "parent_issue=#3" in block
-            assert "child_issues=#1 #2" in block
-            assert "final_check_issue=#2" in block
-            assert f"numbers_json={(root / 'out' / 'numbers.json').resolve()}" in block
-            assert f"shipyard_worktree={root}" in block
-            assert "shipyard_command=Use $shipyard #3" in block
+            assert execution_block(numbers["tracker"], root) == (
+                f"Shipyard handoff:\nworking_directory={root.resolve()}\nUse $shipyard #3"
+            )
             assert "issue-plan-graph" in (root / "out" / "00-tracker.md").read_text()
             assert "issue-plan-graph" in (root / "out" / "01-a.md").read_text()
             assert json.loads((root / "out" / "publish-state.json").read_text())["repo"] == "o/r"
@@ -192,7 +179,7 @@ def main() -> None:
     plan_path = Path(args.plan)
     out = Path(args.out)
     numbers = publish(plan_path, args.repo, args.label, out, args.resume)
-    print(execution_block(plan_path, numbers, args.repo, Path.cwd(), out / "numbers.json"))
+    print(execution_block(numbers["tracker"], Path.cwd()))
 
 
 if __name__ == "__main__":

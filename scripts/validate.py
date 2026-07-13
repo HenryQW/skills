@@ -13,7 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ("🚀 Workflow skills", "🧰 Supporting skills")
 INSTALL_COMMAND = "npx skills add HenryQW/skills --skill '*' --agent codex -y"
-SKILL_HEADING = re.compile(r"#### \[`([^`]+)`\]\(([^)]+)\)")
+SKILL_HEADING = re.compile(r"#### \[(?:\S+ )?`([^`]+)`\]\(([^)]+)\)")
 
 
 class InventoryError(ValueError):
