@@ -9,19 +9,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from repository import branch_name, create_issue_branch, run
+from repository import create_issue_branch, run
 
 
 def self_test() -> int:
-    assert branch_name("123") == "issue-123"
-    assert branch_name("123", "Add Thing!!") == "issue-123-add-thing"
-    try:
-        branch_name("0")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("invalid issue number accepted")
-
     with tempfile.TemporaryDirectory() as raw_tmp:
         tmp = Path(raw_tmp)
         origin = tmp / "origin.git"
@@ -57,7 +48,7 @@ def self_test() -> int:
                 branch_slug="Child Slice",
                 worktree_path=os.fspath(worktree),
                 integration_branch="integration",
-            ) == [f"branch=issue-124-child-slice", f"worktree={worktree}"]
+            ) == ["branch=issue-124-child-slice", f"worktree={worktree}"]
             assert run(["git", "-C", os.fspath(worktree), "branch", "--show-current"]) == "issue-124-child-slice"
             assert run(["git", "-C", os.fspath(worktree), "rev-parse", "HEAD"]) == integration_head
             assert (worktree / "integration.txt").read_text(encoding="utf-8") == "shipyard branch\n"

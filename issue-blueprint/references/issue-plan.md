@@ -1,6 +1,6 @@
 # Issue Plan JSON
 
-Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
+Render this shape with `scripts/render_issue_plan.py`:
 
 ```json
 {
@@ -12,7 +12,7 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
     "definition_of_done": ["Final verifiable condition."]
   },
   "dropped_findings": [
-    {"finding": "Existing route/session cleanup draft.", "reason": "Duplicate of #123; excluded before publish."}
+    {"finding": "Existing cleanup draft.", "reason": "Duplicate of #123."}
   ],
   "issues": [
     {
@@ -36,7 +36,7 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
       "title": "v4: final verification",
       "role": "final_check",
       "purpose": "Final pass.",
-      "context": ["No major architecture work belongs here."],
+      "context": ["No implementation belongs here."],
       "acceptance": ["All checks pass."],
       "testing": {
         "seam": "Final integrated workflow.",
@@ -46,7 +46,7 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
       },
       "blocked_by": ["foundation"],
       "blocks": [],
-      "parallelism": "Runs only after every implementation child; no same-wave issues."
+      "parallelism": "Runs after every implementation child."
     }
   ],
   "waves": [
@@ -57,14 +57,11 @@ Use this compact JSON shape, then render it with `scripts/render_issue_plan.py`.
 ```
 
 Rules:
-- `id` is stable and lowercase. It becomes the filename slug and numbers-map key.
-- `blocked_by` and `blocks` use issue IDs, not GitHub numbers.
-- `tracker` creates the implementation tracker issue. Do not create a child issue for the implementation tracker.
-- Use `context` to justify an unusually small or large issue boundary.
-- `parallelism` must explain why the issue is safe in its wave and identify expected overlap in files, interfaces, or shared state with same-wave issues.
-- `testing` is required for every implementation child. It captures the public seam, existing similar tests, smallest validation command, and what not to test. Use `seam: none` only with a concrete alternative validation path.
-- `dropped_findings` is optional, but required when repo-surveyor or review findings were excluded before publish. Record the reason so the parent graph explains why duplicates were not sliced.
-- Exactly one issue must use `"role": "final_check"`; it is verification-only, must name concrete integration commands, must be blocked by every non-final child, and must block nothing.
-- Keep bodies short enough to scan, but include enough context for an AFK agent.
-- Every issue must appear in exactly one explicit wave.
-- The renderer rejects missing required fields, invalid IDs, unknown dependencies, cycles, duplicate or invalid wave membership, and mismatched `blocks` / `blocked_by`.
+
+- `id` is stable lowercase and is used by filenames, `blocked_by`, `blocks`, and the numbers map.
+- `tracker` is not a child. Every child appears in exactly one explicit wave; `parallelism` names same-wave overlap and why the issue is safe there.
+- `testing` is required for every implementation child and names the public seam, similar tests, smallest validation, and what not to test. Use `seam: none` only with a concrete alternative.
+- A non-final child's validation may use only its declared predecessors and its own output. Add a real dependency for a required sibling, or move genuinely integrated validation to `final_check`. Preserve the project runner; default pytest to the smallest slice with `pytest -q`.
+- Exactly one issue has `"role": "final_check"`; it is verification-only, names concrete integration commands, is blocked by every non-final child, and blocks nothing.
+- `dropped_findings` is optional, but required when survey or review findings are excluded; record why.
+- The renderer validates required fields, IDs, dependencies, cycles, waves, and reciprocal `blocks` / `blocked_by`.

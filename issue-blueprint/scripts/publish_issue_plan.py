@@ -13,7 +13,7 @@ from pathlib import Path
 
 from render_issue_plan import self_test as render_self_test
 from render_issue_plan import render
-from issue_plan import final_check, load_plan, ordered_issues
+from issue_plan import load_plan, ordered_issues
 
 
 def run(cmd: list[str]) -> str:
@@ -50,12 +50,13 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
     if not state_path.exists():
         save(state_path, expected_state)
     label_args = [arg for label in labels for arg in ("--label", label)]
+    children = [(issue, out / f"{index:02d}-{issue['id']}.md") for index, issue in enumerate(ordered_issues(plan), 1)]
 
-    for row in (out / "create-order.tsv").read_text().splitlines():
-        issue_id, title, body_file = row.split("\t")
+    for issue, body_file in children:
+        issue_id = issue["id"]
         if issue_id in numbers:
             continue
-        url = run(["gh", "issue", "create", "--repo", repo, "--title", title, *label_args, "--body-file", body_file])
+        url = run(["gh", "issue", "create", "--repo", repo, "--title", issue["title"], *label_args, "--body-file", str(body_file)])
         numbers[issue_id] = f"#{url.rsplit('/', 1)[-1]}"
         save(numbers_path, numbers)
 
@@ -69,27 +70,17 @@ def publish(plan_path: Path, repo: str, labels: list[str], out: Path, resume: bo
     render(plan_path, out, numbers_path, numbers["tracker"])
     run(["gh", "issue", "edit", numbers["tracker"].lstrip("#"), "--repo", repo, "--body-file", str(out / "00-tracker.md")])
 
-    for row in (out / "create-order.tsv").read_text().splitlines():
-        issue_id, _, body_file = row.split("\t")
-        run(["gh", "issue", "edit", numbers[issue_id].lstrip("#"), "--repo", repo, "--body-file", body_file])
+    for issue, body_file in children:
+        run(["gh", "issue", "edit", numbers[issue["id"]].lstrip("#"), "--repo", repo, "--body-file", str(body_file)])
     return numbers
 
 
-def execution_block(plan_path: Path, numbers: dict[str, str], repo: str, worktree: Path, numbers_path: Path) -> str:
-    plan = load_plan(plan_path)
-    children = [numbers[issue["id"]] for issue in ordered_issues(plan)]
-    final_check_number = numbers[final_check(plan)["id"]]
-    parent = numbers["tracker"]
+def execution_block(parent: str, working_directory: Path) -> str:
     return "\n".join(
         [
-            "execution:",
-            f"parent_issue={parent}",
-            f"child_issues={' '.join(children)}",
-            f"final_check_issue={final_check_number}",
-            f"numbers_json={numbers_path.resolve()}",
-            f"shipyard_worktree={worktree}",
-            f"shipyard_command=Use $shipyard {parent}",
-            f"repo={repo}",
+            "Shipyard handoff:",
+            f"working_directory={working_directory.resolve()}",
+            f"Use $shipyard {parent}",
         ]
     )
 
@@ -114,8 +105,8 @@ def self_test() -> None:
             plan = {
                 "tracker": {"title": "Tracker", "goal": "Goal.", "constraints": ["C."], "non_goals": ["N."], "definition_of_done": ["D."]},
                 "issues": [
-                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "testing": {"seam": "public API", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
                     {"id": "b", "title": "B", "role": "final_check", "purpose": "B.", "context": ["B."], "acceptance": ["B."], "testing": {"seam": "final integration", "validation": "pytest", "do_not_test": "child-owned internals"}, "blocked_by": ["a"], "blocks": [], "parallelism": "Second."},
+                    {"id": "a", "title": "A", "purpose": "A.", "context": ["A."], "acceptance": ["A."], "testing": {"seam": "public API", "validation": "pytest tests/test_a.py", "do_not_test": "private helpers"}, "blocked_by": [], "blocks": ["b"], "parallelism": "First."},
                 ],
                 "waves": [{"name": "Wave 0", "items": ["a"], "notes": "Start."}, {"name": "Wave 1", "items": ["b"], "notes": "End."}],
             }
@@ -124,13 +115,9 @@ def self_test() -> None:
             numbers = publish(plan_path, "o/r", ["enhancement"], root / "out")
             assert numbers == {"a": "#1", "b": "#2", "tracker": "#3"}
             assert "#3" in (root / "out" / "01-a.md").read_text()
-            block = execution_block(plan_path, numbers, "o/r", root, root / "out" / "numbers.json")
-            assert "parent_issue=#3" in block
-            assert "child_issues=#1 #2" in block
-            assert "final_check_issue=#2" in block
-            assert f"numbers_json={(root / 'out' / 'numbers.json').resolve()}" in block
-            assert f"shipyard_worktree={root}" in block
-            assert "shipyard_command=Use $shipyard #3" in block
+            assert execution_block(numbers["tracker"], root) == (
+                f"Shipyard handoff:\nworking_directory={root.resolve()}\nUse $shipyard #3"
+            )
             assert "issue-plan-graph" in (root / "out" / "00-tracker.md").read_text()
             assert "issue-plan-graph" in (root / "out" / "01-a.md").read_text()
             assert json.loads((root / "out" / "publish-state.json").read_text())["repo"] == "o/r"
@@ -192,7 +179,7 @@ def main() -> None:
     plan_path = Path(args.plan)
     out = Path(args.out)
     numbers = publish(plan_path, args.repo, args.label, out, args.resume)
-    print(execution_block(plan_path, numbers, args.repo, Path.cwd(), out / "numbers.json"))
+    print(execution_block(numbers["tracker"], Path.cwd()))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,10 @@ from pathlib import Path
 
 from repository import create_issue_branch, current_branch, diff_snapshot, revision, run, status_lines
 
+SHIPYARD_SCRIPTS = Path(__file__).resolve().parents[2] / "shipyard" / "scripts"
+sys.path.insert(0, os.fspath(SHIPYARD_SCRIPTS))
+from manifest import write_child_handoff  # noqa: E402
+
 
 def emit(lines: list[str]) -> None:
     for line in lines:
@@ -135,45 +139,29 @@ def write_handoff(
     diff_stat: str,
 ) -> Path:
     handoff = progress.parent / HANDOFF_NAME
-    manifest = Path(__file__).resolve().parents[2] / "shipyard" / "scripts" / "manifest.py"
-    command = [
-        sys.executable,
-        os.fspath(manifest),
-        "write-child-handoff",
-        "--output",
-        os.fspath(handoff),
-        "--issue",
-        issue,
-        "--branch",
-        branch,
-        "--worktree",
-        os.fspath(Path.cwd()),
-        "--base-ref",
-        review_base,
-        "--base-sha",
-        revision(review_base),
-        "--commit",
-        head_sha,
-        "--head-sha",
-        head_sha,
-        "--diff-stat",
-        diff_stat,
-        "--verification",
-        verification,
-        "--review",
-        review,
-        "--progress-path",
-        os.fspath(progress),
-    ]
-    for value in changed_files:
-        command.extend(("--changed-file", value))
-    for value in checks:
-        command.extend(("--check", value))
-    for value in known_skips:
-        command.extend(("--known-skip", value))
-    if needs_child_fix:
-        command.extend(("--needs-child-fix", needs_child_fix))
-    run(command)
+    try:
+        write_child_handoff(
+            handoff,
+            {
+                "issue": issue,
+                "branch": branch,
+                "worktree": os.fspath(Path.cwd()),
+                "base_ref": review_base,
+                "base_sha": revision(review_base),
+                "commit": head_sha,
+                "head_sha": head_sha,
+                "changed_files": changed_files,
+                "diff_stat": diff_stat,
+                "verification": verification,
+                "review": review,
+                "checks": checks,
+                "known_skips": known_skips,
+                "progress_path": os.fspath(progress),
+                "needs_child_fix": needs_child_fix,
+            },
+        )
+    except SystemExit as exc:
+        raise RuntimeError(str(exc)) from None
     return record_handoff_progress(progress, handoff, review, checks, known_skips, needs_child_fix)
 
 

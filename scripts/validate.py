@@ -12,8 +12,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ("🚀 Workflow skills", "🧰 Supporting skills")
-INSTALL_COMMAND = "npx skills add HenryQW/skills --skill '*' --agent codex -y"
-SKILL_HEADING = re.compile(r"#### \[`([^`]+)`\]\(([^)]+)\)")
+INSTALL_COMMAND = "npx skills add HenryQW/skills"
+SKILL_HEADING = re.compile(r"#### \[(?:\S+ )?`([^`]+)`\]\(([^)]+)\)")
 
 
 class InventoryError(ValueError):
@@ -25,9 +25,15 @@ def discover_skills(root: Path) -> dict[str, Path]:
     if not skills:
         raise InventoryError("no skills discovered")
     for name, skill_dir in skills.items():
-        metadata = [path for path in skill_dir.rglob("openai.yaml") if path.parent.name == "agents"]
+        metadata = [
+            path
+            for path in skill_dir.rglob("openai.yaml")
+            if path.parent.name == "agents"
+        ]
         if len(metadata) != 1:
-            raise InventoryError(f"{name}: expected 1 agents/openai.yaml, found {len(metadata)}")
+            raise InventoryError(
+                f"{name}: expected 1 agents/openai.yaml, found {len(metadata)}"
+            )
     return skills
 
 
@@ -41,9 +47,14 @@ def read_inventory(readme: Path) -> list[str]:
         heading = f"### {title}"
         indexes = [index for index, line in enumerate(lines) if line == heading]
         if len(indexes) != 1:
-            raise InventoryError(f"expected one {heading} section, found {len(indexes)}")
+            raise InventoryError(
+                f"expected one {heading} section, found {len(indexes)}"
+            )
         section = lines[indexes[0] + 1 :]
-        next_heading = next((i for i, line in enumerate(section) if line.startswith("### ")), len(section))
+        next_heading = next(
+            (i for i, line in enumerate(section) if line.startswith("### ")),
+            len(section),
+        )
         section = section[:next_heading]
 
         names: list[str] = []
@@ -54,7 +65,9 @@ def read_inventory(readme: Path) -> list[str]:
             name, target = match.groups()
             if target != f"{name}/":
                 raise InventoryError(f"{name}: skill heading must link to {name}/")
-            next_content = next((item for item in section[index + 1 :] if item.strip()), "")
+            next_content = next(
+                (item for item in section[index + 1 :] if item.strip()), ""
+            )
             if not next_content or next_content.startswith("#"):
                 raise InventoryError(f"{name}: missing introduction")
             names.append(name)
@@ -75,7 +88,9 @@ def validate_inventory(root: Path) -> dict[str, Path]:
     if discovered != documented:
         missing = sorted(discovered - documented)
         stale = sorted(documented - discovered)
-        raise InventoryError(f"README inventory mismatch; missing={missing}, stale={stale}")
+        raise InventoryError(
+            f"README inventory mismatch; missing={missing}, stale={stale}"
+        )
     return skills
 
 
@@ -93,7 +108,9 @@ def run_validators(root: Path, skills: dict[str, Path]) -> int:
 
 def fixture_readme(workflow: list[str], supporting: list[str]) -> str:
     def section(title: str, names: list[str]) -> str:
-        entries = [f"#### [`{name}`]({name}/)\n\nFixture introduction." for name in names]
+        entries = [
+            f"#### [`{name}`]({name}/)\n\nFixture introduction." for name in names
+        ]
         return "\n\n".join((f"### {title}", *entries))
 
     return (
@@ -120,11 +137,15 @@ def self_test() -> None:
             (root / "README.md").read_text().replace("\n\nFixture introduction.", "", 1)
         ),
         "bad install command": lambda root: (root / "README.md").write_text(
-            (root / "README.md").read_text().replace("--agent codex", "--agent wrong", 1)
+            (root / "README.md")
+            .read_text()
+            .replace("--agent codex", "--agent wrong", 1)
         ),
         "duplicate metadata": lambda root: (
             (root / "alpha" / "duplicate" / "agents").mkdir(parents=True),
-            (root / "alpha" / "duplicate" / "agents" / "openai.yaml").write_text("interface: {}\n"),
+            (root / "alpha" / "duplicate" / "agents" / "openai.yaml").write_text(
+                "interface: {}\n"
+            ),
         ),
         "sort drift": lambda root: (root / "README.md").write_text(
             fixture_readme(["beta", "alpha"], ["gamma"])
@@ -147,7 +168,9 @@ def self_test() -> None:
         make_fixture(root)
         alpha_validator = root / "alpha" / "scripts" / "validate.py"
         alpha_validator.parent.mkdir()
-        alpha_validator.write_text("from pathlib import Path\nPath('alpha-ran').touch()\n")
+        alpha_validator.write_text(
+            "from pathlib import Path\nPath('alpha-ran').touch()\n"
+        )
         stale = root / "stale" / "scripts"
         stale.mkdir(parents=True)
         (stale / "validate.py").write_text("raise SystemExit(9)\n")
@@ -158,10 +181,14 @@ def self_test() -> None:
         (delta / "agents").mkdir(parents=True)
         (delta / "SKILL.md").write_text("# delta\n")
         (delta / "agents" / "openai.yaml").write_text("interface: {}\n")
-        (root / "README.md").write_text(fixture_readme(["alpha", "beta", "delta"], ["gamma"]))
+        (root / "README.md").write_text(
+            fixture_readme(["alpha", "beta", "delta"], ["gamma"])
+        )
         delta_validator = delta / "scripts" / "validate.py"
         delta_validator.parent.mkdir()
-        delta_validator.write_text("from pathlib import Path\nPath('delta-ran').touch()\n")
+        delta_validator.write_text(
+            "from pathlib import Path\nPath('delta-ran').touch()\n"
+        )
         assert run_validators(root, validate_inventory(root)) == 0
         assert (root / "delta-ran").is_file()
         delta_validator.write_text("raise SystemExit(7)\n")
@@ -186,7 +213,9 @@ def main(argv: list[str]) -> int:
     result = run_validators(ROOT, skills)
     if result:
         return result
-    count = sum((path / "scripts" / "validate.py").is_file() for path in skills.values())
+    count = sum(
+        (path / "scripts" / "validate.py").is_file() for path in skills.values()
+    )
     print(f"validate ok: {count} skill validators across {len(skills)} skills")
     return 0
 

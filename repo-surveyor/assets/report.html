@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,334 +11,63 @@
       --muted: #5d6b7c;
       --line: #d9e0e8;
       --page: #f4f6f8;
-      --card: #ffffff;
+      --card: #fff;
       --accent: #246b5a;
-      --accent-soft: #edf7f3;
-      --before: #fff6f1;
-      --before-line: #bd6846;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       background: var(--page);
       color: var(--ink);
-      font: 15px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      -webkit-font-smoothing: antialiased;
+      font: 15px/1.6 system-ui, sans-serif;
     }
-
     main {
       width: min(1120px, calc(100% - 40px));
       margin: auto;
       padding: 48px 0 72px;
     }
-
-    header {
-      display: grid;
-      gap: 10px;
-      margin-bottom: 28px;
-      padding-bottom: 28px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    h1,
-    h2,
-    h3,
-    p {
-      margin: 0;
-    }
-
-    h1 {
-      max-width: 18ch;
-      font-size: 42px;
-      line-height: 1.1;
-      letter-spacing: -.025em;
-      text-wrap: balance;
-    }
-
-    h2 {
-      max-width: 32ch;
-      font-size: 23px;
-      line-height: 1.25;
-      letter-spacing: -.015em;
-      text-wrap: balance;
-    }
-
-    h3 {
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .eyebrow,
-    .meta {
-      color: var(--muted);
-    }
-
-    .summary {
-      max-width: 70ch;
-      color: #344054;
-      font-size: 17px;
-      line-height: 1.55;
-      text-wrap: pretty;
-    }
-
-    #candidates {
-      display: grid;
-      gap: 20px;
-    }
-
+    header { margin-bottom: 28px; border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: 2.5rem; line-height: 1.1; }
+    h2 { font-size: 1.45rem; }
+    .eyebrow, .meta, .evidence { color: var(--muted); }
+    .summary { max-width: 70ch; font-size: 1.1rem; }
+    #candidates { display: grid; gap: 20px; }
     article {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 28px;
     }
-
-    .heading {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 18px;
-    }
-
-    .rank {
-      color: var(--accent);
-      font-size: 13px;
-      font-weight: 750;
-      line-height: 1.2;
-      margin-bottom: 7px;
-    }
-
-    .badge {
-      flex: none;
-      border-radius: 999px;
-      min-width: 38px;
-      padding: 5px 9px;
-      text-align: center;
-      font-size: 12px;
-      font-weight: 750;
-      background: #eef1f5;
-    }
-
-    .badge.p0 {
-      background: #fde8e7;
-      color: #9f1c1c;
-    }
-
-    .badge.p1 {
-      background: #fff1cf;
-      color: #76510d;
-    }
-
-    .badge.p2 {
-      background: #eef1f5;
-      color: #475467;
-    }
-
-    .compare {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin: 24px 0;
-    }
-
-    .visual {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 18px;
-      background: var(--before);
-      min-width: 0;
-    }
-
-    .visual.after {
-      background: var(--accent-soft);
-      border-color: #b9d6cc;
-    }
-
-    .diagram-label {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      color: #76503f;
-      font-size: 13px;
-      font-weight: 750;
-      margin-bottom: 5px;
-    }
-
-    .diagram-label::before {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--before-line);
-      content: "";
-    }
-
-    .after .diagram-label {
-      color: var(--accent);
-    }
-
-    .after .diagram-label::before {
-      background: var(--accent);
-    }
-
-    .mermaid {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 160px;
-      margin: 14px 0 0;
-      overflow-x: auto;
-      background: transparent;
-    }
-
-    .mermaid svg {
-      max-width: 100%;
-      height: auto;
-    }
-
-    .before .node rect {
-      fill: #fffdfb !important;
-      stroke: var(--before-line) !important;
-    }
-
-    .before .flowchart-link {
-      stroke: var(--before-line) !important;
-    }
-
-    .after .node rect {
-      fill: #e8f3ed !important;
-      stroke: var(--accent) !important;
-    }
-
-    .after .flowchart-link {
-      stroke: var(--accent) !important;
-    }
-
-    .details {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-
-    .details section,
-    .evidence {
-      display: grid;
-      gap: 7px;
-    }
-
-    .details p,
-    .evidence li {
-      max-width: 72ch;
-      text-wrap: pretty;
-    }
-
-    ul {
-      margin: 2px 0 0;
-      padding-left: 20px;
-    }
-
-    li + li {
-      margin-top: 4px;
-    }
-
-    .files {
-      margin: 16px 0 0;
-      padding: 10px 12px;
-      border-radius: 7px;
-      background: #f6f8fa;
-      color: var(--muted);
-      font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
-      overflow-wrap: anywhere;
-    }
-
-    .evidence {
-      border-top: 1px solid var(--line);
-      margin-top: 22px;
-      padding-top: 20px;
-    }
-
-    .evidence li {
-      color: var(--muted);
-    }
-
+    .heading { display: flex; justify-content: space-between; gap: 18px; }
+    .rank { color: var(--accent); font-weight: 700; }
+    .badge { border-radius: 999px; padding: 5px 9px; background: #eef1f5; font-weight: 700; }
+    .badge.p0 { background: #fde8e7; color: #9f1c1c; }
+    .badge.p1 { background: #fff1cf; color: #76510d; }
+    .compare, .details { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .compare { margin: 24px 0; }
+    .visual { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 18px; background: #fff6f1; }
+    .visual.after { background: #edf7f3; border-color: #b9d6cc; }
+    .diagram-label { color: var(--muted); font-weight: 700; }
+    .mermaid { overflow-x: auto; text-align: center; background: transparent; }
+    .mermaid svg { max-width: 100%; height: auto; }
+    .files { padding: 10px 12px; background: #f6f8fa; font: 12px/1.6 monospace; overflow-wrap: anywhere; }
+    .evidence { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
     @media (max-width: 720px) {
-      main {
-        width: min(100% - 24px, 1120px);
-        padding: 28px 0 48px;
-      }
-
-      h1 {
-        font-size: 34px;
-      }
-
-      .compare,
-      .details {
-        grid-template-columns: 1fr;
-      }
-
-      .heading {
-        display: grid;
-      }
-
-      article {
-        padding: 20px;
-      }
+      main { width: calc(100% - 24px); padding-top: 28px; }
+      h1 { font-size: 2rem; }
+      .compare, .details { grid-template-columns: 1fr; }
+      .heading { display: grid; }
+      article { padding: 20px; }
     }
   </style>
 </head>
-
 <body>
   <main>
     <!-- REPORT_CONTENT_START -->
-    <header>
-      <p class="eyebrow">Report template</p>
-      <h1>Repository</h1>
-      <p class="summary">Evidence-backed DRY, SOLID, test-strategy, and architecture findings.</p>
-    </header>
-    <section id="candidates">
-      <article>
-        <div class="heading">
-          <div>
-            <p class="rank">Template</p>
-            <h2>Replace this report content before opening</h2>
-          </div>
-          <span class="badge">P0–P2</span>
-        </div>
-        <div class="compare">
-          <section class="visual before" aria-label="Before template">
-            <p class="diagram-label">Before</p>
-            <h3>Current structure</h3>
-            <pre class="mermaid">flowchart TB
-              A["Current module"] --> B["Leaky dependency"]</pre>
-          </section>
-          <section class="visual after" aria-label="After template">
-            <p class="diagram-label">After</p>
-            <h3>Proposed structure</h3>
-            <pre class="mermaid">flowchart TB
-              A["Owned interface"] --> B["Hidden implementation"]</pre>
-          </section>
-        </div>
-        <div class="details">
-          <section>
-            <h3>Problem</h3>
-            <p>Replace with evidence-backed friction.</p>
-          </section>
-          <section>
-            <h3>Proposal</h3>
-            <p>Replace with the bounded architecture improvement.</p>
-          </section>
-        </div>
-      </article>
-    </section>
     <!-- REPORT_CONTENT_END -->
   </main>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js"></script>
-  <script>
-    mermaid.initialize({ startOnLoad: true, securityLevel: "strict", theme: "base", themeVariables: { fontFamily: "ui-sans-serif, system-ui, sans-serif", primaryColor: "#ffffff", primaryBorderColor: "#d9e0e8", lineColor: "#5d6b7c", textColor: "#182230" } });
-  </script>
+  <script>mermaid.initialize({ startOnLoad: true, securityLevel: "strict" });</script>
 </body>
-
 </html>

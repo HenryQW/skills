@@ -85,9 +85,10 @@ def integration_branch_name_from_title(title: str) -> str:
 
 
 def integration_branch_name(parent_issue: str, repo: str | None = None) -> str:
-    if not re.fullmatch(r"[1-9][0-9]*", parent_issue):
-        raise ValueError("parent_issue must be a positive integer")
-    title = issue(parent_issue, "title", repo).get("title", "")
+    match = re.fullmatch(r"(?:(?:https://github\.com/[^/\s]+/[^/\s]+/issues/)|#)?([1-9][0-9]*)/?", parent_issue.strip())
+    if not match:
+        raise ValueError("parent_issue must be a positive integer, #number, or GitHub issue URL")
+    title = issue(match.group(1), "title", repo).get("title", "")
     return integration_branch_name_from_title(str(title))
 
 

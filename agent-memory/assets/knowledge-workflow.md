@@ -23,9 +23,12 @@ Do not silently contradict an existing decision. Record why a replacement supers
 
 ## Update
 
-Record only durable information future agents would otherwise rediscover. Skip routine progress, debugging steps, code-obvious facts, and conversation summaries.
+Record durable engineering decisions whose rationale future agents would otherwise rediscover, including why code is shaped a certain way, why architecture boundaries exist, and why optimizations or tradeoffs were chosen. A decision qualifies when the user states it or approves a plan, design, or implementation containing an agent-authored choice. It does not need to originate in user wording.
 
-- Decisions: date, decision, reason, alternatives, and impact.
+Skip routine progress, debugging steps, code-obvious mechanics, reversible local choices, and conversation summaries.
+Memory should explain the project's engineering approach, not narrate task history.
+
+- Decisions: date, decision, reason, material alternatives or tradeoffs, impact, and approval source.
 - Guidance: when it applies and what to do.
 - Stage new notes in `Decisions/Inbox/<topic-slug>.md` or `Guidance/Inbox/<topic-slug>.md`.
 - Do not create Inbox indexes, promote staged notes, or link them from the router without explicit approval.
