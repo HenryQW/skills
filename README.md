@@ -69,35 +69,35 @@ When skills are nested, the outer workflow stays in charge. `shipyard` launches 
 
 #### [🧯 `ci-repairbay`](ci-repairbay/)
 
-Reads failing GitHub Actions checks, applies a scoped fix only when asked, and returns the branch to its owning PR workflow.
+Diagnoses failing GitHub Actions checks and applies the smallest scoped fix only when explicitly requested.
 
 #### [🗺️ `issue-blueprint`](issue-blueprint/)
 
-Turns a rough feature into an approved, dependency-aware issue graph whose published parent is ready for `shipyard`.
+Builds a dependency-aware issue graph and publishes it only after approval of the exact plan.
 
 #### [🔧 `issue-workbench`](issue-workbench/)
 
-Implements and reviews one issue, then either publishes a standalone PR or returns a verified child handoff to `shipyard`.
+Implements one issue through its review gate, then publishes a PR or returns a verified `shipyard` handoff.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
-Publishes the inspected branch as a consistently formatted PR, reusing a matching existing PR when safe.
+Validates and publishes the inspected branch, reusing one matching PR when safe.
 
 #### [🔭 `repo-surveyor`](repo-surveyor/)
 
-Audits a repository without editing it, produces an HTML/Mermaid report, and optionally hands evidence to `issue-blueprint`.
+Produces a read-only, evidence-backed maintainability report and optionally hands findings to `issue-blueprint`.
 
 #### [🛡️ `review-checkpoint`](review-checkpoint/)
 
-Runs one blocker-only review per commit through Greptile or one adversarial fallback, then returns pass, pending, or blockers.
+Reviews one pushed branch head through Greptile or one adversarial fallback and returns pass, pending, or blockers.
 
 #### [🩹 `review-repairbay`](review-repairbay/)
 
-Fixes selected review feedback or, when explicitly delegated, clears actionable threads and verifies none remain.
+Fixes selected review feedback or, with explicit authority, clears actionable threads and verifies none remain.
 
 #### [🚢 `shipyard`](shipyard/)
 
-Runs an approved issue graph through frozen child waves, batch integration, final checks, one PR, and its repair loop.
+Runs an approved issue graph through frozen waves, HEAD-bound gates, one PR, and its repair loop.
 
 ### 🧰 Supporting skills
 

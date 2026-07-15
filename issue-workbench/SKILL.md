@@ -17,7 +17,8 @@ Implement one actionable issue with the smallest intentional diff. `$review-chec
 
 ## Memory
 
-Direct invocation loads issue-scoped memory and distills only on final `Done`, `Stop`, or `Blocked`, never `PENDING_REVIEW`, approval, or resumable returns. Integration mode skips both and preserves `.context/decisions.jsonl` for Shipyard. Memory skips or failures do not change implementation status.
+Direct invocation owns issue-scoped `$agent-memory`; integration mode defers it
+to Shipyard.
 
 ## Boundaries
 
@@ -69,7 +70,8 @@ Direct invocation loads issue-scoped memory and distills only on final `Done`, `
 
 ## Handoff
 
-In pull-request mode, a `PENDING_REVIEW` returns its pending state path without distilling. After `PASS`, invoke nested `$pr-launchpad`; on final `Done`, distill memory and return only the PR URL.
+In pull-request mode, a `PENDING_REVIEW` returns its pending state path. After
+`PASS`, invoke nested `$pr-launchpad` and return only the PR URL.
 
 In integration mode, pass inspected facts to the helper; it writes the canonical `.context/integration-handoff.json` through Shipyard's manifest interface:
 

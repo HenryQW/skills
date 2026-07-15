@@ -19,7 +19,9 @@ Use Greptile as the branch-diff gate. Review is read-only unless `fix_loop` is e
 
 ## Memory
 
-Direct invocation owns `$agent-memory load` and distills only on final `PASS` or `BLOCKED`, never `PENDING_REVIEW` or resumable returns. Nested Workbench or Shipyard invocation skips both and preserves `.context/decisions.jsonl`. Capture only accepted durable review rules or reusable root causes; memory failure does not change status.
+Direct invocation owns `$agent-memory`; nested Workbench or Shipyard invocation
+defers it to the caller. Capture only accepted durable review rules or reusable
+root causes.
 
 ## Findings and authorization
 
@@ -30,8 +32,13 @@ Direct invocation owns `$agent-memory load` and distills only on final `PASS` or
 
 ## Review state machine
 
+An unchanged `(base_sha, head_sha)` has one remote review ID from creation to
+terminal completion. Only a pushed actionable-fix commit permits a new ID; once
+an ID exists, failures and timeouts resume it rather than restarting or falling
+back.
+
 1. Require a clean worktree except local `.context/progress.md`. Resolve `review_base` and require an upstream equal to local `HEAD` before every new review. Missing or mismatched pushed state is `BLOCKED`: direct `review_only` never pushes, and `fix_loop` may commit or push only fixes it creates. Workbench or Shipyard pushes the initial reviewed `HEAD` before invoking this skill.
-2. On resume, fetch and compare saved branch, local HEAD, upstream, base ref, and base SHA with Git. Before `poll_after_utc`, matching state returns `PENDING_REVIEW` without invoking Greptile. Mark mismatches or unknown base values stale and resolve them, but never replace the review ID for unchanged `HEAD`.
+2. On resume, fetch and compare saved branch, local HEAD, upstream, base ref, and base SHA with Git. Before `poll_after_utc`, matching state returns `PENDING_REVIEW` without invoking Greptile. Mark mismatches or unknown base values stale and resolve them.
 3. For a new `HEAD`, start exactly one process and record its review ID when emitted:
 
    ```bash
@@ -47,8 +54,8 @@ Direct invocation owns `$agent-memory load` and distills only on final `PASS` or
    greptile review show <review_id> --agent
    ```
 
-   Await that same process. In block mode, use `max_review_wait_minutes`; in defer mode, reap an incomplete process and advance `poll_after_utc`. Timeout or `show` failure retains the same ID and returns `PENDING_REVIEW`; never run another concurrent `show`, fallback, or replacement review for unchanged `HEAD`.
-5. A new review ID is allowed only after an actionable fix creates and pushes a new commit. The final gate is the latest completed review with no later commit.
+   Await that same process. In block mode, use `max_review_wait_minutes`; in defer mode, reap an incomplete process and advance `poll_after_utc`. Timeout or `show` failure returns `PENDING_REVIEW`.
+5. The final gate is the latest completed review with no later commit.
 
 `poll_interval_seconds` never drives blocking polls. Report state changes only; any host heartbeat must await the same process without launching a command or repeating detailed status.
 
@@ -71,7 +78,7 @@ Keep progress local and limited to `goal`, `current_step`, `artifacts`, `blocker
 
 ## Fallback
 
-If Greptile is missing, unavailable, or exits before yielding an ID, record the tool error and run exactly one read-only adversarial subagent review for that iteration. Give it the absolute worktree, base, branch, reproducible diff refs or artifact, and validation evidence; require the same blocker taxonomy and file/line evidence. If no reviewer is available, return `BLOCKED` unless caller policy explicitly permits a local review. Once an ID exists, local process failure or timeout never triggers fallback.
+If Greptile is missing, unavailable, or exits before yielding an ID, record the tool error and run exactly one read-only adversarial subagent review for that iteration. Give it the absolute worktree, base, branch, reproducible diff refs or artifact, and validation evidence; require the same blocker taxonomy and file/line evidence. If no reviewer is available, return `BLOCKED` unless caller policy explicitly permits a local review.
 
 Store a diff payload only when Git cannot reproduce it, overwriting `.context/review-payload.txt` and recording its path and SHA; append review history to `.context/review-events.jsonl` without per-review folders.
 

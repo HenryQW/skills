@@ -15,7 +15,7 @@ Execute an Issue Blueprint parent graph without duplicating child work. Workbenc
 - Infer repository from the GitHub remote, base from the repository default, and the integration branch with `issue-workbench/scripts/branch_name.py integration <parent_id>`.
 - Execute by default. Inspect-only behavior requires an explicit inspect, plan, dry-run, or report request.
 
-Direct invocation owns `$agent-memory load` and distills only on final `Done`, `Stop`, or `Blocked`, never pending, approval, or resumable returns. Nested skills skip their memory boundaries and preserve durable candidates for Shipyard; memory failure does not change Shipyard status.
+Direct invocation owns `$agent-memory`; nested skills defer it to Shipyard.
 
 ## State and ownership
 
@@ -23,6 +23,8 @@ Direct invocation owns `$agent-memory load` and distills only on final `Done`, `
 - `.context/shipyard-manifest.json` is the single trusted local run artifact; `manifest.py` alone validates handoffs, lifecycle transitions, validation, and review events. `.context/progress.md` only points to it.
 - A child is `done-local` after its recorded branch is merged into the integration branch. Merging the final Shipyard PR makes that completion durable.
 - Load each nested skill once, immediately before first use. Query manifest coordination as `issue`, `commit`, `status`, and `verification`; inspect full diffs only for incomplete or surprising evidence or merge conflicts.
+- A frozen wave is one issue set plus `wave_base_sha`: no child merges until every handoff is `PASS` without `needs_child_fix` and every retained base still matches; then all merge in ascending issue order. Pending or failed work keeps the whole wave unmerged.
+- Validation and review evidence are HEAD-bound; any code-changing repair invalidates evidence for the prior HEAD.
 
 ## 1. Preflight
 
@@ -52,15 +54,14 @@ Read only issue-linked or named material needed for runnable children.
 
    Use `defer` only when explicitly requested. Do not probe running children or delete their worktrees automatically; use absolute paths for mutations once multiple worktrees exist.
 3. Ingest every returned handoff directly into the canonical manifest through `manifest.py ingest-child --file <path>` as it returns. `manifest.py` validates it; never reconstruct or separately validate its JSON. Re-append durable child decisions through Agent Memory's append helper.
-4. Treat the launched set as one barrier. Do not mutate integration `HEAD` or merge any child until every launched handoff has `review:"PASS"` and no `needs_child_fix`. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. Passing siblings remain unmerged. If a defect belongs to a `done-local` predecessor, follow Repair waves.
-5. Before the first merge, require current `HEAD` and every retained wave `base_sha` to equal `wave_base_sha`. Stop on drift; never refresh the wave base or children.
-6. Merge all PASS branches consecutively in ascending issue order with `integration_child.py merge ... --expected-commit <commit>`, recording each success through `manifest.py merge-child`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
-7. After the batch, run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
+4. Enforce the frozen-wave barrier. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. If a defect belongs to a `done-local` predecessor, follow Repair waves. Stop on base drift; never refresh the wave base or children.
+5. Merge the complete PASS wave with `integration_child.py merge ... --expected-commit <commit>`, recording each success through `manifest.py merge-child`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
+6. After the batch, run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
 
 ## Repair waves
 
 - Never reuse a worktree whose child has already merged. Group all child-owned findings from one completed review by issue, capture the current integration `HEAD` and issue set, then start one fresh `issue-<n>-repair-<short-head>` branch/worktree per issue from that HEAD using existing `branch_slug` and `worktree_path` inputs.
-- Treat the group as a frozen wave: run Workbench children in parallel, collect and validate all handoffs, and batch-merge in ascending issue order only after all return PASS. A new finding or pending child keeps the whole repair wave unmerged.
+- Run each repair group through the frozen-wave contract with Workbench children in parallel.
 - If an open implementation wave reports a defect owned by an already-merged predecessor, merge nothing from the open wave. Repair the predecessor in a fresh frozen repair wave, retire the old unmerged worktrees/handoffs without reusing them, and relaunch the entire invalidated wave from the new integration `HEAD` with fresh `branch_slug=retry-<short-head>` branches and worktrees.
 
 ## 3. Final check
@@ -88,7 +89,7 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 
 1. Take one health snapshot after PR creation and choose exactly one repair owner. Before invoking it, capture `pre_repair_head=$(git rev-parse HEAD)` and the blocker set.
 2. For failing GitHub Actions, invoke nested `$ci-repairbay` with an explicit fix request and delegated authority to make scoped commits and push them. For actionable review threads, invoke nested `$review-repairbay` in `clear-all` mode with authority for scoped fixes, commits, pushes, replies, resolutions, and re-fetches. Skip nested memory boundaries and never run both owners concurrently.
-3. Trust `status=PASS|BLOCKED|PENDING` unless missing or inconsistent. Return pending work without distilling; stop if the same owner returns the same status for the same blocker set at unchanged `HEAD`.
+3. Trust `status=PASS|BLOCKED|PENDING` unless missing or inconsistent. Return pending work; stop if the same owner returns the same status for the same blocker set at unchanged `HEAD`.
 4. Compare current `HEAD` with `pre_repair_head`. Remote-only thread changes leave `HEAD` unchanged: do not rerun code gates; take a fresh snapshot only when remote state changed. If `HEAD` changed, require the repair owner to have committed and pushed it, rerun `final_check`, replace SHA-bound validation, rerun the exact-head `mode=review_only` gate until the manifest accepts PASS, push/confirm that reviewed `HEAD`, then take a fresh snapshot without recreating the PR.
 5. Continue one owner at a time until clear. Ignore resolved, outdated, informational, approval, summary, or waived unavailable checks; stop on unchanged repeated blockers, human approval, merge permission, or external-provider blockers.
 

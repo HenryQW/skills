@@ -11,12 +11,9 @@ temporary HTML report is the only write besides ignored agent-memory artifacts.
 
 ## Memory
 
-Direct invocation calls `$agent-memory load` before surveying and distills only
-before final `Done`, `Stop`, or `Blocked`. Resumable pending states, approval
-waits, handoffs, and callers that own memory preserve `.context/decisions.jsonl`
-without preview or apply. Capture only established durable rules, constraints,
-or reusable root causes—not findings, scores, issue candidates, or routine
-observations. Memory failure does not replace the result.
+Direct invocation owns `$agent-memory`; nested invocation defers it to the
+caller. Capture only established durable rules, constraints, or reusable root
+causes—not findings, scores, issue candidates, or routine observations.
 
 ## Survey
 

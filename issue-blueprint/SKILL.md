@@ -9,11 +9,9 @@ Turn a rough multi-issue plan into an approved GitHub issue graph without implem
 
 ## Memory
 
-Direct invocation owns `$agent-memory load`. Distill only on final `Done`, `Stop`,
-or `Blocked`; approval, publication-resume, `PENDING`, and `PENDING_REVIEW`
-returns preserve `.context/decisions.jsonl` without distilling. Nested invocation
-always preserves it for its caller. Capture only accepted durable product,
-domain, or architecture decisions; memory failure does not change the result.
+Direct invocation owns `$agent-memory`; nested invocation defers it to the
+caller. Capture only accepted durable product, domain, or architecture
+decisions.
 
 ## Workflow
 
