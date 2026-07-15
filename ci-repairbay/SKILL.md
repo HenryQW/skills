@@ -13,13 +13,9 @@ still require authorization.
 
 ## Memory
 
-Direct invocation calls `$agent-memory load` before resolving the PR and
-distills only before final `PASS` or `BLOCKED`. `PENDING`, `PENDING_REVIEW`,
-approval, and resume returns preserve `.context/decisions.jsonl` without
-distilling. A caller such as Shipyard owns both instead. Capture only confirmed
-reusable CI root causes, repository guardrails, or durable fix decisions—not
-status, logs, run IDs, or transient failures. Memory failure does not change
-repair status.
+Direct invocation owns `$agent-memory`; nested invocation defers it to the
+caller. Capture only confirmed reusable CI root causes, repository guardrails,
+or durable fix decisions—not status, logs, run IDs, or transient failures.
 
 ## Inputs
 

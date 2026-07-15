@@ -11,13 +11,9 @@ complete thread model.
 ## Memory
 
 Direct entry loads memory only when feedback depends on prior project decisions.
-Evidence-complete routine fixes skip it. If memory was loaded or a durable
-candidate recorded, distill only before final `PASS` or `BLOCKED`; `PENDING`,
-`PENDING_REVIEW`, approval, and resume returns preserve
-`.context/decisions.jsonl`. `inspect-only` and callers such as Shipyard preserve
-it instead. Capture durable review decisions, repository rules, or reusable root
-causes—not comments, thread state, IDs, or routine fixes. Memory failure does not
-change status.
+Evidence-complete routine fixes skip it; `inspect-only` and nested invocation
+defer it to the caller. Capture durable review decisions, repository rules, or
+reusable root causes—not comments, thread state, IDs, or routine fixes.
 
 ## Workflow
 

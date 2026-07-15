@@ -18,7 +18,7 @@ OBSIDIAN_PROJECT=`${OBSIDIAN_ROOT}/projects/Skills`
 
 The repository root `README.md` must include:
 
-- One installation section near the top with `npx skills add HenryQW/skills --skill '*' --agent codex -y`.
+- One installation section near the top with `npx skills add HenryQW/skills`.
 - One linked heading and short, plain-language introduction for every skill.
 - `Workflow skills` and `Supporting skills` groups, each sorted A-Z by skill name.
 

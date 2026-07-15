@@ -14,36 +14,33 @@ Publish the current branch as a pull request.
 - `shipyard_manifest` supplies only close targets, child commits, checks/skips,
   and review status.
 
-Direct invocation owns `$agent-memory load`. Distill only on final `Done`,
-`Stop`, or `Blocked`; approval, resume, `PENDING`, and `PENDING_REVIEW` returns
-preserve `.context/decisions.jsonl`. Nested invocation preserves it for
+Direct invocation owns `$agent-memory`; nested invocation defers it to
 `issue-workbench` or `shipyard`.
 
 ## Procedure
 
-1. Load memory when owned; `memory_load=SKIPPED` continues without setup.
-2. Resolve the base, preferring its remote-tracking ref. Inspect `git status
+1. Resolve the base, preferring its remote-tracking ref. Inspect `git status
    --short`, `git log --oneline <base>...HEAD`, the committed branch diff, and
    staged and unstaged diffs. Do not commit `.context/`, `.agents/`, or local
    progress. Stop when unrelated changes make intended scope ambiguous;
    otherwise make the focused Conventional Commit.
-3. Run the smallest relevant non-destructive validation. With a manifest, first
+2. Run the smallest relevant non-destructive validation. With a manifest, first
    run `python3 <shipyard_dir>/scripts/manifest.py --manifest
    <shipyard_manifest> can-reuse $(git rev-parse HEAD)` and reuse recorded
    evidence only on success. Otherwise validate normally; state honestly when
    no relevant check exists.
-4. Derive a Conventional Commit PR title and the fixed body below from the live
+3. Derive a Conventional Commit PR title and the fixed body below from the live
    diff and validation. Manifest evidence never overrides git.
-5. Check `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`. Push with
+4. Check `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`. Push with
    `git push --set-upstream origin HEAD` when absent, otherwise `git push`.
-6. Write the multiline body to a temporary file or heredoc. Before creating,
+5. Write the multiline body to a temporary file or heredoc. Before creating,
    query open PRs/MRs whose source is the current branch (`gh pr list --head
    <branch>` or the `glab` equivalent). Reuse exactly one only when its source
    branch, resolved base, and issue/diff scope match; refresh its title/body to
    the fixed values when needed. If multiple candidates exist, or a same-branch
    request has a different base or scope, stop instead of creating a duplicate.
    Otherwise create against the resolved base.
-7. After create or reuse, when `shipyard_manifest` is present, require:
+6. After create or reuse, when `shipyard_manifest` is present, require:
 
    ```bash
    python3 <shipyard_dir>/scripts/manifest.py --manifest <shipyard_manifest> set-pr <url>
@@ -52,9 +49,7 @@ preserve `.context/decisions.jsonl`. Nested invocation preserves it for
    An explicitly waived or replaced unavailable external review check is
    recorded as `Pending external unavailable check: <check>` in caller/progress
    context, not routed to repair skills.
-8. Compact `.context/progress.md`. When memory is owned, distill only on final
-   success or final stop/block. Memory failure does not suppress a created or
-   reused PR URL; record it in progress while the reply remains only that URL.
+7. Compact `.context/progress.md` without suppressing a created or reused PR URL.
 
 ```markdown
 ## Summary

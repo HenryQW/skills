@@ -139,7 +139,7 @@ def self_test() -> None:
         "bad install command": lambda root: (root / "README.md").write_text(
             (root / "README.md")
             .read_text()
-            .replace("--agent codex", "--agent wrong", 1)
+            .replace(INSTALL_COMMAND, "npx skills add wrong/repo", 1)
         ),
         "duplicate metadata": lambda root: (
             (root / "alpha" / "duplicate" / "agents").mkdir(parents=True),
