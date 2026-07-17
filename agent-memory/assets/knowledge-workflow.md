@@ -5,8 +5,7 @@ Use only when the project `AGENTS.md` defines `OBSIDIAN_PROJECT`. Never infer a 
 ## Load
 
 - Start from `${OBSIDIAN_PROJECT}/Agent/Memory/index.md`.
-- Follow only task-relevant links to approved notes.
-- Never load notes from `Decisions/Inbox/` or `Guidance/Inbox/` during normal work.
+- Follow only task-relevant links to confirmed notes.
 - If configured memory is missing or unreadable, report it briefly and continue unless the task depends on it.
 
 ## Priority
@@ -30,6 +29,6 @@ Memory should explain the project's engineering approach, not narrate task histo
 
 - Decisions: date, decision, reason, material alternatives or tradeoffs, impact, and approval source.
 - Guidance: when it applies and what to do.
-- Stage new notes in `Decisions/Inbox/<topic-slug>.md` or `Guidance/Inbox/<topic-slug>.md`.
-- Do not create Inbox indexes, promote staged notes, or link them from the router without explicit approval.
+- Before creating or updating a note, show the exact proposed change and ask the user for confirmation.
+- After confirmation, write directly to `Decisions/<topic-slug>.md` or `Guidance/<topic-slug>.md` and link it from `Agent/Memory/index.md`.
 - If no durable information was created, do not update memory.

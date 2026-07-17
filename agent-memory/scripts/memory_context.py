@@ -123,11 +123,11 @@ def self_test() -> None:
         project = root / "repo"
         memory = memory_root / "projects" / "Demo" / "Platform" / "Agent" / "Memory"
         project.mkdir()
-        (memory / "Guidance" / "Inbox").mkdir(parents=True)
+        (memory / "Guidance" / "Drafts").mkdir(parents=True)
         router = memory / "index.md"
         first = memory / "Guidance" / "issue-workbench.md"
         second = memory / "Guidance" / "review-checkpoint.md"
-        inbox = memory / "Guidance" / "Inbox" / "draft.md"
+        draft = memory / "Guidance" / "Drafts" / "draft.md"
         router.write_text(
             "# Memory\n\n## Guidance\n\n"
             "- [[Guidance/issue-workbench|Issue Workbench]]\n"
@@ -137,7 +137,7 @@ def self_test() -> None:
         )
         first.write_text("# Issue Workbench\n\nExact route.\n" + "x" * 7000, encoding="utf-8")
         second.write_text("# Review Checkpoint\n\nSecond exact route.\n", encoding="utf-8")
-        inbox.write_text("# Draft\n", encoding="utf-8")
+        draft.write_text("# Draft\n", encoding="utf-8")
         os.environ["OBSIDIAN_ROOT"] = os.fspath(memory_root)
         (project / "AGENTS.md").write_text(
             "OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/projects/Demo/Platform\n",
@@ -178,13 +178,13 @@ def self_test() -> None:
         else:
             raise AssertionError("accepted duplicate memory topic")
 
-        router.write_text("# Memory\n\n- [[Guidance/Inbox/draft]]\n", encoding="utf-8")
+        router.write_text("# Memory\n\n- [[Guidance/Drafts/draft]]\n", encoding="utf-8")
         try:
             topic_routes(router)
         except SystemExit as exc:
             assert "non-approved note" in str(exc)
         else:
-            raise AssertionError("accepted staged memory note")
+            raise AssertionError("accepted nested memory note")
 
         outside = root / "outside.md"
         outside.write_text("# Outside\n", encoding="utf-8")

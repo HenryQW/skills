@@ -193,8 +193,8 @@ def plan_setup(
         codex_home,
         workflow.parent,
         project_root / ".context",
-        unsymlinked_path(memory_dir, "Decisions", "Inbox"),
-        unsymlinked_path(memory_dir, "Guidance", "Inbox"),
+        unsymlinked_path(memory_dir, "Decisions"),
+        unsymlinked_path(memory_dir, "Guidance"),
     ]
     missing_dirs: list[Path] = []
     for path in expected_dirs:
@@ -343,8 +343,8 @@ def self_test() -> int:
             assert "OBSIDIAN_PROJECT=${OBSIDIAN_ROOT}/Project_Name" in read(project / "AGENTS.md")
             assert resolve_obsidian_project(project) == (vault / "Project_Name").resolve()
             assert read(vault / "agent" / "knowledge-workflow.md").startswith("# Knowledge Workflow")
-            assert (vault / "Project_Name" / "Agent" / "Memory" / "Decisions" / "Inbox").is_dir()
-            assert (vault / "Project_Name" / "Agent" / "Memory" / "Guidance" / "Inbox").is_dir()
+            assert (vault / "Project_Name" / "Agent" / "Memory" / "Decisions").is_dir()
+            assert (vault / "Project_Name" / "Agent" / "Memory" / "Guidance").is_dir()
             assert all(item in read(project / ".gitignore") for item in IGNORED_CONTEXT_FILES)
 
             directories, changes = plan_setup(project, obsidian_root, parts, codex_home)

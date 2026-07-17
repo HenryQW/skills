@@ -9,7 +9,7 @@ Memory is artifact-driven: `.context/progress.md` is the task ledger;
 `.context/decisions.jsonl` stores durable candidates; generated load and preview
 artifacts remain under `.context/`. The project `AGENTS.md` declares
 `OBSIDIAN_PROJECT`; `Agent/Memory/index.md` links approved `Decisions/` and
-`Guidance/` notes. Their `Inbox/` folders are staging only.
+`Guidance/` notes. Confirmed notes are written there directly.
 
 Only `--setup` reads `references/setup.md` or runs setup.
 
@@ -61,14 +61,15 @@ python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/pro
 ```
 
 Inspect `.context/memory-distill-preview.json`; only explicit approval authorizes
-applying its exact rendered bytes:
+creating or updating its exact final notes and index links:
 
 ```bash
 python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl --apply
 ```
 
-Apply rejects source or staged-note drift. Do not promote Inbox notes, create
-Inbox indexes, or edit `Agent/Memory/index.md` without explicit approval. Topic
-slugs map directly to staged filenames; never search note bodies to choose a
-destination. Use `.context/progress.md` only to clarify an already durable
-decision. No durable records returns `memory_write=SKIPPED` without asking.
+Apply rejects source or destination drift, writes directly to `Decisions/` or
+`Guidance/`, and adds missing links to `Agent/Memory/index.md`. Do not apply
+before the user confirms the preview. Topic slugs map directly to final
+filenames; never search note bodies to choose a destination. Use
+`.context/progress.md` only to clarify an already durable decision. No durable
+records returns `memory_write=SKIPPED` without asking.

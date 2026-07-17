@@ -52,6 +52,6 @@ Setup changes only these surfaces:
 - installs the bundled workflow at `${OBSIDIAN_ROOT}/agent/knowledge-workflow.md`
 - adds the exact `OBSIDIAN_PROJECT` declaration to the project `AGENTS.md`
 - creates `.context/progress.md` and the agent-memory entries in `.gitignore`
-- creates `${OBSIDIAN_PROJECT}/Agent/Memory/index.md`, `Decisions/Inbox/`, and `Guidance/Inbox/`
+- creates `${OBSIDIAN_PROJECT}/Agent/Memory/index.md`, `Decisions/`, and `Guidance/`
 
 Existing identical content is left unchanged. Conflicting declarations, marked blocks, workflow files, paths, or symlinks stop setup without overwriting them.

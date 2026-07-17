@@ -107,7 +107,7 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 #### [🧠 `agent-memory`](agent-memory/)
 
-Loads approved project context before work and distills the accepted reasoning behind code, architecture, and optimization choices after terminal completion; see the [setup guide](agent-memory/references/setup.md).
+Loads confirmed project context and, after explicit creation approval, writes durable engineering decisions and guidance directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 

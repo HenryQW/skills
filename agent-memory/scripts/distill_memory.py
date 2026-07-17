@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preview or apply durable memory candidates to exact staged note paths."""
+"""Preview or apply durable memory candidates to exact final note paths."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def update_frontmatter_date(text: str, today: str) -> str:
     return head + body
 
 
-def render_staged_note(existing: str | None, topic: str, rows: list[dict], kind: str, today: str) -> str | None:
+def render_note(existing: str | None, topic: str, rows: list[dict], kind: str, today: str) -> str | None:
     if existing is None:
         text = (
             "---\n"
@@ -82,7 +82,7 @@ def render_staged_note(existing: str | None, topic: str, rows: list[dict], kind:
         if kind == "decision":
             text += f"## Date\n\n{today}.\n\n## Decision\n"
         else:
-            text += "## Use When\n\n- Review this staged guidance before promotion.\n\n## Guidance\n"
+            text += "## Use When\n\n- Apply this guidance when working on this topic.\n\n## Guidance\n"
     else:
         text = existing
     section = "## Guidance" if kind == "guidance" else "## Decision"
@@ -104,6 +104,18 @@ def render_staged_note(existing: str | None, topic: str, rows: list[dict], kind:
     if not additions:
         return None
     return update_frontmatter_date(text.rstrip() + "\n" + "\n".join(additions) + "\n", today)
+
+
+def render_router(existing: str, targets: list[Path]) -> str | None:
+    additions = []
+    for target in targets:
+        link = target.with_suffix("").as_posix()
+        if re.search(rf"\[\[{re.escape(link)}(?:[|#\]])", existing):
+            continue
+        additions.append(f"- [[{link}|{titleize(target.stem)}]]")
+    if not additions:
+        return None
+    return existing.rstrip() + "\n\n" + "\n".join(additions) + "\n"
 
 
 def file_hash(path: Path) -> str | None:
@@ -133,9 +145,9 @@ def apply_preview(
         raise SystemExit(f"invalid distillation preview changes: {preview_path}")
 
     memory_dir = router.parent.resolve()
-    approved_inboxes = {
-        unsymlinked_path(memory_dir, "Decisions", "Inbox"),
-        unsymlinked_path(memory_dir, "Guidance", "Inbox"),
+    approved_folders = {
+        unsymlinked_path(memory_dir, "Decisions"),
+        unsymlinked_path(memory_dir, "Guidance"),
     }
     validated: list[WriteTarget] = []
     for change in changes:
@@ -146,7 +158,7 @@ def apply_preview(
             raise SystemExit(f"invalid distillation preview target: {change['target']}")
         path = memory_dir.joinpath(*relative.parts)
         rendered = change["content"]
-        if path.parent not in approved_inboxes:
+        if path != router and path.parent not in approved_folders:
             raise SystemExit(f"invalid distillation preview target: {path}")
         if sha256_bytes(rendered.encode()) != change.get("rendered_sha256"):
             raise SystemExit(f"distillation preview content hash mismatch: {path}")
@@ -195,19 +207,21 @@ def distill(
         grouped_rows.setdefault((kind, topic_slug(row["topic"])), []).append(row)
 
     changes: list[tuple[Path, str]] = []
+    routes: list[Path] = []
     memory_dir = router.parent
     today = today or datetime.now(timezone.utc).date().isoformat()
     for (kind, topic), grouped in sorted(grouped_rows.items()):
         folder = "Guidance" if kind == "guidance" else "Decisions"
-        approved = unsymlinked_path(memory_dir, folder, f"{topic}.md")
-        staged = unsymlinked_path(memory_dir, folder, "Inbox", f"{topic}.md")
-        approved_text = approved.read_text(encoding="utf-8") if approved.exists() else None
-        if approved_text is not None and all(row_value(row, kind) in approved_text for row in grouped):
-            continue
-        existing = staged.read_text(encoding="utf-8") if staged.exists() else None
-        rendered = render_staged_note(existing, topic, grouped, kind, today)
+        target = unsymlinked_path(memory_dir, folder, f"{topic}.md")
+        routes.append(target.relative_to(memory_dir))
+        existing = target.read_text(encoding="utf-8") if target.exists() else None
+        rendered = render_note(existing, topic, grouped, kind, today)
         if rendered is not None:
-            changes.append((staged, rendered))
+            changes.append((target, rendered))
+
+    rendered_router = render_router(router.read_text(encoding="utf-8"), routes)
+    if rendered_router is not None:
+        changes.append((router, rendered_router))
 
     if not changes:
         preview_path.unlink(missing_ok=True)
@@ -258,6 +272,19 @@ def self_test() -> None:
             + "\n",
             encoding="utf-8",
         )
+        with source.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "type": "guidance",
+                        "topic": "Review Checkpoint",
+                        "guidance": "Run blocker-only review.",
+                        "source": "self-test",
+                        "durable": True,
+                    }
+                )
+                + "\n"
+            )
         index = memory / "index.md"
         index.write_text("# Memory\n\n## Decisions\n", encoding="utf-8")
         os.environ["OBSIDIAN_ROOT"] = os.fspath(root / "memory")
@@ -267,12 +294,15 @@ def self_test() -> None:
         )
         assert resolve_router(project) == index.resolve()
 
-        staged = (memory / "Decisions" / "Inbox" / "issue-workbench.md").resolve()
+        target = (memory / "Decisions" / "issue-workbench.md").resolve()
+        guidance = (memory / "Guidance" / "review-checkpoint.md").resolve()
         preview_path = project / DEFAULT_PREVIEW
         status, paths = distill(source, index, preview_path, today="2026-07-10")
-        assert status.startswith("PREVIEW files=Decisions/Inbox/issue-workbench.md artifact=")
-        assert paths == [staged]
-        assert not staged.exists()
+        assert status.startswith(
+            "PREVIEW files=Decisions/issue-workbench.md,Guidance/review-checkpoint.md,index.md artifact="
+        )
+        assert paths == [target, guidance, index.resolve()]
+        assert not target.exists() and not guidance.exists()
         preview = json.loads(preview_path.read_text(encoding="utf-8"))
         rendered = preview["changes"][0]["content"]
 
@@ -286,15 +316,15 @@ def self_test() -> None:
             raise AssertionError("applied preview after source drift")
         source.write_text(original_source, encoding="utf-8")
 
-        staged.parent.mkdir(parents=True)
-        staged.write_text("intervening edit\n", encoding="utf-8")
+        target.parent.mkdir(parents=True)
+        target.write_text("intervening edit\n", encoding="utf-8")
         try:
             distill(source, index, preview_path, apply=True)
         except SystemExit as exc:
             assert "changed after planning" in str(exc)
         else:
-            raise AssertionError("applied preview over changed staged memory")
-        staged.unlink()
+            raise AssertionError("applied preview over changed final memory")
+        target.unlink()
 
         recorded_plans = []
 
@@ -310,11 +340,14 @@ def self_test() -> None:
             today="2099-01-01",
             write_plan=recording_write_plan,
         )
-        assert status == "UPDATED files=Decisions/Inbox/issue-workbench.md"
-        assert paths == [staged]
+        assert status == "UPDATED files=Decisions/issue-workbench.md,Guidance/review-checkpoint.md,index.md"
+        assert paths == [target, guidance, index.resolve()]
         assert len(recorded_plans) == 1
-        assert [target.path for target in recorded_plans[0]["targets"]] == [staged]
-        assert staged.read_text(encoding="utf-8") == rendered
+        assert [item.path for item in recorded_plans[0]["targets"]] == [target, guidance, index.resolve()]
+        assert target.read_text(encoding="utf-8") == rendered
+        assert "Run blocker-only review." in guidance.read_text(encoding="utf-8")
+        assert "[[Decisions/issue-workbench|Issue Workbench]]" in index.read_text(encoding="utf-8")
+        assert "[[Guidance/review-checkpoint|Review Checkpoint]]" in index.read_text(encoding="utf-8")
         assert not preview_path.exists()
 
         status, paths = distill(source, index, preview_path, today="2026-07-10")
@@ -328,17 +361,16 @@ def self_test() -> None:
         escape_preview = project / ".context/escape-preview.json"
         status, _ = distill(source, escape_index, escape_preview, today="2026-07-10")
         assert status.startswith("PREVIEW")
-        outside_inbox = root / "outside-inbox"
-        outside_inbox.mkdir()
-        (escape_memory / "Decisions").mkdir()
-        (escape_memory / "Decisions" / "Inbox").symlink_to(outside_inbox, target_is_directory=True)
+        outside_decisions = root / "outside-decisions"
+        outside_decisions.mkdir()
+        (escape_memory / "Decisions").symlink_to(outside_decisions, target_is_directory=True)
         try:
             distill(source, escape_index, escape_preview, apply=True)
         except SystemExit as exc:
             assert "must not contain symlinks" in str(exc)
         else:
-            raise AssertionError("applied memory through symlinked Inbox")
-        assert not (outside_inbox / "issue-workbench.md").exists()
+            raise AssertionError("applied memory through symlinked Decisions")
+        assert not (outside_decisions / "issue-workbench.md").exists()
         assert escape_preview.exists()
 
         symlink_memory = root / "symlink-memory"
@@ -348,10 +380,10 @@ def self_test() -> None:
         symlink_preview = project / ".context/symlink-preview.json"
         status, paths = distill(source, symlink_index, symlink_preview, today="2026-07-10")
         assert status.startswith("PREVIEW")
-        staged = paths[0]
-        staged.parent.mkdir(parents=True)
-        redirected = staged.with_name("redirected.md")
-        staged.symlink_to(redirected)
+        target = paths[0]
+        target.parent.mkdir(parents=True)
+        redirected = target.with_name("redirected.md")
+        target.symlink_to(redirected)
         try:
             distill(source, symlink_index, symlink_preview, apply=True)
         except SystemExit as exc:
