@@ -17,16 +17,18 @@ Only `--setup` reads `references/setup.md` or runs setup.
 
 - `$agent-memory load` runs at a top-level workflow entry. Missing configuration
   or matching topics returns `memory_load=SKIPPED` and does not stop the caller.
-- During work, capture accepted, non-obvious engineering decisions whose
-  rationale future agents would otherwise rediscover: why code is shaped a
-  certain way, why an architecture boundary exists, why an optimization or
-  tradeoff was chosen, plus reusable root causes and repository rules.
-- A decision is accepted when the user states it or approves a plan, design, or
-  implementation containing an agent-authored choice. Record why it was chosen,
-  material alternatives or tradeoffs, and expected impact. This qualifies the
-  decision for capture but does not authorize final `--apply`.
-- Skip routine progress, files changed, checks, transient state, code-obvious
-  mechanics, reversible local choices, and duplicates.
+- During work, capture every distinct durable decision and guidance item; do not
+  stop after the first candidate or combine unrelated topics.
+- A decision settles a non-obvious engineering choice. It qualifies when the
+  user states it or approves a plan, design, or implementation containing it.
+  Record its rationale, material alternatives or tradeoffs, and expected impact.
+- Guidance preserves a verified repository improvement future sessions should
+  repeat or protect. Record what changed, when the practice applies, why it is
+  better than the previous behavior, and what future sessions must watch. User
+  corrections, repository invariants, and reusable failure lessons also qualify.
+- Capturing a candidate does not authorize final `--apply`.
+- Skip routine progress, bare file or commit summaries, checks, transient state,
+  code-obvious mechanics, reversible local choices, and duplicates.
 - Memory should explain the project's engineering approach, not narrate task
   history.
 - `$agent-memory distill` runs only when the top-level workflow is otherwise
@@ -47,14 +49,23 @@ Read the 6,000-character-capped output only when notes loaded.
 
 ## Capture and Distill
 
-Append a durable candidate with:
+Append one decision candidate per choice:
 
 ```bash
-python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/project --topic order-processing --decision "Keep retry policy in the application service" --reason "All transports share one policy; centralizing it avoids divergent behavior. Rejected per-adapter retries." --source "approved architecture plan"
+python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/project --topic order-processing --decision "Keep retry policy in the application service" --reason "All transports share one policy." --alternatives "Per-adapter retries would diverge." --impact "Every transport now uses one policy." --source "approved architecture plan"
 ```
 
-Equivalent normalized decisions receive the same stable ID and are recorded once.
-At the final top-level boundary, preview with:
+Append one guidance candidate per reusable practice:
+
+```bash
+python3 <agent_memory_dir>/scripts/append_decision.py --project-root /path/to/project --topic order-processing --guidance "Keep retry policy changes in the application service." --applies-when "Adding or changing an order transport." --change "Retry policy moved from adapters into the shared application service." --improvement "Transport behavior can no longer drift." --attention "Future sessions must keep transport adapters policy-free." --file src/orders/service.py --source "verified implementation"
+```
+
+Equivalent normalized candidates receive the same stable ID and are recorded
+once. Before the final preview, scan the accepted choices, repository delta,
+user corrections, reusable failures, and `.context/progress.md` for missed
+durable candidates. The ledger may confirm a candidate but is not itself memory.
+Then preview with:
 
 ```bash
 python3 <agent_memory_dir>/scripts/distill_memory.py --project-root /path/to/project --source .context/decisions.jsonl
