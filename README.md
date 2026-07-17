@@ -58,7 +58,7 @@ flowchart TD
   health -->|Review feedback| repair["review-repairbay"]
   repair --> health
   health -->|Yes| done["Merge-ready"]
-  done -->|Approved engineering reasoning| distill["agent-memory distill"]
+  done -->|Durable decisions or guidance| distill["agent-memory distill"]
 ```
 
 When skills are nested, the outer workflow stays in charge. `shipyard` launches child work, ingests their handoffs, batches integration, and delegates PR repair without giving up ownership.
@@ -107,7 +107,7 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 #### [🧠 `agent-memory`](agent-memory/)
 
-Loads confirmed project context and, after explicit creation approval, writes durable engineering decisions and guidance directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
+Loads confirmed project context, captures complete decisions and reusable repository guidance, and writes approved notes directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 

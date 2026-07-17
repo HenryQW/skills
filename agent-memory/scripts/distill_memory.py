@@ -40,7 +40,11 @@ def load_records(path: Path) -> list[dict]:
         row_type = row.get("type", "decision")
         if not row.get("durable", True) or row_type not in {"decision", "guidance"}:
             continue
-        required = ("topic", "source") + (("decision", "reason") if row_type == "decision" else ("guidance",))
+        required = ("topic", "source") + (
+            ("decision", "reason", "alternatives", "impact")
+            if row_type == "decision"
+            else ("guidance", "applies_when", "change", "improvement", "attention")
+        )
         missing = [key for key in required if not row.get(key)]
         if missing:
             raise SystemExit(f"{path}:{number}: missing {', '.join(missing)}")
@@ -68,6 +72,19 @@ def update_frontmatter_date(text: str, today: str) -> str:
     return head + body
 
 
+def append_section_items(text: str, heading: str, items: list[str]) -> str:
+    if not items:
+        return text
+    if heading not in text:
+        text = text.rstrip() + f"\n\n{heading}\n"
+    start = text.index(heading) + len(heading)
+    end = text.find("\n## ", start)
+    end = len(text) if end == -1 else end
+    section = text[start:end].rstrip()
+    separator = "\n" if section.strip() else "\n\n"
+    return text[:start] + section + separator + "\n".join(items) + "\n" + text[end:]
+
+
 def render_note(existing: str | None, topic: str, rows: list[dict], kind: str, today: str) -> str | None:
     if existing is None:
         text = (
@@ -81,11 +98,38 @@ def render_note(existing: str | None, topic: str, rows: list[dict], kind: str, t
         )
         if kind == "decision":
             text += f"## Date\n\n{today}.\n\n## Decision\n"
-        else:
-            text += "## Use When\n\n- Apply this guidance when working on this topic.\n\n## Guidance\n"
     else:
         text = existing
-    section = "## Guidance" if kind == "guidance" else "## Decision"
+    if kind == "guidance":
+        use_when = []
+        guidance = []
+        seen_conditions: set[str] = set()
+        seen_values: set[str] = set()
+        for row in rows:
+            condition = str(row["applies_when"]).strip()
+            value = row_value(row, kind)
+            if condition not in text and condition not in seen_conditions:
+                seen_conditions.add(condition)
+                use_when.append(f"- {condition}")
+            if value and value not in text and value not in seen_values:
+                seen_values.add(value)
+                files = ", ".join(row.get("files", []))
+                file_line = f"\n  **Files:** {files}." if files else ""
+                guidance.append(
+                    f"- **Change:** {row['change']}\n"
+                    f"  **Practice:** {value}\n"
+                    f"  **Improvement:** {row['improvement']}\n"
+                    f"  **Future attention:** {row['attention']}\n"
+                    f"  **Source:** {row['source']}."
+                    f"{file_line}"
+                )
+        if not use_when and not guidance:
+            return None
+        text = append_section_items(text, "## Use When", use_when)
+        text = append_section_items(text, "## Guidance", guidance)
+        return update_frontmatter_date(text.rstrip() + "\n", today)
+
+    section = "## Decision"
     if section not in text:
         text = text.rstrip() + f"\n\n{section}\n"
     additions = []
@@ -95,12 +139,12 @@ def render_note(existing: str | None, topic: str, rows: list[dict], kind: str, t
         if not value or value in text or value in seen_values:
             continue
         seen_values.add(value)
-        if kind == "decision":
-            files = ", ".join(row.get("files", []))
-            file_suffix = f" Files: {files}." if files else ""
-            additions.append(f"- **{value}** Reason: {row['reason']} Source: {row['source']}.{file_suffix}")
-        else:
-            additions.append(f"- {value} Source: {row['source']}.")
+        files = ", ".join(row.get("files", []))
+        file_suffix = f" Files: {files}." if files else ""
+        additions.append(
+            f"- **{value}** Reason: {row['reason']} Alternatives or tradeoffs: {row['alternatives']} "
+            f"Impact: {row['impact']} Source: {row['source']}.{file_suffix}"
+        )
     if not additions:
         return None
     return update_frontmatter_date(text.rstrip() + "\n" + "\n".join(additions) + "\n", today)
@@ -265,6 +309,8 @@ def self_test() -> None:
                     "topic": "Issue Workbench",
                     "decision": "Use lite mode for one issue.",
                     "reason": "Avoid graph overhead.",
+                    "alternatives": "A parent graph adds unnecessary coordination.",
+                    "impact": "Single-issue work starts with fewer steps.",
                     "source": "self-test",
                     "durable": True,
                 }
@@ -279,7 +325,12 @@ def self_test() -> None:
                         "type": "guidance",
                         "topic": "Review Checkpoint",
                         "guidance": "Run blocker-only review.",
+                        "applies_when": "A review is requested for a workflow branch.",
+                        "change": "The review contract now limits findings to blockers.",
+                        "improvement": "Agents spend less time on cosmetic churn.",
+                        "attention": "Future sessions must still report genuine blockers.",
                         "source": "self-test",
+                        "files": ["review-checkpoint/SKILL.md"],
                         "durable": True,
                     }
                 )
@@ -345,7 +396,35 @@ def self_test() -> None:
         assert len(recorded_plans) == 1
         assert [item.path for item in recorded_plans[0]["targets"]] == [target, guidance, index.resolve()]
         assert target.read_text(encoding="utf-8") == rendered
-        assert "Run blocker-only review." in guidance.read_text(encoding="utf-8")
+        guidance_text = guidance.read_text(encoding="utf-8")
+        assert "A review is requested for a workflow branch." in guidance_text
+        assert "The review contract now limits findings to blockers." in guidance_text
+        assert "Run blocker-only review." in guidance_text
+        assert "Agents spend less time on cosmetic churn." in guidance_text
+        assert "Future sessions must still report genuine blockers." in guidance_text
+        assert "review-checkpoint/SKILL.md" in guidance_text
+        expanded_guidance = render_note(
+            guidance_text,
+            "review-checkpoint",
+            [
+                {
+                    "type": "guidance",
+                    "topic": "review-checkpoint",
+                    "guidance": "Compare summaries with live comments.",
+                    "applies_when": "A summary reports a stale blocker.",
+                    "change": "Review evidence now wins over summary prose.",
+                    "improvement": "Approved decisions are not accidentally reversed.",
+                    "attention": "Re-check comments after every pushed fix.",
+                    "source": "self-test",
+                    "files": [],
+                }
+            ],
+            "guidance",
+            "2026-07-11",
+        )
+        assert expanded_guidance is not None
+        assert "A summary reports a stale blocker." in expanded_guidance
+        assert "Review evidence now wins over summary prose." in expanded_guidance
         assert "[[Decisions/issue-workbench|Issue Workbench]]" in index.read_text(encoding="utf-8")
         assert "[[Guidance/review-checkpoint|Review Checkpoint]]" in index.read_text(encoding="utf-8")
         assert not preview_path.exists()

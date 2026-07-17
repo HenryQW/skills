@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent Memory"
-  short_description: "Use and distill project agent memory"
-  default_prompt: "Use $agent-memory load to load approved project memory or $agent-memory distill to preview durable decision candidates; pass --setup only for explicit bootstrap."
+  short_description: "Load and distill project decisions and guidance"
+  default_prompt: "Use $agent-memory load to load approved project memory or $agent-memory distill to preview complete durable decision and guidance candidates; pass --setup only for explicit bootstrap."
