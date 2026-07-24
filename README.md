@@ -97,7 +97,7 @@ Fixes selected review feedback or, with explicit authority, clears actionable th
 
 #### [🚢 `shipyard`](shipyard/)
 
-Runs an approved issue graph through frozen waves, HEAD-bound gates, one PR, and its repair loop.
+Runs an approved issue graph through isolated child worktrees, frozen waves, safe cleanup, and one repairable PR.
 
 ### 🧰 Supporting skills
 

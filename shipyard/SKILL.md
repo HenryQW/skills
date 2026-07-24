@@ -41,7 +41,7 @@ Read only issue-linked or named material needed for runnable children.
 ## 2. Run a frozen wave
 
 1. From the clean integration branch, select the ascending set of current runnable non-final children. Capture that exact set and `wave_base_sha=$(git rev-parse HEAD)`; neither may change before the complete wave is integrated.
-2. For each child, require a fresh deterministic sibling worktree path, run `integration_child.py start <issue> --worktree-path <path> --integration-branch <integration_branch>`, and spawn in parallel with `fork_turns=none` using this complete contract:
+2. For each child, require an absent deterministic sibling path, then run `integration_child.py start <issue> --worktree-path <path> --integration-branch <integration_branch>` to create a clean worktree on a new branch from `integration_branch` at `wave_base_sha`. A path removed after an earlier wave may be reused. Spawn children in parallel with `fork_turns=none` using this complete contract:
 
    ```text
    Use $issue-workbench <child_issue>
@@ -52,15 +52,16 @@ Read only issue-linked or named material needed for runnable children.
    wait_mode=block
    ```
 
-   Use `defer` only when explicitly requested. Do not probe running children or delete their worktrees automatically; use absolute paths for mutations once multiple worktrees exist.
+   Use `defer` only when explicitly requested. Do not probe running children or remove running, pending, failed, conflicted, or otherwise unmerged worktrees; use absolute paths for mutations once multiple worktrees exist.
 3. Ingest every returned handoff directly into the canonical manifest through `manifest.py ingest-child --file <path>` as it returns. `manifest.py` validates it; never reconstruct or separately validate its JSON. Re-append durable child decisions through Agent Memory's append helper.
 4. Enforce the frozen-wave barrier. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. If a defect belongs to a `done-local` predecessor, follow Repair waves. Stop on base drift; never refresh the wave base or children.
 5. Merge the complete PASS wave with `integration_child.py merge ... --expected-commit <commit>`, recording each success through `manifest.py merge-child`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
-6. After the batch, run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
+6. After the complete wave is merged and every merge is recorded, remove each child worktree with `git worktree remove <absolute_path>` without `--force`. Retain and report any worktree that cannot be removed safely. Never remove the integration worktree.
+7. Run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
 
 ## Repair waves
 
-- Never reuse a worktree whose child has already merged. Group all child-owned findings from one completed review by issue, capture the current integration `HEAD` and issue set, then start one fresh `issue-<n>-repair-<short-head>` branch/worktree per issue from that HEAD using existing `branch_slug` and `worktree_path` inputs.
+- Never continue work on a merged child branch. Group all child-owned findings from one completed review by issue, capture the current integration `HEAD` and issue set, then start one new `issue-<n>-repair-<short-head>` branch in a clean worktree per issue from that HEAD using existing `branch_slug` and `worktree_path` inputs.
 - Run each repair group through the frozen-wave contract with Workbench children in parallel.
 - If an open implementation wave reports a defect owned by an already-merged predecessor, merge nothing from the open wave. Repair the predecessor in a fresh frozen repair wave, retire the old unmerged worktrees/handoffs without reusing them, and relaunch the entire invalidated wave from the new integration `HEAD` with fresh `branch_slug=retry-<short-head>` branches and worktrees.
 
