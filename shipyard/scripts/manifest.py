@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-VERSION = 2
+VERSION = 3
 DEFAULT_MANIFEST = Path(".context/shipyard-manifest.json")
 REQUIRED_TOP_LEVEL = {
     "version",
@@ -32,17 +32,15 @@ REQUIRED_CHILD = {
     "worktree",
     "base_ref",
     "base_sha",
-    "commit",
     "head_sha",
     "changed_files",
     "diff_stat",
-    "verification",
     "review",
     "checks",
     "known_skips",
     "status",
 }
-REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"} | {"artifacts"}
+REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"}
 OPTIONAL_HANDOFF = {"needs_child_fix", "pending_review"}
 REQUIRED_PENDING_REVIEW = {
     "review_id",
@@ -105,10 +103,10 @@ def read_json_arg(raw: str | None, file_path: str | None) -> dict[str, Any]:
 def progress_pointer(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "goal": f"shipyard {manifest['parent_issue']}",
-        "current_step": manifest.get("current_step", "use shipyard manifest"),
+        "current_step": "use shipyard manifest",
         "artifacts": {"manifest": os.fspath(manifest_path.resolve())},
-        "blockers": manifest.get("blockers", []),
-        "validation": manifest.get("validation_plan", {}).get("checks", []),
+        "blockers": [],
+        "validation": [],
     }
 
 
@@ -209,21 +207,6 @@ def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return []
 
 
-def verification_errors(child: dict[str, Any], prefix: str) -> list[str]:
-    value = child.get("verification")
-    if isinstance(value, str) and (value.startswith("pass:") or value.startswith("skip:")):
-        return []
-    return [f"{prefix} verification must start with pass: or skip:"]
-
-
-def artifact_errors(child: dict[str, Any], prefix: str) -> list[str]:
-    artifacts = child.get("artifacts")
-    value = artifacts.get("progress_path") if isinstance(artifacts, dict) else None
-    if isinstance(value, str) and value.strip():
-        return []
-    return [f"{prefix} artifacts.progress_path must be a non-empty string"]
-
-
 def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     if child.get("review") != "PENDING_REVIEW":
         return []
@@ -241,7 +224,6 @@ def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
         "local_head_sha": child.get("head_sha"),
         "base_ref": child.get("base_ref"),
         "base_sha": child.get("base_sha"),
-        "progress_path": child.get("artifacts", {}).get("progress_path"),
     }
     errors.extend(
         f"{prefix} pending_review {field} must match handoff {field}"
@@ -278,8 +260,6 @@ def handoff_data(child: dict[str, Any]) -> dict[str, Any]:
 def child_payload_errors(child: dict[str, Any]) -> list[str]:
     return (
         review_status_errors(child, "child payload")
-        + verification_errors(child, "child payload")
-        + artifact_errors(child, "child payload")
         + failed_review_errors(child, "child payload")
         + pending_review_errors(child, "child payload")
     )
@@ -301,17 +281,18 @@ def decode_handoff(child: dict[str, Any]) -> dict[str, Any]:
 
 
 def handoff_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
-    progress_path = facts.get("progress_path")
     child = {
         key: value
         for key, value in facts.items()
-        if key in REQUIRED_HANDOFF - {"artifacts", "pending_review", "needs_child_fix"}
+        if key in REQUIRED_HANDOFF - {"pending_review", "needs_child_fix"}
     }
-    child["artifacts"] = {"progress_path": progress_path}
     if facts.get("needs_child_fix") is not None:
         child["needs_child_fix"] = facts["needs_child_fix"]
     if facts.get("review") == "PENDING_REVIEW":
-        child["pending_review"] = pending_review_from_progress(Path(str(progress_path)))
+        progress_path = facts.get("progress_path")
+        if not isinstance(progress_path, str) or not progress_path.strip():
+            raise SystemExit("PENDING_REVIEW requires progress_path")
+        child["pending_review"] = pending_review_from_progress(Path(progress_path))
     return decode_handoff(child)
 
 
@@ -333,13 +314,13 @@ def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
     if existing:
         if handoff_data(existing) == handoff_data(child):
             return manifest
-        same_merged_commit = (
+        same_merged_head = (
             existing.get("status") == "merged"
             and child["status"] == "returned"
-            and existing.get("commit") == child.get("commit")
+            and existing.get("head_sha") == child.get("head_sha")
         )
-        if same_merged_commit:
-            raise SystemExit(f"child {child['issue']} repair handoff requires a new commit")
+        if same_merged_head:
+            raise SystemExit(f"child {child['issue']} repair handoff requires a new head")
         allowed = HANDOFF_TRANSITIONS.get(existing.get("status"), set())
         if child["status"] not in allowed:
             raise SystemExit(f"child {child['issue']} cannot transition from {existing.get('status')} to {child['status']}")
@@ -355,14 +336,14 @@ def ingest_child(path: Path, child: dict[str, Any]) -> dict[str, Any]:
     return manifest
 
 
-def merge_child(path: Path, issue: str, commit: str) -> dict[str, Any]:
+def merge_child(path: Path, issue: str, head_sha: str) -> dict[str, Any]:
     manifest = load_manifest(path)
     normalized_issue = normalize_issue(issue)
     existing = next((item for item in manifest.get("children", []) if item.get("issue") == normalized_issue), None)
     if not existing:
         raise SystemExit(f"child {normalized_issue} has no ingested handoff")
-    if existing.get("commit") != commit:
-        raise SystemExit(f"child {normalized_issue} commit does not match ingested handoff")
+    if existing.get("head_sha") != head_sha:
+        raise SystemExit(f"child {normalized_issue} head SHA does not match ingested handoff")
     if existing.get("status") == "merged":
         return manifest
     if existing.get("status") != "returned":
@@ -447,6 +428,9 @@ def set_validation(path: Path, event: dict[str, Any]) -> dict[str, Any]:
 
 
 def reusable_evidence_errors(manifest: dict[str, Any], head_sha: str) -> list[str]:
+    manifest_errors = validate_manifest(manifest)
+    if manifest_errors:
+        return manifest_errors
     final = manifest.get("validation_plan", {}).get("final")
     review = manifest.get("review_gate", {}).get("latest")
     errors: list[str] = []
@@ -482,8 +466,6 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(f"children[{index}] missing field: {field}" for field in sorted(missing))
         errors.extend(status_errors(child, f"children[{index}]"))
         errors.extend(review_status_errors(child, f"children[{index}]"))
-        errors.extend(verification_errors(child, f"children[{index}]"))
-        errors.extend(artifact_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
         errors.extend(pending_review_errors(child, f"children[{index}]"))
     final = manifest.get("validation_plan", {}).get("final")
@@ -509,28 +491,16 @@ def self_test() -> int:
                 "base_ref": "shipyard-123",
                 "base_sha": "a" * 40,
                 "head_sha": "b" * 40,
-                "commit": "b" * 40,
                 "changed_files": ["README.md"],
                 "diff_stat": "README.md | 1 +",
-                "verification": "pass:unit",
                 "review": "PASS",
                 "checks": ["python3 scripts/validate.py -> passed"],
                 "known_skips": [],
-                "artifacts": {"progress_path": "/tmp/child/.context/progress.md"},
             }
             facts = dict(passed)
-            facts["progress_path"] = facts.pop("artifacts")["progress_path"]
             handoff_path = Path("integration-handoff.json")
             write_child_handoff(handoff_path, facts)
             assert handoff_path.read_bytes() == canonical_handoff_bytes(decode_handoff(passed))
-            missing_artifact = dict(passed)
-            missing_artifact.pop("artifacts")
-            try:
-                ingest_child(path, missing_artifact)
-            except SystemExit as exc:
-                assert "artifacts" in str(exc)
-            else:
-                raise AssertionError("expected handoff without progress artifact to fail")
             ingest_child(path, passed)
             manifest = load_manifest(path)
             assert manifest["children"][0]["status"] == "returned"
@@ -561,16 +531,16 @@ def self_test() -> int:
             merged_progress = (path.parent / "progress.md").read_text(encoding="utf-8")
             merge_child(path, "#231", "b" * 40)
             assert path.read_text(encoding="utf-8") == merged
-            same_commit_repair = dict(passed, checks=["different check"])
+            same_head_repair = dict(passed, checks=["different check"])
             try:
-                ingest_child(path, same_commit_repair)
+                ingest_child(path, same_head_repair)
             except SystemExit as exc:
-                assert "repair handoff requires a new commit" in str(exc)
+                assert "repair handoff requires a new head" in str(exc)
             else:
-                raise AssertionError("expected same-commit repair handoff to fail")
+                raise AssertionError("expected same-head repair handoff to fail")
             assert path.read_text(encoding="utf-8") == merged
             assert (path.parent / "progress.md").read_text(encoding="utf-8") == merged_progress
-            repaired = dict(passed, commit="c" * 40, head_sha="c" * 40, checks=["repair check"])
+            repaired = dict(passed, head_sha="c" * 40, checks=["repair check"])
             ingest_child(path, repaired)
             assert load_manifest(path)["children"][0]["status"] == "returned"
             merge_child(path, "#231", "c" * 40)
@@ -585,7 +555,7 @@ def self_test() -> int:
             try:
                 merge_child(path, "#231", "d" * 40)
             except SystemExit as exc:
-                assert "commit does not match" in str(exc)
+                assert "head SHA does not match" in str(exc)
             else:
                 raise AssertionError("expected conflicting repaired merge to fail")
             assert path.read_text(encoding="utf-8") == repaired_merged
@@ -637,15 +607,20 @@ def self_test() -> int:
             ingest_child(path, fixed)
             assert next(child for child in load_manifest(path)["children"] if child["issue"] == "#233")["status"] == "returned"
 
-            invalid = dict(passed, issue="#234", verification="failed tests")
-            before_invalid = path.read_text(encoding="utf-8")
-            try:
-                ingest_child(path, invalid)
-            except SystemExit as exc:
-                assert "verification" in str(exc)
-            else:
-                raise AssertionError("expected invalid handoff to fail")
-            assert path.read_text(encoding="utf-8") == before_invalid
+            for field, value in {
+                "commit": "b" * 40,
+                "verification": "pass:unit",
+                "artifacts": {"progress_path": "/tmp/progress.md"},
+            }.items():
+                legacy = dict(passed, issue="#234", **{field: value})
+                before_legacy = path.read_text(encoding="utf-8")
+                try:
+                    ingest_child(path, legacy)
+                except SystemExit as exc:
+                    assert f"unexpected field(s): {field}" in str(exc)
+                else:
+                    raise AssertionError(f"expected legacy {field} handoff to fail")
+                assert path.read_text(encoding="utf-8") == before_legacy
 
             head_sha = "c" * 40
             validation = {
@@ -674,6 +649,9 @@ def self_test() -> int:
             set_review(path, review_event)
             assert reusable_evidence_errors(load_manifest(path), head_sha) == []
             assert "stale" in "\n".join(reusable_evidence_errors(load_manifest(path), "d" * 40))
+            assert "unsupported version" in "\n".join(
+                reusable_evidence_errors(dict(load_manifest(path), version=2), head_sha)
+            )
             try:
                 set_review(path, {"scope": "shipyard", "status": "PASS"})
             except SystemExit as exc:
@@ -686,6 +664,8 @@ def self_test() -> int:
             assert errors == []
             progress = json.loads((path.parent / "progress.md").read_text(encoding="utf-8"))
             assert progress["artifacts"]["manifest"] == os.fspath(path.resolve())
+            assert progress["blockers"] == []
+            assert progress["validation"] == []
             assert manifest["children"][0]["status"] == "merged"
             assert manifest["review_gate"]["latest"]["scope"] == "shipyard"
         finally:
@@ -715,20 +695,18 @@ def main() -> int:
     handoff.add_argument("--worktree", required=True)
     handoff.add_argument("--base-ref", required=True)
     handoff.add_argument("--base-sha", required=True)
-    handoff.add_argument("--commit", required=True)
     handoff.add_argument("--head-sha", required=True)
     handoff.add_argument("--changed-file", action="append", default=[])
     handoff.add_argument("--diff-stat", required=True)
-    handoff.add_argument("--verification", required=True)
     handoff.add_argument("--review", required=True)
     handoff.add_argument("--check", action="append", default=[])
     handoff.add_argument("--known-skip", action="append", default=[])
-    handoff.add_argument("--progress-path", required=True)
+    handoff.add_argument("--progress-path")
     handoff.add_argument("--needs-child-fix")
 
     merged_child = subparsers.add_parser("merge-child")
     merged_child.add_argument("issue")
-    merged_child.add_argument("--commit", required=True)
+    merged_child.add_argument("--head-sha", required=True)
 
     review = subparsers.add_parser("set-review")
     review.add_argument("--json")
@@ -760,11 +738,9 @@ def main() -> int:
             "worktree": args.worktree,
             "base_ref": args.base_ref,
             "base_sha": args.base_sha,
-            "commit": args.commit,
             "head_sha": args.head_sha,
             "changed_files": args.changed_file,
             "diff_stat": args.diff_stat,
-            "verification": args.verification,
             "review": args.review,
             "checks": args.check,
             "known_skips": args.known_skip,
@@ -775,7 +751,7 @@ def main() -> int:
     elif args.command == "ingest-child":
         ingest_child(path, read_json_arg(args.json, args.file))
     elif args.command == "merge-child":
-        merge_child(path, args.issue, args.commit)
+        merge_child(path, args.issue, args.head_sha)
     elif args.command == "set-review":
         set_review(path, read_json_arg(args.json, args.file))
     elif args.command == "set-validation":

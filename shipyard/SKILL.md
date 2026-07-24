@@ -22,7 +22,7 @@ Direct invocation owns `$agent-memory`; nested skills defer it to Shipyard.
 - The parent issue is durable truth; child bodies define dependencies and PRs define durable implementation progress.
 - `.context/shipyard-manifest.json` is the single trusted local run artifact; `manifest.py` alone validates handoffs, lifecycle transitions, validation, and review events. `.context/progress.md` only points to it.
 - A child is `done-local` after its recorded branch is merged into the integration branch. Merging the final Shipyard PR makes that completion durable.
-- Load each nested skill once, immediately before first use. Query manifest coordination as `issue`, `commit`, `status`, and `verification`; inspect full diffs only for incomplete or surprising evidence or merge conflicts.
+- Load each nested skill once, immediately before first use. Query manifest coordination as `issue`, `head_sha`, `status`, and `checks`; inspect full diffs only for incomplete or surprising evidence or merge conflicts.
 - A frozen wave is one issue set plus `wave_base_sha`: no child merges until every handoff is `PASS` without `needs_child_fix` and every retained base still matches; then all merge in ascending issue order. Pending or failed work keeps the whole wave unmerged.
 - Validation and review evidence are HEAD-bound; any code-changing repair invalidates evidence for the prior HEAD.
 
@@ -48,16 +48,14 @@ Read only issue-linked or named material needed for runnable children.
    worktree_path=<absolute_child_worktree>
    handoff_mode=integration_branch
    integration_branch=<integration_branch>
-   review_base=<integration_branch>
-   wait_mode=block
    ```
 
-   Use `defer` only when explicitly requested. Do not probe running children or remove running, pending, failed, conflicted, or otherwise unmerged worktrees; use absolute paths for mutations once multiple worktrees exist.
+   Workbench enters the prepared worktree and runs the child's Greptile gate; it never creates the worktree or launches a PR. Use `defer` only when explicitly requested. Do not probe running children or remove running, pending, failed, conflicted, or otherwise unmerged worktrees; use absolute paths for mutations once multiple worktrees exist.
 3. Ingest every returned handoff directly into the canonical manifest through `manifest.py ingest-child --file <path>` as it returns. `manifest.py` validates it; never reconstruct or separately validate its JSON. Re-append durable child decisions through Agent Memory's append helper.
 4. Enforce the frozen-wave barrier. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. If a defect belongs to a `done-local` predecessor, follow Repair waves. Stop on base drift; never refresh the wave base or children.
-5. Merge the complete PASS wave with `integration_child.py merge ... --expected-commit <commit>`, recording each success through `manifest.py merge-child`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
+5. Merge the complete PASS wave with `integration_child.py merge ... --expected-head <head_sha>`, recording each success through `manifest.py merge-child --head-sha <head_sha>`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
 6. After the complete wave is merged and every merge is recorded, remove each child worktree with `git worktree remove <absolute_path>` without `--force`. Retain and report any worktree that cannot be removed safely. Never remove the integration worktree.
-7. Run one smallest relevant wave validation and re-inspect dependencies. Reserve the complete integrated suite for `final_check`.
+7. Re-inspect dependencies. Before another non-final wave, run a wave check only for cross-child risk not covered by child checks. If `final_check` is next, skip wave validation; never rerun child checks immediately before it.
 
 ## Repair waves
 
@@ -77,14 +75,10 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 ## 4. Exact-head review and PR
 
 1. Inspect only structural guards, compact diff statistics, and merge topology.
-2. Shipyard owns pushing the initial integration `HEAD`; set its upstream when needed and require pushed parity. Run exactly one nested `$review-checkpoint` with `mode=review_only`, `wait_mode=block`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs Greptile and writes review events.
+2. After every child is merged and `final_check` passes, Shipyard owns pushing the initial integration `HEAD`; set its upstream when needed and require pushed parity. Run exactly one parent `$review-checkpoint` with `mode=review_only`, `wait_mode=block`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs the final Greptile and writes review events.
 3. Route findings as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`. Child and final-check defects use a fresh Repair wave; Shipyard fixes only merge conflicts, PR body/progress, or final assembly. After any code fix, rerun final check and this exact-head gate. Do not loop on stale, non-actionable, or unavailable-tool findings.
 4. `PENDING_REVIEW` stops publication. After any review-fix commit, rerun final-check commands and replace the SHA-bound validation event.
-5. Require manifest reuse at current `HEAD`, then invoke nested `$pr-launchpad` with `shipyard_manifest=<absolute manifest>` and memory skipped:
-
-   ```bash
-   python3 <shipyard_dir>/scripts/manifest.py --manifest <manifest_path> can-reuse $(git rev-parse HEAD)
-   ```
+5. Invoke nested `$pr-launchpad` with `shipyard_manifest=<absolute manifest>` and memory skipped; Launchpad alone validates manifest reuse at current `HEAD`.
 
 ## 5. PR health
 
@@ -96,4 +90,4 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 
 ## Output
 
-Inspect-only returns the parent URL, branch policy, child state/blockers/PR/next action, runnable set, and stop reason. Execution returns the parent and PR URLs, integration branch, manifest path, merged issues, checks, routing, and stop reason. Normal children use one compact line containing issue, commit, status, and verification; add branch, worktree, base, or diff details only for blockers or requested diagnostics.
+Inspect-only returns the parent URL, branch policy, child state/blockers/PR/next action, runnable set, and stop reason. Execution returns the parent and PR URLs, integration branch, manifest path, merged issues, checks, routing, and stop reason. Normal children use one compact line containing issue, head SHA, status, and checks; add branch, worktree, base, or diff details only for blockers or requested diagnostics.

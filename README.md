@@ -77,11 +77,11 @@ Builds a dependency-aware issue graph and publishes it only after approval of th
 
 #### [🔧 `issue-workbench`](issue-workbench/)
 
-Implements one issue through its review gate, then publishes a PR or returns a verified `shipyard` handoff.
+Implements one issue in its prepared branch, reuses HEAD-bound checks, then publishes a PR or returns a verified `shipyard` handoff.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
-Validates and publishes the inspected branch, reusing one matching PR when safe.
+Publishes the inspected branch, reusing HEAD-bound validation and one matching PR when safe.
 
 #### [🔭 `repo-surveyor`](repo-surveyor/)
 
@@ -93,11 +93,11 @@ Reviews one pushed branch head through Greptile or one adversarial fallback and 
 
 #### [🩹 `review-repairbay`](review-repairbay/)
 
-Fixes selected review feedback or, with explicit authority, clears actionable threads and verifies none remain.
+Fixes selected review feedback with focused validation or clears actionable threads when explicitly authorized.
 
 #### [🚢 `shipyard`](shipyard/)
 
-Runs an approved issue graph through isolated child worktrees, frozen waves, safe cleanup, and one repairable PR.
+Runs an approved issue graph through child-reviewed worktrees, frozen waves, one final parent review, and one repairable PR.
 
 ### 🧰 Supporting skills
 

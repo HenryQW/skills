@@ -11,7 +11,8 @@ Publish the current branch as a pull request.
 
 - `base_branch` defaults to the repository default branch.
 - `issue_number` or `issue_numbers` may come from input, branch, or title.
-- `shipyard_manifest` supplies only close targets, child commits, checks/skips,
+- `validated_head` plus non-empty `validation` commands/results may come from nested `issue-workbench`.
+- `shipyard_manifest` supplies only close targets, child heads, checks/skips,
   and review status.
 
 Direct invocation owns `$agent-memory`; nested invocation defers it to
@@ -24,15 +25,18 @@ Direct invocation owns `$agent-memory`; nested invocation defers it to
    staged and unstaged diffs. Do not commit `.context/`, `.agents/`, or local
    progress. Stop when unrelated changes make intended scope ambiguous;
    otherwise make the focused Conventional Commit.
-2. Run the smallest relevant non-destructive validation. With a manifest, first
+2. Reuse HEAD-bound validation before running a check. With a manifest, first
    run `python3 <shipyard_dir>/scripts/manifest.py --manifest
    <shipyard_manifest> can-reuse $(git rev-parse HEAD)` and reuse recorded
-   evidence only on success. Otherwise validate normally; state honestly when
-   no relevant check exists.
+   evidence only on success. Without a manifest, reuse nested Workbench evidence
+   only when `validated_head` equals current `HEAD` and validation is non-empty.
+   Otherwise run the smallest relevant non-destructive validation; state
+   honestly when no relevant check exists.
 3. Derive a Conventional Commit PR title and the fixed body below from the live
    diff and validation. Manifest evidence never overrides git.
-4. Check `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`. Push with
-   `git push --set-upstream origin HEAD` when absent, otherwise `git push`.
+4. Resolve the upstream and its SHA. Push with `git push --set-upstream origin
+   HEAD` when absent, `git push` when its SHA differs from `HEAD`, and do not
+   push when they already match.
 5. Write the multiline body to a temporary file or heredoc. Before creating,
    query open PRs/MRs whose source is the current branch (`gh pr list --head
    <branch>` or the `glab` equivalent). Reuse exactly one only when its source

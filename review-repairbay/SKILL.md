@@ -23,9 +23,10 @@ reusable root causes—not comments, thread state, IDs, or routine fixes.
 2. Feedback is evidence-complete when it names the file or symbol, defect, and
    expected behavior. Then `fix-selected` skips PR/thread discovery: inspect the
    named code, direct callers, and regression tests; make the smallest fix and run
-   focused then required broader validation. Escalate only when evidence is
-   contradicted or insufficient. Direct fixes remain uncommitted and unpushed
-   unless the user requested publication. When nested Shipyard explicitly
+   focused validation. Direct mode then runs any required broader validation;
+   nested Shipyard mode leaves `final_check` to Shipyard. Escalate only when
+   evidence is contradicted or insufficient. Direct fixes remain uncommitted
+   and unpushed unless the user requested publication. When nested Shipyard explicitly
    delegates commit-and-push authority, inspect the final scoped code diff,
    commit only those fixes, and push before returning; nesting alone is not
    authority. `fix-selected` never authorizes GitHub thread writes.

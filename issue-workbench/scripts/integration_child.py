@@ -100,15 +100,11 @@ def record_handoff_progress(
     progress: Path,
     handoff: Path,
     review: str,
-    checks: list[str],
-    known_skips: list[str],
     needs_child_fix: str | None,
 ) -> Path:
     blockers = []
     if needs_child_fix:
         blockers.append({"needs_child_fix": needs_child_fix})
-    validation = list(checks)
-    validation.extend(f"known_skip:{skip}" for skip in known_skips)
     artifacts: dict[str, object] = {"handoff": os.fspath(handoff.resolve())}
     if review == "PENDING_REVIEW":
         current = json.loads(progress.read_text(encoding="utf-8"))
@@ -119,7 +115,6 @@ def record_handoff_progress(
         "handoff ready",
         artifacts,
         blockers,
-        validation,
     )
     return handoff.resolve()
 
@@ -127,7 +122,6 @@ def record_handoff_progress(
 def write_handoff(
     progress: Path,
     review_base: str,
-    verification: str,
     review: str,
     checks: list[str],
     known_skips: list[str],
@@ -139,35 +133,31 @@ def write_handoff(
     diff_stat: str,
 ) -> Path:
     handoff = progress.parent / HANDOFF_NAME
+    facts = {
+        "issue": issue,
+        "branch": branch,
+        "worktree": os.fspath(Path.cwd()),
+        "base_ref": review_base,
+        "base_sha": revision(review_base),
+        "head_sha": head_sha,
+        "changed_files": changed_files,
+        "diff_stat": diff_stat,
+        "review": review,
+        "checks": checks,
+        "known_skips": known_skips,
+        "needs_child_fix": needs_child_fix,
+    }
+    if review == "PENDING_REVIEW":
+        facts["progress_path"] = os.fspath(progress)
     try:
-        write_child_handoff(
-            handoff,
-            {
-                "issue": issue,
-                "branch": branch,
-                "worktree": os.fspath(Path.cwd()),
-                "base_ref": review_base,
-                "base_sha": revision(review_base),
-                "commit": head_sha,
-                "head_sha": head_sha,
-                "changed_files": changed_files,
-                "diff_stat": diff_stat,
-                "verification": verification,
-                "review": review,
-                "checks": checks,
-                "known_skips": known_skips,
-                "progress_path": os.fspath(progress),
-                "needs_child_fix": needs_child_fix,
-            },
-        )
+        write_child_handoff(handoff, facts)
     except SystemExit as exc:
         raise RuntimeError(str(exc)) from None
-    return record_handoff_progress(progress, handoff, review, checks, known_skips, needs_child_fix)
+    return record_handoff_progress(progress, handoff, review, needs_child_fix)
 
 
 def finish_child(
     review_base: str,
-    verification: str,
     review: str,
     checks: list[str] | None = None,
     known_skips: list[str] | None = None,
@@ -187,7 +177,6 @@ def finish_child(
     return write_handoff(
         progress,
         review_base,
-        verification,
         review,
         checks or [],
         known_skips or [],
@@ -200,17 +189,17 @@ def finish_child(
     )
 
 
-def merge_child(branch: str, integration_branch: str, expected_commit: str | None = None) -> None:
+def merge_child(branch: str, integration_branch: str, expected_head: str | None = None) -> None:
     current = current_branch()
     if current != integration_branch:
         raise RuntimeError(f"expected integration branch {integration_branch}, got {current}")
     dirty = changed_code_status()
     if dirty:
         raise RuntimeError("uncommitted non-context changes remain:\n" + "\n".join(dirty))
-    if expected_commit:
-        actual_commit = revision(branch)
-        if actual_commit != expected_commit:
-            raise RuntimeError(f"expected {branch} at {expected_commit}, got {actual_commit}")
+    if expected_head:
+        actual_head = revision(branch)
+        if actual_head != expected_head:
+            raise RuntimeError(f"expected {branch} at {expected_head}, got {actual_head}")
     run(["git", "merge", "--no-ff", "--no-edit", branch])
 
 
@@ -265,16 +254,15 @@ def self_test() -> int:
             Path("README.md").write_text("seed\nchild\n", encoding="utf-8")
             run(["git", "add", "README.md"])
             run(["git", "commit", "-m", "fix(test): child change"])
-            assert_raises("pass:", finish_child, "integration", "maybe", "PASS")
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
-            assert_raises("uncommitted non-context", finish_child, "integration", "pass:demo", "PASS")
+            assert_raises("uncommitted non-context", finish_child, "integration", "PASS")
             Path("dirty.txt").unlink()
-            assert_raises("PASS, PENDING_REVIEW, or FAIL", finish_child, "integration", "pass:demo", "MAYBE")
-            assert_raises("requires needs_child_fix", finish_child, "integration", "skip:needs child fix", "FAIL")
-            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "123")
-            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#abc")
-            assert_raises("#123", finish_child, "integration", "skip:needs child fix", "FAIL", [], [], "#123 extra")
-            finish_path = finish_child("integration", "pass:demo", "PASS", ["python -m test"], ["slow check"])
+            assert_raises("PASS, PENDING_REVIEW, or FAIL", finish_child, "integration", "MAYBE")
+            assert_raises("requires needs_child_fix", finish_child, "integration", "FAIL")
+            assert_raises("#123", finish_child, "integration", "FAIL", [], [], "123")
+            assert_raises("#123", finish_child, "integration", "FAIL", [], [], "#abc")
+            assert_raises("#123", finish_child, "integration", "FAIL", [], [], "#123 extra")
+            finish_path = finish_child("integration", "PASS", ["python -m test"], ["slow check"])
             assert finish_path == (worktree / ".context" / HANDOFF_NAME).resolve()
             finish = json.loads(finish_path.read_text(encoding="utf-8"))
             assert finish_path.read_bytes() == (json.dumps(finish, indent=2, sort_keys=True) + "\n").encode()
@@ -283,21 +271,21 @@ def self_test() -> int:
             assert finish["issue"] == "#123"
             assert finish["base_ref"] == "integration"
             assert finish["base_sha"] == integration_head
-            assert finish["head_sha"] == finish["commit"]
+            assert finish["head_sha"] == run(["git", "rev-parse", "HEAD"])
+            assert "commit" not in finish
+            assert "verification" not in finish
+            assert "artifacts" not in finish
             assert finish["changed_files"] == ["README.md"]
             assert str(finish["diff_stat"])
             assert finish["review"] == "PASS"
             assert finish["checks"] == ["python -m test"]
             assert finish["known_skips"] == ["slow check"]
-            progress_path = Path(str(finish["artifacts"]["progress_path"]))
-            assert progress_path.resolve() == (worktree / ".context" / "progress.md").resolve()
+            progress_path = worktree / ".context" / "progress.md"
             progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
             assert set(progress_data) == {"goal", "current_step", "artifacts", "blockers", "validation"}
             assert progress_data["artifacts"]["handoff"] == os.fspath(finish_path)
-            unchanged_handoff = finish_path.read_bytes()
-            assert_raises("verification", finish_child, "integration", "invalid", "PASS")
-            assert finish_path.read_bytes() == unchanged_handoff
-            fail_path = finish_child("integration", "skip:needs child fix", "FAIL", needs_child_fix="#123")
+            assert progress_data["validation"] == []
+            fail_path = finish_child("integration", "FAIL", needs_child_fix="#123")
             fail = json.loads(fail_path.read_text(encoding="utf-8"))
             assert fail["needs_child_fix"] == "#123"
             write_progress(
@@ -317,7 +305,7 @@ def self_test() -> int:
                     }
                 },
             )
-            pending_path = finish_child("integration", "skip:review pending", "PENDING_REVIEW")
+            pending_path = finish_child("integration", "PENDING_REVIEW")
             pending = json.loads(pending_path.read_text(encoding="utf-8"))
             assert pending["review"] == "PENDING_REVIEW"
             assert pending["pending_review"]["review_id"] == "review-1"
@@ -329,7 +317,7 @@ def self_test() -> int:
             assert_raises("uncommitted non-context", merge_child, "issue-123", "integration")
             Path("dirty.txt").unlink()
             assert_raises("expected issue-123-child-slice", merge_child, "issue-123-child-slice", "integration", "0" * 40)
-            merge_child("issue-123-child-slice", "integration", str(finish["commit"]))
+            merge_child("issue-123-child-slice", "integration", str(finish["head_sha"]))
             assert "child" in Path("README.md").read_text(encoding="utf-8")
             (repo / "AGENTS.md").write_text("Use .context/progress.md\n", encoding="utf-8")
             (repo / ".context").mkdir()
@@ -357,7 +345,6 @@ def main() -> int:
 
     finish = subparsers.add_parser("finish")
     finish.add_argument("--review-base", required=True)
-    finish.add_argument("--verification", required=True)
     finish.add_argument("--review", required=True)
     finish.add_argument("--check", action="append", default=[])
     finish.add_argument("--known-skip", action="append", default=[])
@@ -366,7 +353,7 @@ def main() -> int:
     merge = subparsers.add_parser("merge")
     merge.add_argument("branch")
     merge.add_argument("--integration-branch", required=True)
-    merge.add_argument("--expected-commit")
+    merge.add_argument("--expected-head")
 
     args = parser.parse_args()
 
@@ -379,7 +366,6 @@ def main() -> int:
             print(
                 finish_child(
                     args.review_base,
-                    args.verification,
                     args.review,
                     args.check,
                     args.known_skip,
@@ -387,7 +373,7 @@ def main() -> int:
                 )
             )
         elif args.command == "merge":
-            merge_child(args.branch, args.integration_branch, args.expected_commit)
+            merge_child(args.branch, args.integration_branch, args.expected_head)
         else:
             parser.error("command is required unless --self-test is used")
         return 0
