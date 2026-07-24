@@ -297,7 +297,6 @@ def self_test() -> int:
                         "review_id": "review-1",
                         "branch": finish["branch"],
                         "local_head_sha": finish["head_sha"],
-                        "upstream_sha": finish["head_sha"],
                         "base_ref": finish["base_ref"],
                         "base_sha": finish["base_sha"],
                         "poll_after_utc": "2026-01-01T00:00:00Z",

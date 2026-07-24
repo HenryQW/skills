@@ -43,6 +43,17 @@ def self_test() -> int:
             run(["git", "add", "integration.txt"])
             run(["git", "commit", "-m", "test: integration base"])
             integration_head = run(["git", "rev-parse", "integration"])
+            remote_head = run(["git", "rev-parse", "origin/main"])
+            run(
+                [
+                    "git",
+                    "--git-dir",
+                    os.fspath(origin),
+                    "update-ref",
+                    "refs/heads/issue-124-child-slice",
+                    remote_head,
+                ]
+            )
             assert create_issue_branch(
                 "124",
                 branch_slug="Child Slice",
@@ -52,6 +63,13 @@ def self_test() -> int:
             assert run(["git", "-C", os.fspath(worktree), "branch", "--show-current"]) == "issue-124-child-slice"
             assert run(["git", "-C", os.fspath(worktree), "rev-parse", "HEAD"]) == integration_head
             assert (worktree / "integration.txt").read_text(encoding="utf-8") == "shipyard branch\n"
+            run(["git", "--git-dir", os.fspath(origin), "update-ref", "refs/heads/issue-125", remote_head])
+            try:
+                create_issue_branch("125", base_branch="main")
+            except RuntimeError as exc:
+                assert "origin branch already exists" in str(exc)
+            else:
+                raise AssertionError("standalone branch must reject an existing origin branch")
         finally:
             os.chdir(old_cwd)
 
