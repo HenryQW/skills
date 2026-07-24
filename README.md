@@ -77,7 +77,7 @@ Builds a dependency-aware issue graph and publishes it only after approval of th
 
 #### [🔧 `issue-workbench`](issue-workbench/)
 
-Implements one issue in its prepared branch, reuses HEAD-bound checks, then publishes a PR or returns a verified `shipyard` handoff.
+Implements and locally reviews one issue, then publishes a PR or returns a verified `shipyard` handoff.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
@@ -89,7 +89,7 @@ Produces a read-only, evidence-backed maintainability report and optionally hand
 
 #### [🛡️ `review-checkpoint`](review-checkpoint/)
 
-Reviews one pushed branch head through Greptile or one adversarial fallback and returns pass, pending, or blockers.
+Reviews one named local branch head through Greptile or one adversarial fallback and returns pass, pending, or blockers.
 
 #### [🩹 `review-repairbay`](review-repairbay/)
 
@@ -97,7 +97,7 @@ Fixes selected review feedback with focused validation or clears actionable thre
 
 #### [🚢 `shipyard`](shipyard/)
 
-Runs an approved issue graph through child-reviewed worktrees, frozen waves, one final parent review, and one repairable PR.
+Runs an approved issue graph through locally reviewed child branches, frozen waves, one final parent review, and one repairable PR.
 
 ### 🧰 Supporting skills
 

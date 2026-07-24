@@ -33,12 +33,12 @@ root causes.
 ## Review state machine
 
 An unchanged `(base_sha, head_sha)` has one remote review ID from creation to
-terminal completion. Only a pushed actionable-fix commit permits a new ID; once
+terminal completion. Only a new actionable-fix commit permits a new ID; once
 an ID exists, failures and timeouts resume it rather than restarting or falling
 back.
 
-1. Require a clean worktree except local `.context/progress.md`. Resolve `review_base` and require an upstream equal to local `HEAD` before every new review. Missing or mismatched pushed state is `BLOCKED`: direct `review_only` never pushes, and `fix_loop` may commit or push only fixes it creates. Workbench or Shipyard pushes the initial reviewed `HEAD` before invoking this skill.
-2. On resume, fetch and compare saved branch, local HEAD, upstream, base ref, and base SHA with Git. Before `poll_after_utc`, matching state returns `PENDING_REVIEW` without invoking Greptile. Mark mismatches or unknown base values stale and resolve them.
+1. Require a clean worktree except local `.context/progress.md` and a named local branch; Greptile rejects detached `HEAD`. Resolve `review_base`, `base_sha`, and `head_sha`; the reviewed branch does not need an upstream.
+2. On resume, fetch and compare saved branch, local HEAD, base ref, and base SHA with Git. Before `poll_after_utc`, matching state returns `PENDING_REVIEW` without invoking Greptile. Mark mismatches or unknown base values stale and resolve them.
 3. For a new `HEAD`, start exactly one process and record its review ID when emitted:
 
    ```bash
@@ -67,7 +67,6 @@ Without a manifest, store this under `.context/progress.md` `artifacts.pending_r
 review_id=<review id>
 branch=<branch>
 local_head_sha=<git rev-parse HEAD>
-upstream_sha=<git rev-parse @{upstream}>
 base_ref=<review_base or unknown>
 base_sha=<git rev-parse <review_base> or unknown>
 poll_after_utc=<YYYY-MM-DDTHH:MM:SSZ>
@@ -86,7 +85,7 @@ Store a diff payload only when Git cannot reproduce it, overwriting `.context/re
 
 - No actionable blocker -> `PASS`.
 - Actionable blockers in `review_only` -> `BLOCKED` with findings and no edits.
-- In `fix_loop`, apply the smallest fix, inspect the diff, run the smallest relevant check, commit inspected files, push, and return to Step 1 for the new `HEAD`.
+- In `fix_loop`, apply the smallest fix, inspect the diff, run the smallest relevant check, commit inspected files, and return to Step 1 for the new `HEAD`.
 
 When `manifest_path` is set, record pending, fallback, pass, fail, timeout, and blocker events through:
 

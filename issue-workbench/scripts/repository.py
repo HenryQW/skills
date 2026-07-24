@@ -126,10 +126,7 @@ def create_issue_branch(
     name = branch_name(issue_number, branch_slug)
     if local_branch_exists(name):
         raise RuntimeError(f"local branch already exists: {name}")
-    if remote_branch_exists(name):
-        raise RuntimeError(f"origin branch already exists: {name}")
 
-    run(["git", "fetch", "origin"])
     if worktree_path:
         if not integration_branch:
             raise RuntimeError("--integration-branch is required with --worktree-path")
@@ -144,6 +141,9 @@ def create_issue_branch(
 
     if integration_branch:
         raise RuntimeError("--integration-branch requires --worktree-path")
+    if remote_branch_exists(name):
+        raise RuntimeError(f"origin branch already exists: {name}")
+    run(["git", "fetch", "origin"])
     base = base_branch or default_branch()
     run(["git", "checkout", "-b", name, f"origin/{base}"])
     return [f"branch={name}"]

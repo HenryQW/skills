@@ -28,7 +28,7 @@ to Shipyard.
 - Modify only issue-owned files. Do not touch secrets, env, generated, lock, `.agents/`, infrastructure, or `.context/` files unless explicitly required or a verified review blocker requires it.
 - `.context/` may contain only local progress, review, memory, decision, and handoff artifacts. Keep progress to `goal`, `current_step`, `artifacts`, `blockers`, and `validation`; never commit it.
 - Do not add compatibility, migration, aliases, fallbacks, dependencies, or future-proofing without an explicit requirement. Use Conventional Commits and stage only inspected paths.
-- Integration children send no interim status and never run `pr-launchpad`.
+- Integration children send no interim status, never push their local branches, and never run `pr-launchpad`.
 
 ## Workflow
 
@@ -59,7 +59,7 @@ to Shipyard.
    python3 <skill_dir>/scripts/diff_guard.py --base <review_base>
    ```
 
-   Use `git add -N` for new files. Allow a blocked path only after tracing it to an explicit issue requirement or verified review blocker. Run the smallest relevant validation, commit inspected paths, bind its command and result to `validated_head=$(git rev-parse HEAD)`, and push the initial review `HEAD` (`git push --set-upstream origin HEAD` when needed).
+   Use `git add -N` for new files. Allow a blocked path only after tracing it to an explicit issue requirement or verified review blocker. Run the smallest relevant validation, commit inspected paths, and bind its command and result to `validated_head=$(git rev-parse HEAD)`.
 
 5. Capture `pre_review_head`, then run `$review-checkpoint` with `mode=fix_loop`, `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`; do not pass Shipyard's shared manifest from a child worktree. Return `BLOCKED` or `PENDING_REVIEW` with its artifact instead of treating either as PASS. Continue only after the latest completed review returns `PASS` with no later commit. If `HEAD` changed, rerun `diff_guard.py` and use the review fix's check evidence for the new `validated_head`; otherwise reuse Step 4 evidence.
 

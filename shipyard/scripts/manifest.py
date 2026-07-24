@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-VERSION = 3
+VERSION = 4
 DEFAULT_MANIFEST = Path(".context/shipyard-manifest.json")
 REQUIRED_TOP_LEVEL = {
     "version",
@@ -46,7 +46,6 @@ REQUIRED_PENDING_REVIEW = {
     "review_id",
     "branch",
     "local_head_sha",
-    "upstream_sha",
     "base_ref",
     "base_sha",
     "poll_after_utc",
@@ -573,7 +572,6 @@ def self_test() -> int:
                 "review_id": "review-1",
                 "branch": "issue-232",
                 "local_head_sha": "b" * 40,
-                "upstream_sha": "b" * 40,
                 "base_ref": "shipyard-123",
                 "base_sha": "a" * 40,
                 "poll_after_utc": "2026-07-08T05:30:00Z",
@@ -650,7 +648,7 @@ def self_test() -> int:
             assert reusable_evidence_errors(load_manifest(path), head_sha) == []
             assert "stale" in "\n".join(reusable_evidence_errors(load_manifest(path), "d" * 40))
             assert "unsupported version" in "\n".join(
-                reusable_evidence_errors(dict(load_manifest(path), version=2), head_sha)
+                reusable_evidence_errors(dict(load_manifest(path), version=3), head_sha)
             )
             try:
                 set_review(path, {"scope": "shipyard", "status": "PASS"})
