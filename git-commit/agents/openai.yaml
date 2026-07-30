@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Commit"
+  short_description: "Create focused Conventional Commits"
+  default_prompt: "Use $git-commit to inspect, stage, and commit one logical change."
