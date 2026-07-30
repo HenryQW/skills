@@ -109,6 +109,10 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 Loads confirmed project context, captures complete decisions and reusable repository guidance, and writes approved notes directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
 
+#### [🧩 `multica-cli`](multica-cli/)
+
+Operates existing Multica workspace resources from the command line.
+
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
