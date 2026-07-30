@@ -1,9 +1,9 @@
 ---
-name: multica-cli
+name: multica-ops
 description: Operate an existing Multica workspace from the CLI. Use for issues, agents, skills, squads, projects, autopilots, daemon runtimes, repositories, and attachments.
 ---
 
-# Multica CLI
+# Multica Ops
 
 Assume authentication and workspace selection are already configured. Use
 `multica <command> --help` before inventing flags. Prefer `--output json` when
