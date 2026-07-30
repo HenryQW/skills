@@ -1,4 +1,4 @@
 interface:
   display_name: "Git Commit"
   short_description: "Create focused Conventional Commits"
-  default_prompt: "Use $git-commit to inspect, stage, and commit one logical change."
+  default_prompt: "Use $git-commit to group changes against the target branch and create scoped Conventional Commits."
