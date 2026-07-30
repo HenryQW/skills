@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multica Ops"
+  short_description: "Operate Multica agents, squads, and issues"
+  default_prompt: "Use $multica-ops to operate the Multica workspace from the CLI."
