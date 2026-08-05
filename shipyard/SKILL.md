@@ -50,9 +50,9 @@ Read only issue-linked or named material needed for runnable children.
    integration_branch=<integration_branch>
    ```
 
-   Workbench enters the prepared worktree and runs the child's Greptile gate; it never creates the worktree or launches a PR. Use `defer` only when explicitly requested. Do not probe running children or remove running, pending, failed, conflicted, or otherwise unmerged worktrees; use absolute paths for mutations once multiple worktrees exist.
+   Workbench enters the prepared worktree and runs the child's native subagent review gate; it never creates the worktree or launches a PR. Do not probe running children or remove running, failed, conflicted, or otherwise unmerged worktrees; use absolute paths for mutations once multiple worktrees exist.
 3. Ingest every returned handoff directly into the canonical manifest through `manifest.py ingest-child --file <path>` as it returns. `manifest.py` validates it; never reconstruct or separately validate its JSON. Re-append durable child decisions through Agent Memory's append helper.
-4. Enforce the frozen-wave barrier. Resume pending reviews after `poll_after_utc`; rerun an unmerged owning Workbench child for fixes. If a defect belongs to a `done-local` predecessor, follow Repair waves. Stop on base drift; never refresh the wave base or children.
+4. Enforce the frozen-wave barrier. Rerun an unmerged owning Workbench child for review fixes. If a defect belongs to a `done-local` predecessor, follow Repair waves. Stop on base drift; never refresh the wave base or children.
 5. Merge the complete PASS wave with `integration_child.py merge ... --expected-head <head_sha>`, recording each success through `manifest.py merge-child --head-sha <head_sha>`. Do not validate, re-inspect, reopen diffs, or print detail between merges. Preserve earlier successful merges if a later child conflicts; stop with that child's issue, branch, worktree, and conflicted files.
 6. After the complete wave is merged and every merge is recorded, remove each child worktree with `git worktree remove <absolute_path>` without `--force`, then delete its recorded local branch with `git branch -d <branch>`. Retain and report any worktree or branch that cannot be removed safely. Never remove the integration worktree or any unmerged child branch.
 7. Re-inspect dependencies. Before another non-final wave, run a wave check only for cross-child risk not covered by child checks. If `final_check` is next, skip wave validation; never rerun child checks immediately before it.
@@ -75,9 +75,9 @@ Default unspecified pytest runs to `uv run pytest -q`; on failure, rerun only th
 ## 4. Exact-head review and PR
 
 1. Inspect only structural guards, compact diff statistics, and merge topology.
-2. After every child is merged and `final_check` passes, Shipyard owns pushing the initial integration `HEAD`; set its upstream when needed and require pushed parity. Run exactly one parent `$review-checkpoint` with `mode=review_only`, `wait_mode=block`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs the final Greptile and writes review events.
+2. After every child is merged and `final_check` passes, run exactly one parent `$review-checkpoint` with `mode=review_only`, `manifest_path=<absolute manifest>`, and memory skipped. It alone runs the final native subagent review and writes review events.
 3. Route findings as `child:<issue>`, `final_check`, `integration`, `stale`, `non_actionable`, or `tooling_unavailable`. Child and final-check defects use a fresh Repair wave; Shipyard fixes only merge conflicts, PR body/progress, or final assembly. After any code fix, rerun final check and this exact-head gate. Do not loop on stale, non-actionable, or unavailable-tool findings.
-4. `PENDING_REVIEW` stops publication. After any review-fix commit, rerun final-check commands and replace the SHA-bound validation event.
+4. A blocked or unavailable review stops publication. After any review-fix commit, rerun final-check commands and replace the SHA-bound validation event.
 5. Invoke nested `$pr-launchpad` with `shipyard_manifest=<absolute manifest>` and memory skipped; Launchpad alone validates manifest reuse at current `HEAD`.
 
 ## 5. PR health

@@ -32,9 +32,9 @@ Only `--setup` reads `references/setup.md` or runs setup.
 - Memory should explain the project's engineering approach, not narrate task
   history.
 - `$agent-memory distill` runs only when the top-level workflow is otherwise
-  ready to return final `Done`, `Stop`, or `Blocked`. Resumable `PENDING` or
-  `PENDING_REVIEW`, approval waits, handoffs, and nested skills preserve
-  `.context/decisions.jsonl` without preview or apply.
+  ready to return final `Done`, `Stop`, or `Blocked`. Resumable `PENDING`,
+  approval waits, handoffs, and nested skills preserve `.context/decisions.jsonl`
+  without preview or apply.
 - Memory failure never replaces or hides the caller's terminal result.
 
 ## Load

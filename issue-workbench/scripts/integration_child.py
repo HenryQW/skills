@@ -99,16 +99,12 @@ def ensure_local_progress_file() -> Path:
 def record_handoff_progress(
     progress: Path,
     handoff: Path,
-    review: str,
     needs_child_fix: str | None,
 ) -> Path:
     blockers = []
     if needs_child_fix:
         blockers.append({"needs_child_fix": needs_child_fix})
     artifacts: dict[str, object] = {"handoff": os.fspath(handoff.resolve())}
-    if review == "PENDING_REVIEW":
-        current = json.loads(progress.read_text(encoding="utf-8"))
-        artifacts["pending_review"] = current["artifacts"]["pending_review"]
     write_progress(
         progress,
         "issue-workbench integration child",
@@ -147,13 +143,11 @@ def write_handoff(
         "known_skips": known_skips,
         "needs_child_fix": needs_child_fix,
     }
-    if review == "PENDING_REVIEW":
-        facts["progress_path"] = os.fspath(progress)
     try:
         write_child_handoff(handoff, facts)
     except SystemExit as exc:
         raise RuntimeError(str(exc)) from None
-    return record_handoff_progress(progress, handoff, review, needs_child_fix)
+    return record_handoff_progress(progress, handoff, needs_child_fix)
 
 
 def finish_child(
@@ -257,7 +251,8 @@ def self_test() -> int:
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")
             assert_raises("uncommitted non-context", finish_child, "integration", "PASS")
             Path("dirty.txt").unlink()
-            assert_raises("PASS, PENDING_REVIEW, or FAIL", finish_child, "integration", "MAYBE")
+            assert_raises("PASS or FAIL", finish_child, "integration", "MAYBE")
+            assert_raises("PASS or FAIL", finish_child, "integration", "PENDING_REVIEW")
             assert_raises("requires needs_child_fix", finish_child, "integration", "FAIL")
             assert_raises("#123", finish_child, "integration", "FAIL", [], [], "123")
             assert_raises("#123", finish_child, "integration", "FAIL", [], [], "#abc")
@@ -288,28 +283,6 @@ def self_test() -> int:
             fail_path = finish_child("integration", "FAIL", needs_child_fix="#123")
             fail = json.loads(fail_path.read_text(encoding="utf-8"))
             assert fail["needs_child_fix"] == "#123"
-            write_progress(
-                progress_path,
-                "issue-workbench integration child",
-                "review pending",
-                {
-                    "pending_review": {
-                        "review_id": "review-1",
-                        "branch": finish["branch"],
-                        "local_head_sha": finish["head_sha"],
-                        "base_ref": finish["base_ref"],
-                        "base_sha": finish["base_sha"],
-                        "poll_after_utc": "2026-01-01T00:00:00Z",
-                        "progress_path": os.fspath(progress_path),
-                    }
-                },
-            )
-            pending_path = finish_child("integration", "PENDING_REVIEW")
-            pending = json.loads(pending_path.read_text(encoding="utf-8"))
-            assert pending["review"] == "PENDING_REVIEW"
-            assert pending["pending_review"]["review_id"] == "review-1"
-            pending_progress = json.loads(progress_path.read_text(encoding="utf-8"))
-            assert pending_progress["artifacts"]["pending_review"] == pending["pending_review"]
             assert_raises("expected integration branch", merge_child, "issue-123-child-slice", "integration")
             os.chdir(repo)
             Path("dirty.txt").write_text("dirty\n", encoding="utf-8")

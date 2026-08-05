@@ -12,7 +12,7 @@ Implement one actionable issue with the smallest intentional diff. `$review-chec
 - `issue_number` is required.
 - `base_branch` defaults to the repository default; `branch_slug` is optional.
 - `worktree_path` is optional in pull-request mode and is prepared by Shipyard in integration mode.
-- `max_iterations`, `review_base`, `wait_mode`, and `poll_interval_seconds` pass through to `$review-checkpoint`.
+- `max_iterations` and `review_base` pass through to `$review-checkpoint`.
 - `handoff_mode` is `pull_request` (default) or `integration_branch`.
 - `integration_branch` and Shipyard's prepared `worktree_path` are required in integration mode.
 
@@ -61,14 +61,14 @@ to Shipyard.
 
    Use `git add -N` for new files. Allow a blocked path only after tracing it to an explicit issue requirement or verified review blocker. Run the smallest relevant validation, commit inspected paths, and bind its command and result to `validated_head=$(git rev-parse HEAD)`.
 
-5. Capture `pre_review_head`, then run `$review-checkpoint` with `mode=fix_loop`, `review_base`, `max_iterations`, `wait_mode`, and `poll_interval_seconds`; do not pass Shipyard's shared manifest from a child worktree. Return `BLOCKED` or `PENDING_REVIEW` with its artifact instead of treating either as PASS. Continue only after the latest completed review returns `PASS` with no later commit. If `HEAD` changed, rerun `diff_guard.py` and use the review fix's check evidence for the new `validated_head`; otherwise reuse Step 4 evidence.
+5. Capture `pre_review_head`, then run `$review-checkpoint` with `mode=fix_loop`, `review_base`, and `max_iterations`; do not pass Shipyard's shared manifest from a child worktree. Return `BLOCKED` with its findings instead of treating it as PASS. Continue only after the latest completed review returns `PASS` with no later commit. If `HEAD` changed, rerun `diff_guard.py` and use the review fix's check evidence for the new `validated_head`; otherwise reuse Step 4 evidence.
 
 6. Finish according to mode.
 
 ## Handoff
 
-In pull-request mode, a `PENDING_REVIEW` returns its pending state path. After
-`PASS`, invoke nested `$pr-launchpad` with `validated_head` and its validation
+In pull-request mode, after `PASS`, invoke nested `$pr-launchpad` with
+`validated_head` and its validation
 commands/results, then return only the PR URL.
 
 In integration mode, pass inspected facts to the helper; it writes the canonical `.context/integration-handoff.json` through Shipyard's manifest interface:
@@ -77,11 +77,8 @@ In integration mode, pass inspected facts to the helper; it writes the canonical
 # PASS
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --review PASS --check "<cmd>" --known-skip "<reason>"
 
-# deferred review
-python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --review PENDING_REVIEW
-
 # defect owned by another child
 python3 <skill_dir>/scripts/integration_child.py finish --review-base <review_base> --review FAIL --needs-child-fix '#123'
 ```
 
-For `PENDING_REVIEW`, retain the checkpoint evidence under `artifacts.pending_review`. Return only the helper's absolute path; never reconstruct, copy, or extend its payload or choose a Shipyard child status.
+Return only the helper's absolute path; never reconstruct, copy, or extend its payload or choose a Shipyard child status.

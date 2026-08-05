@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-VERSION = 4
+VERSION = 5
 DEFAULT_MANIFEST = Path(".context/shipyard-manifest.json")
 REQUIRED_TOP_LEVEL = {
     "version",
@@ -41,26 +41,15 @@ REQUIRED_CHILD = {
     "status",
 }
 REQUIRED_HANDOFF = REQUIRED_CHILD - {"status"}
-OPTIONAL_HANDOFF = {"needs_child_fix", "pending_review"}
-REQUIRED_PENDING_REVIEW = {
-    "review_id",
-    "branch",
-    "local_head_sha",
-    "base_ref",
-    "base_sha",
-    "poll_after_utc",
-    "progress_path",
-}
+OPTIONAL_HANDOFF = {"needs_child_fix"}
 REQUIRED_PASS_REVIEW = {"status", "branch", "base_sha", "head_sha"}
-ALLOWED_CHILD_STATUS = {"returned", "needs_fix", "pending_review", "merged"}
+ALLOWED_CHILD_STATUS = {"returned", "needs_fix", "merged"}
 REVIEW_STATUS = {
     "PASS": {"returned", "merged"},
-    "PENDING_REVIEW": {"pending_review"},
     "FAIL": {"needs_fix"},
 }
 HANDOFF_TRANSITIONS = {
-    "pending_review": {"returned", "needs_fix"},
-    "needs_fix": {"pending_review", "returned"},
+    "needs_fix": {"returned"},
     "merged": {"returned"},
 }
 
@@ -187,7 +176,7 @@ def status_errors(child: dict[str, Any], prefix: str) -> list[str]:
 def review_status_errors(child: dict[str, Any], prefix: str) -> list[str]:
     allowed = REVIEW_STATUS.get(child.get("review"))
     if not allowed:
-        return [f"{prefix} review must be PASS, PENDING_REVIEW, or FAIL"]
+        return [f"{prefix} review must be PASS or FAIL"]
     if child.get("status") in allowed:
         return []
     return [f"{prefix} status {child.get('status')} does not match review {child.get('review')}"]
@@ -206,48 +195,9 @@ def failed_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
     return []
 
 
-def pending_review_errors(child: dict[str, Any], prefix: str) -> list[str]:
-    if child.get("review") != "PENDING_REVIEW":
-        return []
-    pending = child.get("pending_review")
-    if not isinstance(pending, dict):
-        return [f"{prefix} requires pending_review evidence"]
-    missing = [
-        field
-        for field in sorted(REQUIRED_PENDING_REVIEW)
-        if not isinstance(pending.get(field), str) or not pending[field].strip()
-    ]
-    errors = [f"{prefix} pending_review missing/empty field: {field}" for field in missing]
-    expected = {
-        "branch": child.get("branch"),
-        "local_head_sha": child.get("head_sha"),
-        "base_ref": child.get("base_ref"),
-        "base_sha": child.get("base_sha"),
-    }
-    errors.extend(
-        f"{prefix} pending_review {field} must match handoff {field}"
-        for field, value in expected.items()
-        if pending.get(field) != value
-    )
-    return errors
-
-
-def pending_review_from_progress(path: Path) -> dict[str, Any]:
-    try:
-        progress = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        raise SystemExit(f"pending review progress not found: {path}") from None
-    artifacts = progress.get("artifacts") if isinstance(progress, dict) else None
-    pending = artifacts.get("pending_review") if isinstance(artifacts, dict) else None
-    if not isinstance(pending, dict):
-        raise SystemExit("PENDING_REVIEW requires artifacts.pending_review in progress")
-    return pending
-
-
 def handoff_status(child: dict[str, Any]) -> str:
     return {
         "PASS": "returned",
-        "PENDING_REVIEW": "pending_review",
         "FAIL": "needs_fix",
     }.get(child.get("review"), "")
 
@@ -260,7 +210,6 @@ def child_payload_errors(child: dict[str, Any]) -> list[str]:
     return (
         review_status_errors(child, "child payload")
         + failed_review_errors(child, "child payload")
-        + pending_review_errors(child, "child payload")
     )
 
 
@@ -283,15 +232,10 @@ def handoff_from_facts(facts: dict[str, Any]) -> dict[str, Any]:
     child = {
         key: value
         for key, value in facts.items()
-        if key in REQUIRED_HANDOFF - {"pending_review", "needs_child_fix"}
+        if key in REQUIRED_HANDOFF
     }
     if facts.get("needs_child_fix") is not None:
         child["needs_child_fix"] = facts["needs_child_fix"]
-    if facts.get("review") == "PENDING_REVIEW":
-        progress_path = facts.get("progress_path")
-        if not isinstance(progress_path, str) or not progress_path.strip():
-            raise SystemExit("PENDING_REVIEW requires progress_path")
-        child["pending_review"] = pending_review_from_progress(Path(progress_path))
     return decode_handoff(child)
 
 
@@ -400,7 +344,10 @@ def validation_event_errors(event: dict[str, Any]) -> list[str]:
 
 
 def review_event_errors(event: dict[str, Any]) -> list[str]:
-    if event.get("status") != "PASS":
+    status = event.get("status")
+    if status not in {"PASS", "BLOCKED"}:
+        return ["review event status must be PASS or BLOCKED"]
+    if status == "BLOCKED":
         return []
     missing = [field for field in sorted(REQUIRED_PASS_REVIEW) if not isinstance(event.get(field), str) or not event[field].strip()]
     errors = [f"passing review event missing/empty field: {field}" for field in missing]
@@ -466,7 +413,6 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.extend(status_errors(child, f"children[{index}]"))
         errors.extend(review_status_errors(child, f"children[{index}]"))
         errors.extend(failed_review_errors(child, f"children[{index}]"))
-        errors.extend(pending_review_errors(child, f"children[{index}]"))
     final = manifest.get("validation_plan", {}).get("final")
     if final is not None:
         errors.extend(validation_event_errors(final))
@@ -559,36 +505,15 @@ def self_test() -> int:
                 raise AssertionError("expected conflicting repaired merge to fail")
             assert path.read_text(encoding="utf-8") == repaired_merged
 
-            pending = dict(passed, issue="#232", branch="issue-232", review="PENDING_REVIEW")
-            before_pending = path.read_text(encoding="utf-8")
+            retired_pending = dict(passed, issue="#232", branch="issue-232", review="PENDING_REVIEW")
+            before_retired = path.read_text(encoding="utf-8")
             try:
-                ingest_child(path, pending)
+                ingest_child(path, retired_pending)
             except SystemExit as exc:
-                assert "pending_review" in str(exc)
+                assert "PASS or FAIL" in str(exc)
             else:
-                raise AssertionError("expected pending handoff without evidence to fail")
-            assert path.read_text(encoding="utf-8") == before_pending
-            pending["pending_review"] = {
-                "review_id": "review-1",
-                "branch": "issue-232",
-                "local_head_sha": "b" * 40,
-                "base_ref": "shipyard-123",
-                "base_sha": "a" * 40,
-                "poll_after_utc": "2026-07-08T05:30:00Z",
-                "progress_path": "/tmp/child/.context/progress.md",
-            }
-            ingest_child(path, pending)
-            before_out_of_order = path.read_text(encoding="utf-8")
-            try:
-                merge_child(path, "#232", "b" * 40)
-            except SystemExit as exc:
-                assert "cannot transition from pending_review to merged" in str(exc)
-            else:
-                raise AssertionError("expected pending child merge to fail")
-            assert path.read_text(encoding="utf-8") == before_out_of_order
-            resumed = dict(passed, issue="#232", branch="issue-232")
-            ingest_child(path, resumed)
-            assert next(child for child in load_manifest(path)["children"] if child["issue"] == "#232")["status"] == "returned"
+                raise AssertionError("expected retired pending review status to fail")
+            assert path.read_text(encoding="utf-8") == before_retired
 
             failed = dict(passed, issue="#233", branch="issue-233", review="FAIL")
             before_failed = path.read_text(encoding="utf-8")
@@ -656,6 +581,12 @@ def self_test() -> int:
                 assert "head_sha" in str(exc)
             else:
                 raise AssertionError("expected incomplete passing review to fail")
+            try:
+                set_review(path, {"scope": "shipyard", "status": "PENDING_REVIEW"})
+            except SystemExit as exc:
+                assert "PASS or BLOCKED" in str(exc)
+            else:
+                raise AssertionError("expected retired pending review event to fail")
             set_pr(path, "https://github.com/org/repo/pull/1")
             manifest = load_manifest(path)
             errors = validate_manifest(manifest)
@@ -699,7 +630,6 @@ def main() -> int:
     handoff.add_argument("--review", required=True)
     handoff.add_argument("--check", action="append", default=[])
     handoff.add_argument("--known-skip", action="append", default=[])
-    handoff.add_argument("--progress-path")
     handoff.add_argument("--needs-child-fix")
 
     merged_child = subparsers.add_parser("merge-child")
@@ -742,7 +672,6 @@ def main() -> int:
             "review": args.review,
             "checks": args.check,
             "known_skips": args.known_skip,
-            "progress_path": args.progress_path,
             "needs_child_fix": args.needs_child_fix,
         }
         print(write_child_handoff(Path(args.output), facts))

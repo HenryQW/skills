@@ -13,7 +13,6 @@ npx skills add HenryQW/skills
 ## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
-- `greptile` is optional; `review-checkpoint` falls back to local adversarial review when unavailable.
 
 ## 🧭 How the harness works
 
@@ -77,7 +76,7 @@ Builds a dependency-aware issue graph and publishes it only after approval of th
 
 #### [🔧 `issue-workbench`](issue-workbench/)
 
-Implements and locally reviews one issue, then publishes a PR or returns a verified `shipyard` handoff.
+Implements one issue, runs a native subagent review, then publishes a PR or returns a verified `shipyard` handoff.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
@@ -89,7 +88,7 @@ Produces a read-only, evidence-backed maintainability report and optionally hand
 
 #### [🛡️ `review-checkpoint`](review-checkpoint/)
 
-Reviews one named local branch head through Greptile or one adversarial fallback and returns pass, pending, or blockers.
+Reviews one named local branch head through a native read-only subagent and returns pass or blockers.
 
 #### [🩹 `review-repairbay`](review-repairbay/)
 
@@ -97,7 +96,7 @@ Fixes selected review feedback with focused validation or clears actionable thre
 
 #### [🚢 `shipyard`](shipyard/)
 
-Runs an approved issue graph through locally reviewed child branches, frozen waves, one final parent review, and one repairable PR.
+Runs an approved issue graph through subagent-reviewed child branches, frozen waves, one final parent review, and one repairable PR.
 
 ### 🧰 Supporting skills
 
@@ -107,7 +106,7 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 #### [🧠 `agent-memory`](agent-memory/)
 
-Loads confirmed project context, captures complete decisions and reusable repository guidance, and writes approved notes directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
+Loads confirmed project context, preserves candidates across resumable work, and writes approved decisions and guidance directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
 
 #### [💾 `git-commit`](git-commit/)
 
