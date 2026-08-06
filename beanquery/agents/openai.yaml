@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beanquery"
+  short_description: "Query existing Beancount ledgers"
+  default_prompt: "Use $beanquery to run a quick read-only BQL query against an existing Beancount ledger."

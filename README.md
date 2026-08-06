@@ -108,6 +108,10 @@ Adds or audits shared discovery, Markdown, and plain-text routes for public webs
 
 Loads confirmed project context, preserves candidates across resumable work, and writes approved decisions and guidance directly to Obsidian; see the [setup guide](agent-memory/references/setup.md).
 
+#### [🔎 `beanquery`](beanquery/)
+
+Runs quick read-only BQL queries against existing Beancount ledgers.
+
 #### [💾 `git-commit`](git-commit/)
 
 Creates coherent scoped Conventional Commits from changes against the target branch.
