@@ -84,7 +84,7 @@ Publishes the inspected branch, reusing HEAD-bound validation and one matching P
 
 #### [🔭 `repo-surveyor`](repo-surveyor/)
 
-Produces a read-only, evidence-backed maintainability report and optionally hands findings to `issue-blueprint`.
+Produces a clear, read-only, evidence-backed HTML maintainability report and optionally hands findings to `issue-blueprint`.
 
 #### [🛡️ `review-checkpoint`](review-checkpoint/)
 
