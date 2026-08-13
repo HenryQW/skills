@@ -128,7 +128,7 @@ Creates focused GitHub pull requests from inspected branch changes.
 
 #### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
 
-Develops, modifies, and debugs Pi extensions and extension packages using safely resolved, version-matched references shipped with installed Pi.
+Builds and repairs Pi extensions against version-matched docs and examples from installed Pi; includes a reusable authority resolver.
 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
