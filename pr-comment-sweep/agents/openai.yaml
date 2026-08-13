@@ -1,4 +1,4 @@
 interface:
   display_name: "PR Comment Sweep"
   short_description: "Assess and fix actionable PR comments"
-  default_prompt: "Use $pr-comment-sweep as standalone workflow to fetch current PR comments, assess actionability, fix accepted feedback, validate, push, and resolve addressed threads."
+  default_prompt: "Use $pr-comment-sweep as standalone workflow to assess and fix current PR feedback, validate, commit, push, and resolve addressed threads without approval pauses unless blocked."

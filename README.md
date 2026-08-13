@@ -82,7 +82,7 @@ Implements one issue, runs a native subagent review, then publishes a PR or retu
 
 #### [🗣️ `pr-comment-sweep`](pr-comment-sweep/)
 
-Fetches all PR feedback, then—with publication authority—fixes, pushes, and resolves addressed threads.
+Runs PR feedback repair end to end by default, stopping only for blockers.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
