@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Comment Sweep"
+  short_description: "Assess and fix actionable PR comments"
+  default_prompt: "Use $pr-comment-sweep to fetch current PR comments, assess actionability, propose and apply accepted fixes, validate, commit, and push."

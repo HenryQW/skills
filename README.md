@@ -30,7 +30,7 @@ Choose the smallest entry point that matches the work. Skills can run alone; the
 - One actionable issue: `issue-workbench #<issue>`
 - A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
 - A basic GitHub pull request: `git-pr`; workflow-managed branch: `pr-launchpad`
-- A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
+- A pull request blocked by checks or review: `ci-repairbay`, `pr-comment-sweep`, or `review-repairbay`
 
 ```mermaid
 flowchart TD
@@ -54,7 +54,7 @@ flowchart TD
   launch --> health
   health{"PR healthy?"} -->|CI failing| ci["ci-repairbay"]
   ci --> health
-  health -->|Review feedback| repair["review-repairbay"]
+  health -->|Review feedback| repair["pr-comment-sweep"]
   repair --> health
   health -->|Yes| done["Merge-ready"]
   done -->|Durable decisions or guidance| distill["agent-memory distill"]
@@ -77,6 +77,10 @@ Builds a dependency-aware issue graph and publishes it only after approval of th
 #### [🔧 `issue-workbench`](issue-workbench/)
 
 Implements one issue, runs a native subagent review, then publishes a PR or returns a verified `shipyard` handoff.
+
+#### [🗣️ `pr-comment-sweep`](pr-comment-sweep/)
+
+Fetches PR comments, assesses actionable feedback, proposes and applies accepted fixes, then commits and pushes.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
