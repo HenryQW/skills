@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pi Extension Workbench"
+  short_description: "Build Pi extensions and packages from installed references"
+  default_prompt: "Use $pi-extension-workbench to implement or repair this Pi extension package against docs and examples shipped with active published Pi package."
