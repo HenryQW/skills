@@ -5,12 +5,36 @@ description: Fetch GitHub pull request comments with gh, assess actionable feedb
 
 # PR Comment Sweep
 
-Address actionable PR feedback from current branch PR, supplied PR number, or URL.
+Address actionable feedback on current-branch PR or supplied PR number/URL. Run
+standalone; never invoke, defer to, or modify Shipyard.
 
-1. Standalone only: do not invoke, defer to, or modify Shipyard. Require authenticated `gh`; resolve an open PR with `gh pr view --json number,url,state,headRepository,headRefName,headRefOid`. Require clean index and worktree; stop unless user explicitly adopts each pre-existing change. Require `HEAD` equals `headRefOid`; require branch equals PR head only when discovering current-branch PR, not for supplied number/URL. Fetch/reset only when explicitly authorized. Inspect status, base, and full diff; stop on non-open PR, missing PR, or ambiguous scope.
-2. Fetch conversation comments, reviews, `reviewThreads`, and thread replies through paginated `gh api graphql`, including path, line, `isResolved`, and `isOutdated`; never treat partial connection data as complete.
-3. Ignore resolved, approval-only, informational, duplicate, and non-specific feedback. Re-anchor outdated threads against current code before marking them non-actionable. Assess each remaining item against code, callers, tests, and PR intent. Mark `actionable`, `non-actionable`, or `blocked`, with concise evidence.
-4. Invocation authorizes routine scoped edits, commits, pushes, and addressed-thread resolution. State smallest proposed fix, then proceed without approval. Stop only for unclear PR scope or behavior, conflicting feedback, material product choices, or required scope expansion; never invent behavior.
-5. Inspect full diff, run smallest relevant non-destructive validation, and stage only inspected paths. Stop on failed or unavailable required validation; do not commit or push without explicit risk acceptance. Do not change `.context/`, secrets, generated files, or unrelated work.
-6. Commit scoped fixes with Conventional Commit message(s). Resolve PR `headRepository` as `OWNER/REPO`; select a configured remote by normalized GitHub host/owner/repo identity, accepting SSH and HTTPS forms. Push explicit `HEAD:<headRefName>` to it; stop before any push if none matches. Before resolving, re-fetch PR metadata and require `headRefOid` equals local `HEAD`; this also permits resolution without a new push when feedback is verified addressed at current head. Resolve only addressed review threads with `gh api graphql` `resolveReviewThread`.
-7. Re-fetch full paginated feedback. Assess threads added during sweep before completion; resolve addressed threads and report pending/blockers for rest. Require every resolved thread reports `isResolved`. With no accepted fixes, make no commit or push. Do not reply unless explicitly requested. Report PR URL, actioned, resolved, skipped, pending feedback, validation, commit SHA(s), push result, and blockers.
+1. Run `scripts/fetch_feedback.py --output /tmp/pr-feedback.json`, adding `--pr URL`
+   or `--repo OWNER/REPO --pr NUMBER` when supplied. Stop on its state, auth,
+   cleanliness, branch, or head mismatch errors; fetch/reset only when explicitly
+   authorized. Inspect PR status, base, full diff, and snapshot. See
+   [GitHub operations](references/gh-operations.md) only for command details or
+   recovery.
+2. Ignore resolved, approval-only, informational, duplicate, and non-specific
+   feedback. Re-anchor outdated threads against current code. Assess every other
+   item against code, callers, tests, and PR intent as `actionable`,
+   `non-actionable`, or `blocked`, with concise evidence.
+3. Invocation authorizes routine scoped edits, commits, push, and addressed-thread
+   resolution. State smallest fix and proceed. Stop only for unclear scope or
+   behavior, conflicting feedback, material product choice, or required scope
+   expansion; never invent behavior.
+4. Inspect full resulting diff and run smallest relevant non-destructive
+   validation. Stage only inspected paths. Stop on failed or unavailable required
+   validation unless user accepts risk. Never change `.context/`, secrets,
+   generated files, or unrelated work. Never wait or poll for GitHub checks; do
+   not use `gh pr checks --watch` (including interval variants). Report pending
+   checks and leave CI repair to its owning workflow.
+5. Commit accepted fixes with scoped Conventional Commit message(s). With no fixes,
+   make no commit or push. After clean-worktree validation, run
+   `scripts/push_head.py --snapshot /tmp/pr-feedback.json`.
+6. Re-run fetcher to `/tmp/pr-feedback-final.json`; assess feedback added during
+   sweep. Pass only addressed review thread IDs to
+   `scripts/resolve_threads.py --snapshot /tmp/pr-feedback-final.json ID...`.
+   Re-fetch once more; require addressed IDs resolved and assess any late feedback.
+   Do not reply unless explicitly requested.
+7. Report PR URL, actioned, resolved, skipped, pending/blockers, validation, commit
+   SHA(s), and push result.
