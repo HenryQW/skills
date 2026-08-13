@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git PR"
+  short_description: "Create focused GitHub pull requests"
+  default_prompt: "Use $git-pr to inspect current branch, commit focused changes, validate them, push, and create GitHub pull request."
