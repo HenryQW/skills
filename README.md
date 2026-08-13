@@ -29,7 +29,7 @@ Choose the smallest entry point that matches the work. Skills can run alone; the
 
 - One actionable issue: `issue-workbench #<issue>`
 - A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
-- A branch ready to publish: `pr-launchpad`
+- A basic GitHub pull request: `git-pr`; workflow-managed branch: `pr-launchpad`
 - A pull request blocked by checks or review: `ci-repairbay` or `review-repairbay`
 
 ```mermaid
@@ -115,6 +115,10 @@ Runs quick read-only BQL queries against existing Beancount ledgers.
 #### [💾 `git-commit`](git-commit/)
 
 Creates coherent scoped Conventional Commits from changes against the target branch.
+
+#### [🔀 `git-pr`](git-pr/)
+
+Creates focused GitHub pull requests from inspected branch changes.
 
 #### [🧩 `multica-ops`](multica-ops/)
 
