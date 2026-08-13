@@ -38,8 +38,12 @@ done <"$probe_dir/entries"
 test -n "$PI_CODING_AGENT_ROOT"
 test -d "$PI_CODING_AGENT_ROOT/examples/extensions"
 test -f "$PI_CODING_AGENT_ROOT/docs/extensions.md"
-export PI_CODING_AGENT_ROOT
+printf '%s\n' "$PI_CODING_AGENT_ROOT"
 ```
+
+Record printed path. Shell tool calls do not share exports; start every later
+one-shot shell call with `PI_CODING_AGENT_ROOT='<printed-path>'` and export it
+when child processes need it.
 
 Installed package docs, examples, and types define active runtime. Do not
 replace them with GitHub, local Pi source clones, or remembered APIs.
@@ -61,6 +65,7 @@ Then search installed references for exact API and read only matching docs
 section plus closest example:
 
 ```bash
+PI_CODING_AGENT_ROOT='<printed-path>'
 rg -nF '<API-or-behavior>' "$PI_CODING_AGENT_ROOT/docs/extensions.md" \
   "$PI_CODING_AGENT_ROOT/docs/packages.md" \
   "$PI_CODING_AGENT_ROOT/examples/extensions"

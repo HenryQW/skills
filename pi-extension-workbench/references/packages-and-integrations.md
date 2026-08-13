@@ -16,8 +16,10 @@ Set `TARGET_PACKAGE_JSON` to manifest owning inspected extension entry point,
 not workspace root, then check its Pi range against active package version:
 
 ```bash
+PI_CODING_AGENT_ROOT='<printed-path>'
 TARGET_PACKAGE_JSON=/path/to/extension/package.json
-node -p 'require(process.env.PI_CODING_AGENT_ROOT + "/package.json").version'
+node -e 'console.log(require(process.argv[1]).version)' \
+  "$PI_CODING_AGENT_ROOT/package.json"
 node -e 'const p=require(process.argv[1]); console.log({dependencies:p.dependencies,peerDependencies:p.peerDependencies,devDependencies:p.devDependencies,engines:p.engines})' \
   "$TARGET_PACKAGE_JSON"
 ```
@@ -55,8 +57,8 @@ Without `pi` manifest, Pi discovers conventional `extensions/`, `skills/`,
 - A Pi package dependency whose resources must load from this package belongs
   in both `dependencies` and `bundledDependencies`; list its resource paths
   under `node_modules/` in `pi` manifest.
-- Use `npm pack --dry-run` to inspect publish contents. Never version or publish
-  unless requested.
+- Use `npm pack --dry-run --ignore-scripts` to inspect publish contents without
+  running package lifecycle hooks. Never version or publish unless requested.
 
 See `$PI_CODING_AGENT_ROOT/docs/packages.md` and
 `examples/extensions/with-deps/package.json`.
