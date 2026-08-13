@@ -120,10 +120,6 @@ Creates coherent scoped Conventional Commits from changes against the target bra
 
 Creates focused GitHub pull requests from inspected branch changes.
 
-#### [🧩 `multica-ops`](multica-ops/)
-
-Operates existing Multica workspace resources from the command line.
-
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
