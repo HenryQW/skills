@@ -10,16 +10,35 @@ source checkout.
 
 ## Resolve authority
 
-Locate package behind active `pi` command and fail if expected published package
-or reference material is missing:
+Locate package loaded by active `pi` command, including package-manager launcher
+shims, and fail on first invalid assumption:
 
 ```bash
-PI_CODING_AGENT_ROOT="$(dirname "$(dirname "$(realpath "$(command -v pi)")")")"
-export PI_CODING_AGENT_ROOT
-node -e 'const p=require(process.argv[1]); if (p.name !== "@earendil-works/pi-coding-agent") process.exit(1)' \
-  "$PI_CODING_AGENT_ROOT/package.json"
+set -eu
+probe_dir="$(mktemp -d)"
+trap 'rm -rf "$probe_dir"' EXIT
+cat >"$probe_dir/probe.cjs" <<'EOF'
+require("node:fs").appendFileSync(process.env.PI_ENTRY_PROBE, `${process.argv[1]}\n`)
+EOF
+PI_ENTRY_PROBE="$probe_dir/entries" \
+  NODE_OPTIONS="--require=$probe_dir/probe.cjs ${NODE_OPTIONS:-}" \
+  pi --version >/dev/null
+PI_CODING_AGENT_ROOT=
+while IFS= read -r entry; do
+  candidate="$(dirname "$(realpath "$entry")")"
+  while [ "$candidate" != "$(dirname "$candidate")" ]; do
+    if node -e 'const p=require(process.argv[1]); process.exit(p.name === "@earendil-works/pi-coding-agent" ? 0 : 1)' \
+      "$candidate/package.json" 2>/dev/null; then
+      PI_CODING_AGENT_ROOT="$candidate"
+      break 2
+    fi
+    candidate="$(dirname "$candidate")"
+  done
+done <"$probe_dir/entries"
+test -n "$PI_CODING_AGENT_ROOT"
 test -d "$PI_CODING_AGENT_ROOT/examples/extensions"
 test -f "$PI_CODING_AGENT_ROOT/docs/extensions.md"
+export PI_CODING_AGENT_ROOT
 ```
 
 Installed package docs, examples, and types define active runtime. Do not
@@ -42,7 +61,7 @@ Then search installed references for exact API and read only matching docs
 section plus closest example:
 
 ```bash
-rg -n '<API-or-behavior>' "$PI_CODING_AGENT_ROOT/docs/extensions.md" \
+rg -nF '<API-or-behavior>' "$PI_CODING_AGENT_ROOT/docs/extensions.md" \
   "$PI_CODING_AGENT_ROOT/docs/packages.md" \
   "$PI_CODING_AGENT_ROOT/examples/extensions"
 ```
@@ -53,8 +72,9 @@ signature. Do not read full extension guide by default.
 ## Work
 
 1. Read repository instructions, manifest, entry point, callers, tests, and
-   neighboring patterns. Treat package-named request as extension work when
-   manifest, conventional directories, or imports identify it as such.
+   neighboring patterns. Treat package-named request as extension work only
+   when manifest, conventional extension directory, or default extension factory
+   using `ExtensionAPI` identifies an extension entry point.
 2. Inspect target Pi dependency/peer range and active installed version before
    selecting API. Active package defines current runtime; target's declared
    support floor remains compatibility constraint.

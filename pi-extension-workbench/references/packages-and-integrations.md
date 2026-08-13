@@ -6,15 +6,20 @@ examples. Verify manifest and provider contracts in installed docs before edits.
 ## Recognize package-shaped work
 
 A request naming repository or package such as `pi-auto-dag` still counts as Pi
-extension work when `package.json` has `pi.extensions`, conventional
-`extensions/`, or imports `@earendil-works/pi-coding-agent`. Inspect manifest,
-entry points, lockfile, and package scripts before choosing API.
+extension work when `package.json` has `pi.extensions`, a conventional
+`extensions/` directory contains its entry point, or code exports a default
+extension factory using `ExtensionAPI`. A core-package import alone may indicate
+an embedded SDK app, not an extension. Inspect manifest, entry points, lockfile,
+and package scripts before choosing API.
 
-Check target Pi dependency or peer range against active package version:
+Set `TARGET_PACKAGE_JSON` to manifest owning inspected extension entry point,
+not workspace root, then check its Pi range against active package version:
 
 ```bash
+TARGET_PACKAGE_JSON=/path/to/extension/package.json
 node -p 'require(process.env.PI_CODING_AGENT_ROOT + "/package.json").version'
-node -e 'const p=require("./package.json"); console.log({dependencies:p.dependencies,peerDependencies:p.peerDependencies,devDependencies:p.devDependencies,engines:p.engines})'
+node -e 'const p=require(process.argv[1]); console.log({dependencies:p.dependencies,peerDependencies:p.peerDependencies,devDependencies:p.devDependencies,engines:p.engines})' \
+  "$TARGET_PACKAGE_JSON"
 ```
 
 Installed package defines active runtime. Broad target support range adds a
