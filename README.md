@@ -126,6 +126,10 @@ Creates coherent scoped Conventional Commits from changes against the target bra
 
 Creates focused GitHub pull requests from inspected branch changes.
 
+#### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
+
+Develops, modifies, and debugs Pi extensions and extension packages using safely resolved, version-matched references shipped with installed Pi.
+
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
