@@ -80,7 +80,7 @@ Implements one issue, runs a native subagent review, then publishes a PR or retu
 
 #### [🗣️ `pr-comment-sweep`](pr-comment-sweep/)
 
-Fetches PR comments, assesses actionable feedback, proposes and applies accepted fixes, then commits and pushes.
+Fetches PR comments, fixes actionable feedback, pushes scoped repairs, and resolves addressed threads.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 
