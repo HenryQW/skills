@@ -126,6 +126,10 @@ Creates coherent scoped Conventional Commits from changes against the target bra
 
 Creates focused GitHub pull requests from inspected branch changes.
 
+#### [🔄 `merge-main`](merge-main/)
+
+Merges current remote `main` into current worktree branch with safe stashing and conflict repair.
+
 #### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
 
 Builds and repairs Pi extensions against version-matched docs and examples from installed Pi; includes a reusable authority resolver.
