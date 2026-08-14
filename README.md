@@ -134,6 +134,10 @@ Builds and repairs Pi extensions against version-matched docs and examples from 
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
 
+#### [🔄 `update-from-main`](update-from-main/)
+
+Safely syncs current worktree branch with remote `main`.
+
 ## 📄 License
 
 Apache License 2.0.
