@@ -153,15 +153,14 @@ def emit(
     stash_oid: str | None,
     stash_state: str,
 ) -> None:
+    stash = "none" if stash_oid is None else f"{stash_oid}:{stash_state}"
     fields = (
         ("status", status),
-        ("branch_ref", branch_ref),
-        ("head_before", head_before),
-        ("main_ref", FETCHED_MAIN_REF),
-        ("main_sha", main_sha),
-        ("head_after", revision("HEAD")),
-        ("stash_oid", stash_oid or "none"),
-        ("stash_state", stash_state),
+        ("branch", branch_ref),
+        ("before", head_before),
+        ("main", f"{FETCHED_MAIN_REF}:{main_sha}"),
+        ("head", revision("HEAD")),
+        ("stash", stash),
     )
     print(" ".join(f"{key}={value}" for key, value in fields))
 
@@ -265,7 +264,7 @@ def self_test() -> None:
     with tempfile.TemporaryDirectory() as raw_tmp:
         root = Path(raw_tmp)
         seed, repo = setup_repo(root / "clean")
-        commit(repo, "feature.txt", "feature\n", "test: feature")
+        head_before = commit(repo, "feature.txt", "feature\n", "test: feature")
         main_sha = commit(seed, "main.txt", "main\n", "test: main")
         test_git(seed, "push", "origin", "main")
         (repo / "staged.txt").write_text("staged\n", encoding="utf-8")
@@ -273,9 +272,12 @@ def self_test() -> None:
         (repo / "untracked.txt").write_text("untracked\n", encoding="utf-8")
         result, output = update_in(repo)
         assert result == 0
-        assert f"main_ref={FETCHED_MAIN_REF}" in output
-        assert f"main_sha={main_sha}" in output
-        assert "stash_state=popped" in output
+        assert len(output.split()) == 6
+        assert "branch=refs/heads/feature" in output
+        assert f"before={head_before}" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"head={test_git(repo, 'rev-parse', 'HEAD')}" in output
+        assert "stash=" in output and output.rstrip().endswith(":popped")
         assert test_git(repo, "rev-parse", FETCHED_MAIN_REF) == main_sha
         assert (repo / "main.txt").read_text(encoding="utf-8") == "main\n"
         assert "A  staged.txt" in test_git(repo, "status", "--porcelain=v1", "--untracked-files=all")
@@ -291,8 +293,8 @@ def self_test() -> None:
         assert result == 2
         stash_oid = test_git(repo, "rev-parse", "refs/stash")
         assert "status=merge_conflict" in output
-        assert f"main_sha={main_sha}" in output
-        assert f"stash_oid={stash_oid}" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"stash={stash_oid}:retained" in output
         assert not (repo / "deferred.txt").exists()
         assert test_git(repo, "diff", "--name-only", "--diff-filter=U") == "conflict.txt"
         assert test_git(repo, "rev-parse", FETCHED_MAIN_REF) == main_sha
@@ -310,8 +312,8 @@ def self_test() -> None:
         stash_oid = test_git(repo, "rev-parse", "refs/stash")
         assert result == 3
         assert "status=stash_restore_failed" in output
-        assert f"main_sha={main_sha}" in output
-        assert f"stash_oid={stash_oid}" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"stash={stash_oid}:retained" in output
         assert (repo / "ignored.txt").read_text(encoding="utf-8") == "upstream\n"
         assert test_git(repo, "stash", "show", "--include-untracked", "--name-only", stash_oid) == "ignored.txt"
 

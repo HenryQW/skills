@@ -1,21 +1,16 @@
 ---
 name: update-from-main
-description: Update current worktree branch from remote main with exact refs, stashing local changes and resolving conflicts. Use when asked to sync, update, or bring main into current worktree or branch.
+description: Safely sync attached non-`main` worktree branch with fetched `origin/main`. Use when asked to update, merge, or bring main into current branch.
 ---
 
 # update-from-main
 
-Update current worktree branch from `origin/main`.
+Run `python3 <skill>/scripts/update_from_main.py`.
 
-1. Run:
+Helper fetches before mutation, stashes tracked/untracked state plus colliding ignored paths, and merges exact `main_sha`.
 
-   ```bash
-   python3 <skill>/scripts/update_from_main.py
-   ```
-
-2. Helper accepts only attached non-`main` branch. It fetches `+refs/heads/main:refs/remotes/origin/main` before mutation, pins `main_sha`, then stashes tracked/untracked state plus ignored paths that collide with source.
-3. `status=merged` or `status=up_to_date` ends work. Report emitted refs, SHAs, and stash state.
-4. On `status=merge_conflict`, agent must solve every conflict in current worktree: inspect both sides, preserve intended behavior, `git add <paths>`, then `GIT_EDITOR=true git merge --continue`. If `stash_oid` is not `none`, run `git stash apply --index <stash_oid>` after merge completion.
-5. On `status=stash_conflict`, agent must solve every stash conflict and retain backup `stash_oid`.
-6. On `status=stash_restore_failed`, retain `stash_oid`; inspect current files and `git stash show --include-untracked <stash_oid>`. Restore clear changes. Ask user which version wins for an upstream-path collision; never drop backup first.
-7. After conflict recovery, inspect `git status --short` and run smallest relevant project check. Never rebase, reset, abort, commit unrelated work, or push.
+- `status=merged` or `status=up_to_date`: report emitted refs, SHAs, and stash state.
+- `status=merge_conflict`: resolve intended behavior, `git add <paths>`, `GIT_EDITOR=true git merge --continue`; then apply non-`none` `stash` OID with `git stash apply --index <oid>`.
+- `status=stash_conflict`: resolve and stage every stash conflict; retain and report stash OID.
+- `status=stash_restore_failed`: retain and report stash OID, inspect files and `git stash show --include-untracked <oid>`, then restore clear changes. Ask user which version wins for upstream-path collision; never drop backup first.
+- After recovery, run `git status --short` and smallest relevant check. Never rebase, reset, abort, push, or commit unrelated work.
