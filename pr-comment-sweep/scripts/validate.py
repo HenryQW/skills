@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Run pr-comment-sweep helper self-tests."""
+"""Run PR feedback helper regression checks."""
 
 from pathlib import Path
 import subprocess
-import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-for script in ("fetch_feedback.py", "push_head.py", "resolve_threads.py"):
-    result = subprocess.run(
-        (sys.executable, f"pr-comment-sweep/scripts/{script}", "--self-test"),
-        cwd=ROOT,
-    )
+compile((ROOT / "scripts/fetch-pr-feedback.py").read_text(), "fetch-pr-feedback.py", "exec")
+for command in (
+    ("node", "scripts/pr-feedback.mjs", "self-test"),
+    ("sh", "-n", "scripts/verify-pr-target.sh"),
+):
+    result = subprocess.run(command, cwd=ROOT)
     if result.returncode:
         raise SystemExit(result.returncode)
