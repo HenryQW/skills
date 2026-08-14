@@ -1,16 +1,16 @@
 ---
-name: merge-main
-description: Merge current remote main into current worktree branch with exact refs, stashing local changes and resolving conflicts. Use when asked to sync, merge, or bring main into current worktree or branch.
+name: update-from-main
+description: Update current worktree branch from remote main with exact refs, stashing local changes and resolving conflicts. Use when asked to sync, update, or bring main into current worktree or branch.
 ---
 
-# merge-main
+# update-from-main
 
-Merge `origin/main` into current worktree branch.
+Update current worktree branch from `origin/main`.
 
 1. Run:
 
    ```bash
-   python3 <skill>/scripts/merge_main.py
+   python3 <skill>/scripts/update_from_main.py
    ```
 
 2. Helper accepts only attached non-`main` branch. It stashes tracked and untracked state, fetches `+refs/heads/main:refs/remotes/origin/main`, pins `main_sha`, then merges that exact commit.

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Merge Main"
-  short_description: "Merge current origin/main into worktree"
-  default_prompt: "Use $merge-main to fetch origin/main, merge its exact ref into current worktree branch, stash local changes, and resolve any conflicts."
