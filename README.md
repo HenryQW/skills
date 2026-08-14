@@ -136,7 +136,7 @@ Finds evidenced waste in an existing skill, applies the smallest root-cause fix,
 
 #### [🔄 `update-from-main`](update-from-main/)
 
-Updates current worktree branch from remote `main` with safe stashing and conflict repair.
+Updates current worktree branch from remote `main` with safe stashing, ignored-file protection, and conflict repair.
 
 ## 📄 License
 

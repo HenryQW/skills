@@ -89,6 +89,12 @@ def status_lines() -> list[str]:
     return git(["status", "--porcelain=v1", "--untracked-files=all"]).splitlines()
 
 
+def ignored_source_paths(source_sha: str) -> list[str]:
+    ignored = set(git(["ls-files", "--others", "--ignored", "--exclude-standard"]).splitlines())
+    source = set(git(["ls-tree", "-r", "--name-only", source_sha]).splitlines())
+    return sorted(ignored & source)
+
+
 def require_ready_worktree() -> str:
     if git(["rev-parse", "--is-inside-work-tree"]) != "true":
         raise UpdateError("current directory must be inside a worktree")
@@ -100,16 +106,16 @@ def require_ready_worktree() -> str:
     return current_branch_ref()
 
 
-def stash_dirty_worktree() -> str | None:
-    if not status_lines():
+def stash_dirty_worktree(source_sha: str) -> str | None:
+    ignored = ignored_source_paths(source_sha)
+    if not status_lines() and not ignored:
         return None
     before = optional_revision("refs/stash")
-    run(["stash", "push", "--include-untracked", "--message", "update-from-main"])
+    mode = "--all" if ignored else "--include-untracked"
+    run(["stash", "push", mode, "--message", "update-from-main"])
     stash_oid = revision("refs/stash")
     if stash_oid == before:
         raise UpdateError("git stash did not create a backup")
-    if status_lines():
-        raise UpdateError(f"stash {stash_oid} did not clean worktree")
     return stash_oid
 
 
@@ -166,8 +172,10 @@ def update_from_main() -> int:
     stash_oid: str | None = None
     main_sha = "none"
     try:
-        stash_oid = stash_dirty_worktree()
         main_sha = fetch_source()
+        stash_oid = stash_dirty_worktree(main_sha)
+        if status_lines():
+            raise UpdateError(f"stash {stash_oid} did not clean worktree")
         if current_branch_ref() != branch_ref or revision(branch_ref) != head_before:
             raise UpdateError("current branch moved before merge")
         if is_ancestor(main_sha, "HEAD"):
@@ -291,6 +299,37 @@ def self_test() -> None:
         test_git(repo, "merge", "--abort")
         test_git(repo, "stash", "apply", "--index", stash_oid)
         assert (repo / "deferred.txt").read_text(encoding="utf-8") == "deferred\n"
+
+        seed, repo = setup_repo(root / "ignored")
+        main_sha = commit(seed, "ignored.txt", "upstream\n", "test: main")
+        test_git(seed, "push", "origin", "main")
+        exclude = repo / ".git" / "info" / "exclude"
+        exclude.write_text(exclude.read_text(encoding="utf-8") + "\n/ignored.txt\n", encoding="utf-8")
+        (repo / "ignored.txt").write_text("local\n", encoding="utf-8")
+        result, output = update_in(repo)
+        stash_oid = test_git(repo, "rev-parse", "refs/stash")
+        assert result == 3
+        assert "status=stash_restore_failed" in output
+        assert f"main_sha={main_sha}" in output
+        assert f"stash_oid={stash_oid}" in output
+        assert (repo / "ignored.txt").read_text(encoding="utf-8") == "upstream\n"
+        assert test_git(repo, "stash", "show", "--include-untracked", "--name-only", stash_oid) == "ignored.txt"
+
+        child = root / "submodule-child"
+        run(["init", os.fspath(child)])
+        test_git(child, "config", "user.email", "agent@example.invalid")
+        test_git(child, "config", "user.name", "Agent")
+        commit(child, "child.txt", "base\n", "test: child")
+        _seed, repo = setup_repo(root / "submodule")
+        test_git(repo, "-c", "protocol.file.allow=always", "submodule", "add", os.fspath(child), "sub")
+        test_git(repo, "commit", "-am", "test: add submodule")
+        (repo / "ordinary.txt").write_text("ordinary\n", encoding="utf-8")
+        (repo / "sub" / "child.txt").write_text("dirty\n", encoding="utf-8")
+        result, _output = update_in(repo)
+        assert result == 1
+        assert (repo / "ordinary.txt").read_text(encoding="utf-8") == "ordinary\n"
+        assert (repo / "sub" / "child.txt").read_text(encoding="utf-8") == "dirty\n"
+        assert not test_git(repo, "stash", "list")
 
 
 def main(argv: list[str]) -> int:
