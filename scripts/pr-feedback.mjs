@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 
 const PR_FIELDS = "number,url,title,state,baseRefName,headRefName,headRefOid,headRepository";
 const PR_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/;
+const READ_ATTEMPTS = 3;
 
 const FEEDBACK_QUERY = `
 query Feedback($owner:String!,$repo:String!,$number:Int!,$commentsCursor:String,$reviewsCursor:String,$threadsCursor:String){
@@ -88,6 +89,26 @@ function jsonCommand(program, args, input) {
   }
 }
 
+function retryableReadFailure(error) {
+  return /\b5(?:\d\d|xx)\b|tls|ssl|x509|certificate|handshake/i.test(error instanceof Error ? error.message : String(error));
+}
+
+function retryRead(read, report = console.error) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return read();
+    } catch (error) {
+      if (attempt === READ_ATTEMPTS - 1 || !retryableReadFailure(error)) throw error;
+      report(`retrying read-only GitHub request (${attempt + 1}/${READ_ATTEMPTS - 1})`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250 * (attempt + 1));
+    }
+  }
+}
+
+function readJsonCommand(program, args, input) {
+  return retryRead(() => jsonCommand(program, args, input));
+}
+
 function git(...args) {
   return run("git", args).trim();
 }
@@ -112,7 +133,7 @@ function readOpenPr(pr) {
   const args = ["pr", "view"];
   if (pr !== undefined) args.push(pr);
   args.push("--json", PR_FIELDS);
-  const value = jsonCommand("gh", args);
+  const value = readJsonCommand("gh", args);
   if (value.state !== "OPEN") throw new FeedbackError(`PR must be OPEN, got ${JSON.stringify(value.state)}`);
 
   const url = requiredText(value.url, "PR URL");
@@ -144,7 +165,7 @@ function requireDiscoveryBranch(pr, metadata) {
   }
 }
 
-function graphql(query, variables) {
+function graphqlResponse(query, variables) {
   const args = ["api", "graphql", "-F", "query=@-"];
   for (const [name, value] of Object.entries(variables)) {
     if (value !== null && value !== undefined) args.push("-F", `${name}=${value}`);
@@ -155,6 +176,14 @@ function graphql(query, variables) {
   }
   if (!isRecord(response.data)) throw new FeedbackError("GitHub GraphQL response has no data");
   return response.data;
+}
+
+function readGraphql(query, variables) {
+  return retryRead(() => graphqlResponse(query, variables));
+}
+
+function writeGraphql(query, variables) {
+  return graphqlResponse(query, variables);
 }
 
 function pullRequest(data) {
@@ -175,7 +204,7 @@ function connection(value, label) {
   return { nodes, hasNextPage, endCursor };
 }
 
-function collectFeedback(metadata, request = graphql) {
+function collectFeedback(metadata, request = readGraphql) {
   const [owner, repo] = metadata.baseRepository.split("/", 2);
   const targets = [
     { key: "conversationComments", field: "comments", cursor: "commentsCursor", label: "conversation comments" },
@@ -231,7 +260,7 @@ function collectReplies(thread, request) {
   return { ...thread, comments };
 }
 
-function collectThreadStates(metadata, request = graphql) {
+function collectThreadStates(metadata, request = readGraphql) {
   const [owner, repo] = metadata.baseRepository.split("/", 2);
   const states = new Map();
   let cursor = null;
@@ -248,7 +277,7 @@ function collectThreadStates(metadata, request = graphql) {
 }
 
 function resolveThread(threadId) {
-  const data = graphql(RESOLVE_THREAD_MUTATION, { threadId });
+  const data = writeGraphql(RESOLVE_THREAD_MUTATION, { threadId });
   const result = data.resolveReviewThread;
   if (!isRecord(result) || !isRecord(result.thread)) throw new FeedbackError(`failed to resolve ${threadId}`);
   if (result.thread.id !== threadId || result.thread.isResolved !== true) {
@@ -296,6 +325,19 @@ function nodeIds(nodes, label) {
   });
 }
 
+function threadBuckets(threads) {
+  const resolved = [];
+  const outdated = [];
+  const openCurrent = [];
+  for (const thread of threads) {
+    if (!isRecord(thread)) throw new FeedbackError("invalid review thread");
+    if (bool(thread.isResolved, "review thread isResolved")) resolved.push(thread);
+    else if (bool(thread.isOutdated, "review thread isOutdated")) outdated.push(thread);
+    else openCurrent.push(thread);
+  }
+  return { resolved, outdated, openCurrent };
+}
+
 function login(author) {
   if (author === null) return "-";
   if (!isRecord(author)) throw new FeedbackError("comment author is invalid");
@@ -313,30 +355,20 @@ function location(thread) {
 }
 
 function printFetchSummary(data, previous, out) {
-  if (previous && previous.pullRequest.url !== data.pullRequest.url) {
-    throw new FeedbackError(`existing feedback JSON belongs to ${previous.pullRequest.url}, not ${data.pullRequest.url}`);
-  }
   const oldReviewIds = new Set(previous ? nodeIds(previous.reviews, "previous review") : []);
   const newReviewIds = nodeIds(data.reviews, "review").filter((id) => !oldReviewIds.has(id));
-  const resolved = [];
-  const unresolved = [];
-  for (const thread of data.reviewThreads) {
-    if (!isRecord(thread)) throw new FeedbackError("invalid review thread");
-    if (bool(thread.isResolved, "review thread isResolved")) resolved.push(thread);
-    else unresolved.push(thread);
-  }
+  const { resolved, outdated, openCurrent } = threadBuckets(data.reviewThreads);
 
   console.log(`snapshot=${out}`);
-  console.log(`counts comments=${data.conversationComments.length} reviews=${data.reviews.length} threads=${data.reviewThreads.length} unresolved=${unresolved.length}`);
+  console.log(`counts comments=${data.conversationComments.length} reviews=${data.reviews.length} threads=${data.reviewThreads.length} open_current=${openCurrent.length} outdated=${outdated.length}`);
   console.log(`new_review_ids=${newReviewIds.join(",") || "-"}`);
-  console.log("unresolved_threads=thread\tlocation\toutdated\tcomment\tauthor\tbody");
-  if (!unresolved.length) console.log("-");
-  for (const thread of unresolved) {
+  console.log("open_current_threads=thread\tlocation\tcomment\tauthor\tbody");
+  if (!openCurrent.length) console.log("-");
+  for (const thread of openCurrent) {
     const threadId = requiredText(thread.id, "review thread ID");
-    const outdated = bool(thread.isOutdated, "review thread isOutdated") ? "yes" : "no";
     const comments = list(thread.comments, `replies for ${threadId}`);
     if (!comments.length) {
-      console.log([threadId, location(thread), outdated, "-", "-", "-"].join("\t"));
+      console.log([threadId, location(thread), "-", "-", "-"].join("\t"));
       continue;
     }
     for (const comment of comments) {
@@ -344,7 +376,6 @@ function printFetchSummary(data, previous, out) {
       console.log([
         threadId,
         location(thread),
-        outdated,
         requiredText(comment.id, "comment ID"),
         login(comment.author),
         JSON.stringify(text(comment.body, "comment body")),
@@ -363,8 +394,8 @@ function writeSnapshot(path, data) {
 
 function fetchFeedback(options) {
   requireGh();
-  const out = resolve(options.out);
-  const previous = previousSnapshot(out);
+  const out = options.json ? null : resolve(options.out);
+  const previous = out ? previousSnapshot(out) : null;
   const localHead = cleanHead();
   const initial = readOpenPr(options.pr);
   if (previous && previous.pullRequest.url !== initial.url) {
@@ -378,8 +409,17 @@ function fetchFeedback(options) {
     throw new FeedbackError(`PR head changed during fetch: ${initial.headRefOid} -> ${current.headRefOid}`);
   }
   requireMatchingHead(current, localHead);
-  const saved = writeSnapshot(out, { ...data, pullRequest: current });
-  printFetchSummary({ ...data, pullRequest: current }, previous, saved);
+  const complete = {
+    ...data,
+    pullRequest: current,
+    openCurrentThreads: threadBuckets(data.reviewThreads).openCurrent,
+  };
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(complete)}\n`);
+    return;
+  }
+  const saved = writeSnapshot(out, complete);
+  printFetchSummary(complete, previous, saved);
 }
 
 function currentExpectedHead(pr, expectedHead) {
@@ -440,6 +480,19 @@ function pushRemote(repository) {
   return matches[0];
 }
 
+function verifyTarget(options) {
+  requireGh();
+  const localHead = cleanHead();
+  const metadata = readOpenPr(options.pr);
+  requireMatchingHead(metadata, localHead);
+  requireDiscoveryBranch(options.pr, metadata);
+  const repository = metadata.headRepository.nameWithOwner;
+  const remote = pushRemote(repository);
+  console.log(`pr=${metadata.url}`);
+  console.log(`remote=${remote} repository=${repository}`);
+  console.log(`push_target=git push ${remote} HEAD:${metadata.headRefName}`);
+}
+
 function pushHead(options) {
   requireGh();
   const saved = snapshot(resolve(options.snapshot));
@@ -470,6 +523,16 @@ function selfTest() {
   assert.equal(githubRemote("https://github.com/Owner/Repo.git"), "owner/repo");
   assert.equal(githubRemote("https://example.com/Owner/Repo.git"), null);
 
+  assert.equal(retryableReadFailure(new FeedbackError("HTTP 503")), true);
+  assert.equal(retryableReadFailure(new FeedbackError("HTTP 400")), false);
+  let readAttempts = 0;
+  assert.equal(retryRead(() => {
+    readAttempts += 1;
+    if (readAttempts === 1) throw new FeedbackError("TLS handshake failed");
+    return "ok";
+  }, () => {}), "ok");
+  assert.equal(readAttempts, 2);
+
   let feedbackPages = 0;
   const request = (query) => {
     if (query === THREAD_REPLIES_QUERY) return { node: { comments: page([{ id: "reply-2" }]) } };
@@ -492,6 +555,12 @@ function selfTest() {
     };
   };
   const metadata = { baseRepository: "owner/repo", number: 1 };
+  const buckets = threadBuckets([
+    { id: "resolved", isResolved: true, isOutdated: false },
+    { id: "outdated", isResolved: false, isOutdated: true },
+    { id: "open", isResolved: false, isOutdated: false },
+  ]);
+  assert.deepEqual(nodeIds(buckets.openCurrent, "open thread"), ["open"]);
   const fetched = collectFeedback(metadata, request);
   assert.deepEqual(nodeIds(fetched.conversationComments, "comment"), ["comment-1", "comment-2"]);
   assert.deepEqual(nodeIds(fetched.reviews, "review"), ["review-1"]);
@@ -520,7 +589,8 @@ function selfTest() {
 
 function usage() {
   return `usage:
-  node scripts/pr-feedback.mjs fetch [--pr PR] --out FILE
+  node scripts/pr-feedback.mjs fetch [--pr PR] (--out FILE | --json)
+  node scripts/pr-feedback.mjs target [--pr PR]
   node scripts/pr-feedback.mjs push --snapshot FILE
   node scripts/pr-feedback.mjs resolve [--pr PR] --expected-head SHA --thread ID [--thread ID ...]
   node scripts/pr-feedback.mjs self-test`;
@@ -528,7 +598,8 @@ function usage() {
 
 function parse(command, args) {
   const allowed = {
-    fetch: new Set(["--pr", "--out"]),
+    fetch: new Set(["--pr", "--out", "--json"]),
+    target: new Set(["--pr"]),
     push: new Set(["--snapshot"]),
     resolve: new Set(["--pr", "--expected-head", "--thread"]),
   }[command];
@@ -537,6 +608,11 @@ function parse(command, args) {
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
     if (!allowed.has(flag)) throw new UsageError(`unsupported ${flag} for ${command}`);
+    if (flag === "--json") {
+      if (values.json) throw new UsageError("--json was supplied twice");
+      values.json = true;
+      continue;
+    }
     const value = args[index + 1];
     if (value === undefined || value.startsWith("--")) throw new UsageError(`${flag} needs a value`);
     index += 1;
@@ -549,7 +625,8 @@ function parse(command, args) {
     values[key] = value;
   }
   validatePrRef(values.pr);
-  if (command === "fetch" && values.out === undefined) throw new UsageError("fetch needs --out");
+  if (command === "fetch" && values.out === undefined && !values.json) throw new UsageError("fetch needs --out or --json");
+  if (command === "fetch" && values.out !== undefined && values.json) throw new UsageError("fetch accepts --out or --json, not both");
   if (command === "push" && values.snapshot === undefined) throw new UsageError("push needs --snapshot");
   if (command === "resolve") {
     if (values.expectedHead === undefined) throw new UsageError("resolve needs --expected-head");
@@ -572,6 +649,7 @@ function main(argv) {
   }
   const options = parse(command, args);
   if (command === "fetch") fetchFeedback(options);
+  if (command === "target") verifyTarget(options);
   if (command === "push") pushHead(options);
   if (command === "resolve") resolveFeedback(options);
   return 0;
