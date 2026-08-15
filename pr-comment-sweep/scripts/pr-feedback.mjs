@@ -2,8 +2,9 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
 const PR_FIELDS = "number,url,title,state,baseRefName,headRefName,headRefOid,headRepository";
 const PR_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/;
@@ -310,7 +311,9 @@ function snapshot(path) {
 
 function previousSnapshot(path) {
   try {
-    return parsedSnapshot(readFileSync(path, "utf8"), path);
+    const raw = readFileSync(path, "utf8");
+    if (!raw.trim()) return null;
+    return parsedSnapshot(raw, path);
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     if (error instanceof FeedbackError) throw error;
@@ -533,6 +536,12 @@ function selfTest() {
   }, () => {}), "ok");
   assert.equal(readAttempts, 2);
 
+  const temporary = mkdtempSync(join(tmpdir(), "pr-feedback-"));
+  const emptySnapshot = join(temporary, "snapshot.json");
+  writeFileSync(emptySnapshot, "");
+  assert.equal(previousSnapshot(emptySnapshot), null);
+  rmSync(temporary, { recursive: true, force: true });
+
   let feedbackPages = 0;
   const request = (query) => {
     if (query === THREAD_REPLIES_QUERY) return { node: { comments: page([{ id: "reply-2" }]) } };
@@ -588,12 +597,13 @@ function selfTest() {
 }
 
 function usage() {
+  const command = `node ${process.argv[1]}`;
   return `usage:
-  node scripts/pr-feedback.mjs fetch [--pr PR] (--out FILE | --json)
-  node scripts/pr-feedback.mjs target [--pr PR]
-  node scripts/pr-feedback.mjs push --snapshot FILE
-  node scripts/pr-feedback.mjs resolve [--pr PR] --expected-head SHA --thread ID [--thread ID ...]
-  node scripts/pr-feedback.mjs self-test`;
+  ${command} fetch [--pr PR] (--out FILE | --json)
+  ${command} target [--pr PR]
+  ${command} push --snapshot FILE
+  ${command} resolve [--pr PR] --expected-head SHA --thread ID [--thread ID ...]
+  ${command} self-test`;
 }
 
 function parse(command, args) {

@@ -8,16 +8,22 @@ description: Fetch GitHub pull request comments with gh, assess actionable feedb
 Address actionable feedback on current-branch PR or supplied PR number/URL. Run
 standalone; never invoke, defer to, or modify Shipyard.
 
-1. Set `$PR` and temporary `$SNAPSHOT`. Run `scripts/verify-pr-target.sh "$PR"`;
-   it requires authenticated `gh`, open PR, clean index/worktree, matching local
-   `HEAD`, and exactly one matching HTTPS/SSH push remote. Then use read-only flow:
+1. Resolve `<skill>` to installed `pr-comment-sweep` directory. Set optional `$PR` number/URL and run bundled read-only flow:
 
    ```bash
-   scripts/fetch-pr-feedback.py "$PR" > "$SNAPSHOT"
+   SNAPSHOT=$(mktemp)
+   if [ -n "${PR:-}" ]; then
+     "<skill>/scripts/verify-pr-target.sh" "$PR"
+     "<skill>/scripts/fetch-pr-feedback.py" "$PR" > "$SNAPSHOT"
+   else
+     "<skill>/scripts/verify-pr-target.sh"
+     "<skill>/scripts/fetch-pr-feedback.py" > "$SNAPSHOT"
+   fi
+   PR=$(jq -r '.pullRequest.url' "$SNAPSHOT")
    jq '.openCurrentThreads' "$SNAPSHOT"
    ```
 
-   For compact terminal output instead, run `node scripts/pr-feedback.mjs fetch --pr "$PR" --out "$SNAPSHOT"`. On head mismatch, stop unless user says exact words **“Adopt PR head”**. Inspect `gh pr view "$PR" --json headRepository,headRefName`; select exactly one configured remote whose normalized GitHub host/owner/repo matches `headRepository`; run `git fetch "$REMOTE" "$HEAD_REF"`, show `git log --oneline HEAD..FETCH_HEAD` and `git diff --stat HEAD..FETCH_HEAD`, require `git merge-base --is-ancestor HEAD FETCH_HEAD`, then
+   Verifier requires authenticated `gh`, open PR, clean index/worktree, matching local `HEAD`, and exactly one matching HTTPS/SSH push remote. For compact terminal output, run `node "<skill>/scripts/pr-feedback.mjs" fetch --pr "$PR" --out "$SNAPSHOT"`. On head mismatch, stop unless user says exact words **“Adopt PR head”**. Inspect `gh pr view "$PR" --json headRepository,headRefName`; select exactly one configured remote whose normalized GitHub host/owner/repo matches `headRepository`; run `git fetch "$REMOTE" "$HEAD_REF"`, show `git log --oneline HEAD..FETCH_HEAD` and `git diff --stat HEAD..FETCH_HEAD`, require `git merge-base --is-ancestor HEAD FETCH_HEAD`, then
    run `git merge --ff-only FETCH_HEAD`. Stop on divergence; never hard-reset from
    “adopt”. Re-run verification and fetch. Inspect PR status, base, full diff, and
    snapshot.
@@ -44,11 +50,11 @@ standalone; never invoke, defer to, or modify Shipyard.
    work. Never wait or poll GitHub checks; report pending checks and leave CI repair to
    its owning workflow.
 5. Commit accepted fixes with scoped Conventional Commit message(s). With no fixes,
-   make no commit or push. After clean-worktree validation, run `node scripts/pr-feedback.mjs push --snapshot "$SNAPSHOT"`. It selects one matching
+   make no commit or push. After clean-worktree validation, run `node "<skill>/scripts/pr-feedback.mjs" push --snapshot "$SNAPSHOT"`. It selects one matching
    PR-head remote, pushes explicit `HEAD:<headRefName>`, and verifies remote
    `headRefOid == local HEAD`.
-6. Run `node scripts/pr-feedback.mjs fetch --pr "$PR" --out "$FINAL_SNAPSHOT"`.
-   Assess added feedback, then pass only addressed IDs: `node scripts/pr-feedback.mjs resolve --pr "$PR" --expected-head "$(git rev-parse HEAD)" --thread "$ID"`;
+6. Set `FINAL_SNAPSHOT=$(mktemp)`; run `node "<skill>/scripts/pr-feedback.mjs" fetch --pr "$PR" --out "$FINAL_SNAPSHOT"`.
+   Assess added feedback, then pass only addressed IDs: `node "<skill>/scripts/pr-feedback.mjs" resolve --pr "$PR" --expected-head "$(git rev-parse HEAD)" --thread "$ID"`;
    repeat `--thread` per ID. It checks open PR and exact head, issues no retried
    mutation, and verifies every supplied ID resolved. Never resolve non-actionable or
    blocked threads; report them pending. Re-fetch full feedback once more, assess late
