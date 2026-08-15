@@ -136,7 +136,7 @@ Finds evidenced waste in an existing skill, applies the smallest root-cause fix,
 
 #### [🔄 `update-from-main`](update-from-main/)
 
-Safely syncs current worktree branch with remote `main`.
+Safely syncs current worktree branch with remote `main` and names recovery steps.
 
 ## 📄 License
 
