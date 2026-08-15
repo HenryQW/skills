@@ -90,8 +90,9 @@ def status_lines() -> list[str]:
 
 
 def ignored_source_paths(source_sha: str) -> list[str]:
-    ignored = set(git(["ls-files", "--others", "--ignored", "--exclude-standard"]).splitlines())
-    source = set(git(["ls-tree", "-r", "--name-only", source_sha]).splitlines())
+    root = Path(git(["rev-parse", "--show-toplevel"]))
+    ignored = set(git(["ls-files", "--others", "--ignored", "--exclude-standard"], cwd=root).splitlines())
+    source = set(git(["ls-tree", "-r", "--full-tree", "--name-only", source_sha], cwd=root).splitlines())
     return sorted(ignored & source)
 
 
@@ -187,8 +188,25 @@ def update_from_main() -> int:
                     emit("merge_conflict", branch_ref, head_before, main_sha, stash_oid, "retained")
                     print(f"error: {detail}", file=sys.stderr)
                     return 2
+                if has_git_path("MERGE_HEAD"):
+                    emit("merge_pending", branch_ref, head_before, main_sha, stash_oid, "retained")
+                    print(
+                        f"error: {detail}; fix hook failure, run GIT_EDITOR=true git merge --continue, "
+                        "then apply non-none stash OID",
+                        file=sys.stderr,
+                    )
+                    return 2
                 raise UpdateError(detail or "git merge failed")
             outcome = "merged"
+
+        if outcome == "merged" and status_lines():
+            emit("submodule_update_required", branch_ref, head_before, main_sha, stash_oid, "retained")
+            print(
+                "error: initialized submodule requires git submodule update --checkout --recursive; "
+                "then apply non-none stash OID",
+                file=sys.stderr,
+            )
+            return 4
 
         if stash_oid:
             restored, stash_state, detail = restore_stash(stash_oid)
@@ -308,7 +326,8 @@ def self_test() -> None:
         exclude = repo / ".git" / "info" / "exclude"
         exclude.write_text(exclude.read_text(encoding="utf-8") + "\n/ignored.txt\n", encoding="utf-8")
         (repo / "ignored.txt").write_text("local\n", encoding="utf-8")
-        result, output = update_in(repo)
+        (repo / "sub").mkdir()
+        result, output = update_in(repo / "sub")
         stash_oid = test_git(repo, "rev-parse", "refs/stash")
         assert result == 3
         assert "status=stash_restore_failed" in output
@@ -333,6 +352,63 @@ def self_test() -> None:
         assert (repo / "sub" / "child.txt").read_text(encoding="utf-8") == "dirty\n"
         assert not test_git(repo, "stash", "list")
 
+        seed, repo = setup_repo(root / "submodule-update")
+        child = root / "submodule-update-child"
+        run(["init", os.fspath(child)])
+        test_git(child, "config", "user.email", "agent@example.invalid")
+        test_git(child, "config", "user.name", "Agent")
+        child_base = commit(child, "child.txt", "base\n", "test: child")
+        test_git(seed, "-c", "protocol.file.allow=always", "submodule", "add", os.fspath(child), "sub")
+        test_git(seed, "commit", "-am", "test: add submodule")
+        test_git(seed, "push", "origin", "main")
+        test_git(repo, "fetch", "origin", "main")
+        test_git(repo, "merge", "--ff-only", "origin/main")
+        run(["-c", "protocol.file.allow=always", "submodule", "update", "--init", "--checkout"], cwd=repo)
+        assert test_git(repo / "sub", "rev-parse", "HEAD") == child_base
+        commit(repo, "feature.txt", "feature\n", "test: feature")
+        child_sha = commit(child, "child.txt", "main\n", "test: child update")
+        test_git(seed / "sub", "fetch", "origin")
+        test_git(seed / "sub", "checkout", child_sha)
+        test_git(seed, "add", "sub")
+        test_git(seed, "commit", "-m", "test: update submodule")
+        main_sha = test_git(seed, "rev-parse", "HEAD")
+        test_git(seed, "push", "origin", "main")
+        (repo / "deferred.txt").write_text("deferred\n", encoding="utf-8")
+        result, output = update_in(repo)
+        assert result == 4
+        stash_oid = test_git(repo, "rev-parse", "refs/stash")
+        assert "status=submodule_update_required" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"stash={stash_oid}:retained" in output
+        assert not (repo / "deferred.txt").exists()
+        assert test_git(repo / "sub", "rev-parse", "HEAD") == child_base
+        assert "M sub" in test_git(repo, "status", "--porcelain=v1")
+        test_git(repo, "-c", "protocol.file.allow=always", "submodule", "update", "--checkout", "--recursive")
+        assert test_git(repo / "sub", "rev-parse", "HEAD") == child_sha
+        test_git(repo, "stash", "apply", "--index", stash_oid)
+        assert (repo / "deferred.txt").read_text(encoding="utf-8") == "deferred\n"
+
+        seed, repo = setup_repo(root / "merge-hook")
+        commit(repo, "feature.txt", "feature\n", "test: feature")
+        main_sha = commit(seed, "main.txt", "main\n", "test: main")
+        test_git(seed, "push", "origin", "main")
+        (repo / "deferred.txt").write_text("deferred\n", encoding="utf-8")
+        hook = repo / ".git" / "hooks" / "pre-merge-commit"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        result, output = update_in(repo)
+        assert result == 2
+        stash_oid = test_git(repo, "rev-parse", "refs/stash")
+        assert "status=merge_pending" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"stash={stash_oid}:retained" in output
+        assert (repo / ".git" / "MERGE_HEAD").exists()
+        assert not (repo / "deferred.txt").exists()
+        hook.unlink()
+        run(["-c", "core.editor=true", "merge", "--continue"], cwd=repo)
+        test_git(repo, "stash", "apply", "--index", stash_oid)
+        assert (repo / "deferred.txt").read_text(encoding="utf-8") == "deferred\n"
+
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -340,7 +416,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.self_test:
         self_test()
-        print("update-from-main self-test ok: dirty restore and conflict backup")
+        print("update-from-main self-test ok: update and recovery paths")
         return 0
     return update_from_main()
 
