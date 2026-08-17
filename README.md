@@ -82,7 +82,7 @@ Implements one issue, runs a native subagent review, then publishes a PR or retu
 
 #### [🗣️ `pr-comment-sweep`](pr-comment-sweep/)
 
-Sweeps PR feedback with bundled helpers, retrying snapshots, evidence-led triage, safe push, and thread resolution.
+Sweeps complete PR feedback with resumable state, one-shot status, idempotent push recovery, and batched thread resolution.
 
 #### [🚀 `pr-launchpad`](pr-launchpad/)
 

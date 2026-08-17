@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-const PR_FIELDS = "number,url,title,state,baseRefName,headRefName,headRefOid,headRepository";
+const PR_FIELDS = "number,url,title,state,baseRefName,headRefName,headRefOid,headRepository,mergeStateStatus,statusCheckRollup";
 const PR_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/;
 const READ_ATTEMPTS = 3;
 
@@ -94,6 +94,10 @@ function retryableReadFailure(error) {
   return /\b5(?:\d\d|xx)\b|tls|ssl|x509|certificate|handshake/i.test(error instanceof Error ? error.message : String(error));
 }
 
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
 function retryRead(read, report = console.error) {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -101,7 +105,7 @@ function retryRead(read, report = console.error) {
     } catch (error) {
       if (attempt === READ_ATTEMPTS - 1 || !retryableReadFailure(error)) throw error;
       report(`retrying read-only GitHub request (${attempt + 1}/${READ_ATTEMPTS - 1})`);
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250 * (attempt + 1));
+      sleep(250 * (attempt + 1));
     }
   }
 }
@@ -143,6 +147,8 @@ function readOpenPr(pr) {
   if (!Number.isInteger(value.number)) throw new FeedbackError("PR number must be an integer");
   requiredText(value.headRefName, "PR head ref");
   requiredText(value.headRefOid, "PR head OID");
+  requiredText(value.mergeStateStatus, "PR merge state");
+  list(value.statusCheckRollup, "PR status checks");
   if (!isRecord(value.headRepository)) throw new FeedbackError("PR head repository identity is unavailable");
   requiredText(value.headRepository.nameWithOwner, "PR head repository");
 
@@ -357,26 +363,43 @@ function location(thread) {
   return `${path}:${line}`;
 }
 
-function printFetchSummary(data, previous, out) {
-  const oldReviewIds = new Set(previous ? nodeIds(previous.reviews, "previous review") : []);
-  const newReviewIds = nodeIds(data.reviews, "review").filter((id) => !oldReviewIds.has(id));
-  const { resolved, outdated, openCurrent } = threadBuckets(data.reviewThreads);
+function checkBucket(check) {
+  if (!isRecord(check)) throw new FeedbackError("invalid PR status check");
+  if (typeof check.status === "string" && check.status !== "COMPLETED") return "pending";
+  if (typeof check.state === "string") {
+    if (check.state === "SUCCESS") return "passing";
+    return ["ERROR", "FAILURE"].includes(check.state) ? "failing" : "pending";
+  }
+  if (check.conclusion === null || check.conclusion === undefined || check.conclusion === "") return "pending";
+  const conclusion = text(check.conclusion, "PR status check conclusion");
+  if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion)) return "passing";
+  return ["ACTION_REQUIRED", "CANCELLED", "FAILURE", "STARTUP_FAILURE", "TIMED_OUT"].includes(conclusion) ? "failing" : "pending";
+}
 
-  console.log(`snapshot=${out}`);
-  console.log(`counts comments=${data.conversationComments.length} reviews=${data.reviews.length} threads=${data.reviewThreads.length} open_current=${openCurrent.length} outdated=${outdated.length}`);
-  console.log(`new_review_ids=${newReviewIds.join(",") || "-"}`);
-  console.log("open_current_threads=thread\tlocation\tcomment\tauthor\tbody");
-  if (!openCurrent.length) console.log("-");
-  for (const thread of openCurrent) {
+function checkSummary(metadata) {
+  const summary = { passing: 0, pending: 0, failing: 0 };
+  for (const check of list(metadata.statusCheckRollup, "PR status checks")) summary[checkBucket(check)] += 1;
+  return summary;
+}
+
+function printPrStatus(metadata, log = console.log) {
+  const checks = checkSummary(metadata);
+  log(`merge_state=${requiredText(metadata.mergeStateStatus, "PR merge state")} checks_total=${checks.passing + checks.pending + checks.failing} passing=${checks.passing} pending=${checks.pending} failing=${checks.failing}`);
+}
+
+function printThreads(label, threads, log) {
+  log(`${label}=thread\tlocation\tcomment\tauthor\tbody`);
+  if (!threads.length) log("-");
+  for (const thread of threads) {
     const threadId = requiredText(thread.id, "review thread ID");
     const comments = list(thread.comments, `replies for ${threadId}`);
     if (!comments.length) {
-      console.log([threadId, location(thread), "-", "-", "-"].join("\t"));
+      log([threadId, location(thread), "-", "-", "-"].join("\t"));
       continue;
     }
     for (const comment of comments) {
       if (!isRecord(comment)) throw new FeedbackError(`invalid comment in ${threadId}`);
-      console.log([
+      log([
         threadId,
         location(thread),
         requiredText(comment.id, "comment ID"),
@@ -385,7 +408,32 @@ function printFetchSummary(data, previous, out) {
       ].join("\t"));
     }
   }
-  console.log(`resolved_thread_ids=${nodeIds(resolved, "resolved review thread").join(",") || "-"}`);
+}
+
+function printFetchSummary(data, previous, out, log = console.log) {
+  const oldReviewIds = new Set(previous ? nodeIds(previous.reviews, "previous review") : []);
+  const newReviewIds = nodeIds(data.reviews, "review").filter((id) => !oldReviewIds.has(id));
+  const { resolved, outdated, openCurrent } = threadBuckets(data.reviewThreads);
+
+  log(`snapshot=${out}`);
+  log(`counts comments=${data.conversationComments.length} reviews=${data.reviews.length} threads=${data.reviewThreads.length} open_current=${openCurrent.length} outdated=${outdated.length}`);
+  log(`new_review_ids=${newReviewIds.join(",") || "-"}`);
+  printPrStatus(data.pullRequest, log);
+  log("conversation_comments=comment\tauthor\tbody");
+  if (!data.conversationComments.length) log("-");
+  for (const comment of data.conversationComments) {
+    if (!isRecord(comment)) throw new FeedbackError("invalid conversation comment");
+    log([requiredText(comment.id, "conversation comment ID"), login(comment.author), JSON.stringify(text(comment.body, "conversation comment body"))].join("\t"));
+  }
+  log("reviews=review\tstate\tauthor\tbody");
+  if (!data.reviews.length) log("-");
+  for (const review of data.reviews) {
+    if (!isRecord(review)) throw new FeedbackError("invalid review");
+    log([requiredText(review.id, "review ID"), requiredText(review.state, "review state"), login(review.author), JSON.stringify(text(review.body, "review body"))].join("\t"));
+  }
+  printThreads("open_current_threads", openCurrent, log);
+  printThreads("outdated_threads", outdated, log);
+  log(`resolved_thread_ids=${nodeIds(resolved, "resolved review thread").join(",") || "-"}`);
 }
 
 function writeSnapshot(path, data) {
@@ -496,24 +544,69 @@ function verifyTarget(options) {
   console.log(`push_target=git push ${remote} HEAD:${metadata.headRefName}`);
 }
 
-function pushHead(options) {
+function checkPr(options) {
   requireGh();
-  const saved = snapshot(resolve(options.snapshot));
-  const initial = saved.pullRequest;
+  const metadata = readOpenPr(options.pr);
+  console.log(`pr=${metadata.url}`);
+  printPrStatus(metadata);
+}
+
+function waitForHead(pr, expectedHead, readPr = readOpenPr, pause = sleep) {
+  let metadata;
+  for (let attempt = 0; attempt < READ_ATTEMPTS; attempt += 1) {
+    metadata = readPr(pr);
+    if (metadata.headRefOid === expectedHead) return metadata;
+    if (attempt < READ_ATTEMPTS - 1) pause(250 * (attempt + 1));
+  }
+  return metadata;
+}
+
+function publishHead(initial, localHead, operations) {
+  const { readPr, remoteFor, push, pause = sleep } = operations;
   const initialHead = requiredText(initial.headRefOid, "snapshot PR head");
-  const localHead = cleanHead();
-  const current = readOpenPr(initial.url);
+  const current = readPr(initial.url);
+  if (current.headRefOid === localHead) return { metadata: current, status: "already-current" };
   if (current.headRefOid !== initialHead) {
     throw new FeedbackError(`PR head changed since feedback fetch: ${initialHead} -> ${current.headRefOid}`);
   }
-  if (localHead === current.headRefOid) throw new FeedbackError("local HEAD already matches PR head; no push needed");
-  const remote = pushRemote(current.headRepository.nameWithOwner);
-  run("git", ["push", remote, `HEAD:${current.headRefName}`]);
-  const pushed = readOpenPr(current.url);
+
+  const remote = remoteFor(current.headRepository.nameWithOwner);
+  try {
+    push(remote, current.headRefName);
+  } catch (pushError) {
+    let observed;
+    try {
+      observed = waitForHead(current.url, localHead, readPr, pause);
+    } catch (readError) {
+      throw new FeedbackError(`push failed: ${pushError.message}; head verification failed: ${readError.message}`);
+    }
+    if (observed.headRefOid === localHead) {
+      return { metadata: observed, remote, status: "recovered-after-error" };
+    }
+    if (observed.headRefOid !== initialHead) {
+      throw new FeedbackError(`PR head changed while recovering failed push: ${initialHead} -> ${observed.headRefOid}`);
+    }
+    throw pushError;
+  }
+
+  const pushed = waitForHead(current.url, localHead, readPr, pause);
   if (pushed.headRefOid !== localHead) {
     throw new FeedbackError(`push did not update PR head to local HEAD: ${pushed.headRefOid} != ${localHead}`);
   }
-  console.log(`pushed_head=${localHead} remote=${remote} branch=${current.headRefName}`);
+  return { metadata: pushed, remote, status: "pushed" };
+}
+
+function pushHead(options) {
+  requireGh();
+  const initial = snapshot(resolve(options.snapshot)).pullRequest;
+  const localHead = cleanHead();
+  const result = publishHead(initial, localHead, {
+    readPr: readOpenPr,
+    remoteFor: pushRemote,
+    push: (remote, branch) => run("git", ["push", remote, `HEAD:${branch}`]),
+  });
+  const remote = result.remote ? ` remote=${result.remote}` : "";
+  console.log(`pushed_head=${localHead}${remote} branch=${result.metadata.headRefName} status=${result.status}`);
 }
 
 function page(nodes, hasNextPage = false, endCursor = null) {
@@ -587,6 +680,63 @@ function selfTest() {
   };
   assert.deepEqual([...collectThreadStates(metadata, stateRequest)], [["thread-1", true], ["thread-2", true]]);
 
+  const feedback = {
+    pullRequest: {
+      mergeStateStatus: "BLOCKED",
+      statusCheckRollup: [
+        { status: "COMPLETED", conclusion: "SUCCESS" },
+        { status: "IN_PROGRESS", conclusion: null },
+        { state: "FAILURE" },
+        { status: "COMPLETED", conclusion: "STALE" },
+      ],
+    },
+    conversationComments: [{ id: "conversation-1", author: { login: "octocat" }, body: "conversation body" }],
+    reviews: [{ id: "review-1", state: "CHANGES_REQUESTED", author: { login: "reviewer" }, body: "review body" }],
+    reviewThreads: [
+      { id: "current", isResolved: false, isOutdated: false, path: "src/a.js", line: 3, comments: [{ id: "current-comment", author: { login: "reviewer" }, body: "current body" }] },
+      { id: "outdated", isResolved: false, isOutdated: true, path: "src/b.js", originalLine: 4, comments: [{ id: "old-comment", author: { login: "reviewer" }, body: "outdated body" }] },
+      { id: "resolved", isResolved: true, isOutdated: false },
+    ],
+  };
+  assert.deepEqual(checkSummary(feedback.pullRequest), { passing: 1, pending: 2, failing: 1 });
+  const summaryLines = [];
+  printFetchSummary(feedback, { reviews: [{ id: "review-1" }] }, "/tmp/snapshot", (line) => summaryLines.push(line));
+  assert(summaryLines.includes("new_review_ids=-"));
+  assert(summaryLines.includes("merge_state=BLOCKED checks_total=4 passing=1 pending=2 failing=1"));
+  assert(summaryLines.some((line) => line.includes("conversation body")));
+  assert(summaryLines.some((line) => line.includes("review body")));
+  assert(summaryLines.some((line) => line.includes("current body")));
+  assert(summaryLines.some((line) => line.includes("outdated body")));
+
+  const oldHead = {
+    url: "https://github.com/owner/repo/pull/1",
+    headRefOid: "old",
+    headRefName: "feature",
+    headRepository: { nameWithOwner: "owner/repo" },
+  };
+  const localHead = { ...oldHead, headRefOid: "local" };
+  const sequence = (...values) => {
+    let index = 0;
+    return () => values[Math.min(index++, values.length - 1)];
+  };
+  const operations = (readPr, push = () => {}) => ({
+    readPr,
+    remoteFor: () => "origin",
+    push,
+    pause: () => {},
+  });
+  assert.equal(publishHead(oldHead, "local", operations(sequence(localHead))).status, "already-current");
+  assert.equal(publishHead(oldHead, "local", operations(sequence(oldHead, oldHead, localHead))).status, "pushed");
+  assert.equal(publishHead(oldHead, "local", operations(sequence(oldHead, localHead), () => {
+    throw new FeedbackError("HTTP 503");
+  })).status, "recovered-after-error");
+  assert.throws(
+    () => publishHead(oldHead, "local", operations(sequence(oldHead), () => {
+      throw new FeedbackError("HTTP 503");
+    })),
+    /HTTP 503/,
+  );
+
   assert.throws(
     () => collectFeedback(metadata, () => ({ repository: { pullRequest: {
       comments: page([], true), reviews: page([]), reviewThreads: page([]),
@@ -601,6 +751,7 @@ function usage() {
   return `usage:
   ${command} fetch [--pr PR] (--out FILE | --json)
   ${command} target [--pr PR]
+  ${command} checks [--pr PR]
   ${command} push --snapshot FILE
   ${command} resolve [--pr PR] --expected-head SHA --thread ID [--thread ID ...]
   ${command} self-test`;
@@ -610,6 +761,7 @@ function parse(command, args) {
   const allowed = {
     fetch: new Set(["--pr", "--out", "--json"]),
     target: new Set(["--pr"]),
+    checks: new Set(["--pr"]),
     push: new Set(["--snapshot"]),
     resolve: new Set(["--pr", "--expected-head", "--thread"]),
   }[command];
@@ -660,6 +812,7 @@ function main(argv) {
   const options = parse(command, args);
   if (command === "fetch") fetchFeedback(options);
   if (command === "target") verifyTarget(options);
+  if (command === "checks") checkPr(options);
   if (command === "push") pushHead(options);
   if (command === "resolve") resolveFeedback(options);
   return 0;
