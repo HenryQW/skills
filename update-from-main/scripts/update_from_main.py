@@ -6,11 +6,15 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
+from unittest import mock
 
 MAIN_SOURCE_REF = "refs/heads/main"
 FETCHED_MAIN_REF = "refs/remotes/origin/main"
@@ -82,7 +86,8 @@ def active_operation() -> str | None:
 
 
 def unmerged_paths() -> list[str]:
-    return git(["diff", "--name-only", "--diff-filter=U"]).splitlines()
+    output = run(["diff", "--name-only", "--diff-filter=U", "-z"]).stdout
+    return output.removesuffix("\0").split("\0") if output else []
 
 
 def status_lines() -> list[str]:
@@ -121,7 +126,19 @@ def stash_dirty_worktree(source_sha: str) -> str | None:
 
 
 def fetch_source() -> str:
-    run(["fetch", "--no-tags", "origin", f"+{MAIN_SOURCE_REF}:{FETCHED_MAIN_REF}"])
+    args = ["fetch", "--no-tags", "origin", f"+{MAIN_SOURCE_REF}:{FETCHED_MAIN_REF}"]
+    result = run(args, check=False)
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip()
+        race = re.search(
+            rf"cannot lock ref '{re.escape(FETCHED_MAIN_REF)}': "
+            r"is at [0-9a-f]+ but expected [0-9a-f]+\b",
+            detail,
+        )
+        if not race:
+            raise UpdateError(detail or "git fetch failed")
+        time.sleep(0.2)
+        run(args)
     return revision(FETCHED_MAIN_REF)
 
 
@@ -153,17 +170,22 @@ def emit(
     main_sha: str,
     stash_oid: str | None,
     stash_state: str,
+    conflict_paths: list[str] | None = None,
 ) -> None:
     stash = "none" if stash_oid is None else f"{stash_oid}:{stash_state}"
-    fields = (
+    fields = [
         ("status", status),
         ("branch", branch_ref),
         ("before", head_before),
         ("main", f"{FETCHED_MAIN_REF}:{main_sha}"),
         ("head", revision("HEAD")),
         ("stash", stash),
-    )
+    ]
+    if conflict_paths:
+        fields.append(("conflicts", str(len(conflict_paths))))
     print(" ".join(f"{key}={value}" for key, value in fields))
+    if conflict_paths:
+        print(f"conflict_paths={json.dumps(conflict_paths, separators=(',', ':'))}")
 
 
 def update_from_main() -> int:
@@ -184,8 +206,17 @@ def update_from_main() -> int:
             result = run(["merge", "--ff", "--no-edit", main_sha], check=False)
             if result.returncode:
                 detail = (result.stderr or result.stdout).strip().replace("\n", " | ")
-                if unmerged_paths():
-                    emit("merge_conflict", branch_ref, head_before, main_sha, stash_oid, "retained")
+                conflicts = unmerged_paths()
+                if conflicts:
+                    emit(
+                        "merge_conflict",
+                        branch_ref,
+                        head_before,
+                        main_sha,
+                        stash_oid,
+                        "retained",
+                        conflicts,
+                    )
                     print(f"error: {detail}", file=sys.stderr)
                     return 2
                 if has_git_path("MERGE_HEAD"):
@@ -211,8 +242,17 @@ def update_from_main() -> int:
         if stash_oid:
             restored, stash_state, detail = restore_stash(stash_oid)
             if not restored:
-                status = "stash_conflict" if unmerged_paths() else "stash_restore_failed"
-                emit(status, branch_ref, head_before, main_sha, stash_oid, "retained")
+                conflicts = unmerged_paths()
+                status = "stash_conflict" if conflicts else "stash_restore_failed"
+                emit(
+                    status,
+                    branch_ref,
+                    head_before,
+                    main_sha,
+                    stash_oid,
+                    "retained",
+                    conflicts,
+                )
                 print(f"error: {detail}", file=sys.stderr)
                 return 3
         else:
@@ -279,6 +319,42 @@ def update_in(path: Path) -> tuple[int, str]:
 
 
 def self_test() -> None:
+    lock_race = subprocess.CompletedProcess(
+        ["git"],
+        1,
+        "",
+        f"error: cannot lock ref '{FETCHED_MAIN_REF}': is at abc but expected def",
+    )
+    success = subprocess.CompletedProcess(["git"], 0, "", "")
+    resolved = subprocess.CompletedProcess(["git"], 0, "abc123\n", "")
+    fetch_args = ["fetch", "--no-tags", "origin", f"+{MAIN_SOURCE_REF}:{FETCHED_MAIN_REF}"]
+    with mock.patch(__name__ + ".run", side_effect=(lock_race, success, resolved)) as mocked_run:
+        with mock.patch(__name__ + ".time.sleep") as mocked_sleep:
+            assert fetch_source() == "abc123"
+            assert mocked_run.call_args_list == [
+                mock.call(fetch_args, check=False),
+                mock.call(fetch_args),
+                mock.call(
+                    ["rev-parse", "--verify", f"{FETCHED_MAIN_REF}^{{commit}}"], cwd=None
+                ),
+            ]
+            mocked_sleep.assert_called_once_with(0.2)
+
+    non_races = (
+        "error: network down",
+        f"error: cannot lock ref '{FETCHED_MAIN_REF}': expected symref but is a regular ref",
+    )
+    for detail in non_races:
+        failure = subprocess.CompletedProcess(["git"], 1, "", detail)
+        with mock.patch(__name__ + ".run", return_value=failure) as mocked_run:
+            try:
+                fetch_source()
+            except UpdateError as error:
+                assert str(error) == detail
+            else:
+                raise AssertionError("non-race fetch failure did not fail fast")
+            assert mocked_run.call_count == 1
+
     with tempfile.TemporaryDirectory() as raw_tmp:
         root = Path(raw_tmp)
         seed, repo = setup_repo(root / "clean")
@@ -312,7 +388,8 @@ def self_test() -> None:
         stash_oid = test_git(repo, "rev-parse", "refs/stash")
         assert "status=merge_conflict" in output
         assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
-        assert f"stash={stash_oid}:retained" in output
+        assert f"stash={stash_oid}:retained conflicts=1" in output
+        assert 'conflict_paths=["conflict.txt"]' in output.splitlines()
         assert not (repo / "deferred.txt").exists()
         assert test_git(repo, "diff", "--name-only", "--diff-filter=U") == "conflict.txt"
         assert test_git(repo, "rev-parse", FETCHED_MAIN_REF) == main_sha
@@ -335,6 +412,24 @@ def self_test() -> None:
         assert f"stash={stash_oid}:retained" in output
         assert (repo / "ignored.txt").read_text(encoding="utf-8") == "upstream\n"
         assert test_git(repo, "stash", "show", "--include-untracked", "--name-only", stash_oid) == "ignored.txt"
+
+        seed, repo = setup_repo(root / "stash-conflict")
+        name = "stash conflict.txt"
+        commit(seed, name, "base\n", "test: add stash conflict fixture")
+        test_git(seed, "push", "origin", "main")
+        test_git(repo, "fetch", "origin", "main")
+        test_git(repo, "merge", "--ff-only", "origin/main")
+        main_sha = commit(seed, name, "main\n", "test: main")
+        test_git(seed, "push", "origin", "main")
+        (repo / name).write_text("local\n", encoding="utf-8")
+        result, output = update_in(repo)
+        stash_oid = test_git(repo, "rev-parse", "refs/stash")
+        assert result == 3
+        assert "status=stash_conflict" in output
+        assert f"main={FETCHED_MAIN_REF}:{main_sha}" in output
+        assert f"stash={stash_oid}:retained conflicts=1" in output
+        assert f'conflict_paths=["{name}"]' in output.splitlines()
+        assert run(["diff", "--name-only", "--diff-filter=U", "-z"], cwd=repo).stdout == f"{name}\0"
 
         child = root / "submodule-child"
         run(["init", os.fspath(child)])
