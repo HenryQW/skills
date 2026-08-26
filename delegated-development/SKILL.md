@@ -1,6 +1,6 @@
 ---
 name: delegated-development
-description: "Standard development process for agent-driven repos: main agent decomposes and orchestrates only; implementer/reviewer subagent pairs do the work in isolated worktrees with maximal safe parallelism, one PR per unit. Use for ALL dev tasks: features, refactors, bug fixes, cleanups."
+description: "Standard development process for agent-driven repos: main agent decomposes and orchestrates only; implementer/reviewer subagent pairs do the work in isolated worktrees with maximal safe parallelism, one validated local handoff per unit without publication authorization, or one PR per independent unit when authorized. Use for ALL dev tasks: features, refactors, bug fixes, cleanups."
 ---
 
 # Delegated development: main orchestrates, subagent pairs do the work
@@ -12,7 +12,7 @@ task ──► main agent: decompose into bounded, independent units
               │
               ▼
          per unit: implementer ⇄ reviewer pair (parallel across units, chained within a unit)
-              │ agree → validate → ship (one PR per unit)
+              │ agree → validate → hand off locally, or ship one PR per independent unit when authorized
               │ disagree/defects → rebuttal back to main agent
               ▼
          main agent: judge rebuttals & reviews, re-validate, delegate all remaining work back out
