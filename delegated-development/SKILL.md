@@ -35,20 +35,22 @@ task ──► main agent: decompose into bounded, independent units
 
 For every unit:
 
-1. **Isolated worktree**: one git worktree and branch per unit so concurrent subagents never share a working tree:
+1. **Isolated worktree**: one git worktree and branch per unit so concurrent subagents never share a working tree. Resolve the integration/base branch from explicit task input or the repository default branch, then base new unit worktrees on its remote-tracking ref:
    ```bash
-   git fetch origin main
-   git worktree add -b <prefix>/<unit> /tmp/agent-dev/<unit> origin/main
+   git fetch origin <integration-branch>
+   git worktree add -b <prefix>/<unit> /tmp/agent-dev/<unit> origin/<integration-branch>
    ```
 2. **Pair**: implementer implements; for substantive changes a reviewer then checks the diff (correctness, simplicity, safety, regressions). Reviewer findings go back to the implementer or, if contested, to the main agent as a rebuttal.
-3. **Validation**: scoped typecheck/lint + scoped tests must pass before shipping.
+3. **Validation**: run the smallest checks applicable to the unit's diff (scoped typecheck/lint, scoped tests) before shipping. Do not run every category universally; when a category does not apply or is unavailable, record the reason.
 4. **Version bump** if the repo publishes artifacts: follow the repo's own release policy (e.g. npm workspaces: `npm version patch --workspace packages/<pkg> --no-git-tag-version`, committing `package.json` and lockfile together). Docs-only changes usually don't warrant a release.
-5. **Ship**: Conventional Commit, push the branch, `gh pr create --base main --body-file ...` listing what was applied and rebutted, with reasoning.
+5. **Ship**: Conventional Commit. Publish remotely only when the user has actually authorized push/PR; hand that authorized publication to the workflow-managed PR skill (`pr-launchpad` where repo routing allows it) so base resolution, HEAD-bound validation reuse, and duplicate-PR handling stay in one place — never construct a raw `gh pr create` here. Without authorization, keep the validated local branch and worktree intact and report a local handoff.
+6. **Cleanup** only after successful publication and main-agent revalidation of the published exact head: `git worktree remove <absolute_path>` without `--force`, then `git branch -d <branch>` only once the remote ref provably preserves that exact head. Retain and report anything that cannot be removed safely; never clean the main agent's own worktree.
 
 ## Main-agent judgment
 
 - Judge rebuttals and review disagreements against the code reasoning provided. Accepted ones stay unimplemented; wrong ones are overridden via a new delegation.
-- Re-run scoped validation on every worktree afterward; inspect diffs. Delegate repair of anything broken/incomplete to a fresh subagent with a bounded packet (what was applied, what fails, what's missing such as a version bump).
+- Re-run scoped validation on every worktree afterward; inspect diffs against the exact head. Delegate repair of anything broken/incomplete to a fresh subagent with a bounded packet (what was applied, what fails, what's missing such as a version bump).
+- After any rebase or conflict resolution, require fresh scoped validation and reviewer approval on the exact new head before publication or PR update.
 
 ## Finding scopes
 
@@ -56,8 +58,8 @@ Task classes that feed this workflow have thin scope docs defining what counts a
 
 ## Operational notes (lessons from running this)
 
-- **Model references** for delegation need `provider/model-id` form (e.g. `x-ai/grok-4.6`, `openai-codex/gpt-5.6-terra`) and thinking levels must match what the model supports in-session — check your harness's model registry/config when unsure.
-- **Explicitly authorize push/PR** in the task packet ("the user has authorized you to commit, push, and run `gh pr create`"). Some subagents otherwise refuse network/git-write steps even when the task asks for them.
+- **Model references** use whatever model/thinking-level selection syntax the active harness provides — check the harness's model registry/config; do not assume a fixed provider string format.
+- **State only real permissions** in the task packet. Restate the permissions the user actually granted (e.g. commit/push/PR allowed) because some subagents refuse network/git-write steps even when asked; never fabricate authorization the user did not give.
 - **Subagents may fail silently or leave broken trees.** Always re-run scoped validation on every worktree afterward; delegate repair of any broken/incomplete work to a fresh subagent with a bounded task packet (what was applied, what fails, what's missing such as a version bump).
 - **Shared lockfiles conflict**: every PR touching dependencies modifies them. Expect trivial merge-order conflicts between sibling PRs; rebase whichever merges second.
 - **Commit messages with backticks**: write them to a temp file and use `git commit -F <file>` — inline `-m "..."` breaks on backticks/command substitution.

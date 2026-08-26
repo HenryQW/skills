@@ -74,7 +74,7 @@ Diagnoses failing GitHub Actions checks and applies the smallest scoped fix only
 
 #### [🤝 `delegated-development`](delegated-development/)
 
-Orchestrates bounded implementer/reviewer subagent pairs in isolated worktrees, with one validated pull request per independent unit.
+Orchestrates bounded implementer/reviewer subagent pairs in isolated worktrees, publishing one validated pull request per independent unit only with explicit user authorization.
 
 #### [🗺️ `issue-blueprint`](issue-blueprint/)
 
