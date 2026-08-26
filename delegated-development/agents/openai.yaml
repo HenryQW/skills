@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delegated Development"
+  short_description: "Orchestrate paired subagent development"
+  default_prompt: "Use $delegated-development to decompose the task into bounded units and orchestrate implementer/reviewer subagents through validated pull requests."

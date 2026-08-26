@@ -72,6 +72,10 @@ When skills are nested, the outer workflow stays in charge. `shipyard` launches 
 
 Diagnoses failing GitHub Actions checks and applies the smallest scoped fix only when explicitly requested.
 
+#### [🤝 `delegated-development`](delegated-development/)
+
+Orchestrates bounded implementer/reviewer subagent pairs in isolated worktrees, with one validated pull request per independent unit.
+
 #### [🗺️ `issue-blueprint`](issue-blueprint/)
 
 Builds a dependency-aware issue graph and publishes it only after approval of the exact plan.
