@@ -134,6 +134,10 @@ Creates focused GitHub pull requests from inspected branch changes.
 
 Generates restrained branded Open Graph PNGs from existing identity and product assets.
 
+#### [✏️ `pencil-to-figma-migration`](pencil-to-figma-migration/)
+
+Migrates Pencil design sources and repository workflows to verified Figma files through Figwright.
+
 #### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
 
 Builds and repairs Pi extensions against version-matched docs and examples from installed Pi; includes a reusable authority resolver.
