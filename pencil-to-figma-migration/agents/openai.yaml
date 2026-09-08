@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pencil to Figma Migration"
+  short_description: "Migrate Pencil designs to Figma"
+  default_prompt: "Use $pencil-to-figma-migration to reconstruct and verify this Pencil design in Figma through Figwright, then cut over the repository workflow."

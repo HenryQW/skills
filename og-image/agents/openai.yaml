@@ -1,0 +1,4 @@
+interface:
+  display_name: "OG Image"
+  short_description: "Generate a branded Open Graph card"
+  default_prompt: "Use $og-image to create or polish a branded Open Graph PNG for this website."
