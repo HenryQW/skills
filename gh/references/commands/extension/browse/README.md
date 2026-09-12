@@ -4,6 +4,9 @@ This command will take over your terminal and run a fully interactive interface 
 
 **Usage:** `gh extension browse [flags]`
 
+## Options
+      --debug           Log to /tmp/extBrowse-*
+  -s, --single-column   Render TUI with only one column of text
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

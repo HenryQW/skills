@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render raw GitHub CLI help as progressively loadable command facets."""
+"""Render normalized GitHub CLI help as progressively loadable command facets."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 
-FACETS = ("README.md", "options.md", "examples.md", "details.md")
+FACETS = ("README.md", "examples.md", "details.md")
 BUILTIN_SECTIONS = {
     "USAGE",
     "ALIASES",
@@ -22,11 +22,11 @@ BUILTIN_SECTIONS = {
 }
 GENERIC_LEARN_MORE = {
     "Use `gh <command> <subcommand> --help` for more information about a command.",
-    "Read the manual at https://cli.github.com/manual",
     "Learn about exit codes using `gh help exit-codes`",
     "Learn about accessibility experiences using `gh help accessibility`",
 }
 GENERIC_COBRA_HELP = re.compile(r'^Use "gh .+ \[command\] --help" for more information about a command\.$')
+HELP_OPTION = re.compile(r"^(?:-h,\s*)?--help(?:\s+.*)?$")
 CHILD_ROW = re.compile(r"^  ([a-z][a-z0-9-]*):?\s{2,}(.+)$")
 
 
@@ -104,7 +104,7 @@ def child_rows(sections: list[tuple[str, list[str]]]) -> list[tuple[str, str]]:
 
 
 def render_help(help_text: str, command_path: tuple[str, ...]) -> dict[str, str]:
-    """Return deterministic compact files for one lossless help.txt source."""
+    """Return deterministic compact files for one normalized help.txt source."""
     preamble, sections = split_sections(help_text)
     command = "gh" + (" " + " ".join(command_path) if command_path else "")
     summary = first_sentence(preamble)
@@ -125,7 +125,12 @@ def render_help(help_text: str, command_path: tuple[str, ...]) -> dict[str, str]
         elif name == "ALIASES":
             aliases.extend(compact_aliases(body))
         elif name in {"FLAGS", "INHERITED FLAGS"}:
-            body = [line for line in body if not GENERIC_COBRA_HELP.match(line.strip())]
+            body = [
+                line
+                for line in body
+                if not GENERIC_COBRA_HELP.match(line.strip())
+                and not HELP_OPTION.fullmatch(line.strip())
+            ]
             if clean(body):
                 option_blocks.append((name.title(), body))
         elif name == "EXAMPLES":
@@ -153,12 +158,12 @@ def render_help(help_text: str, command_path: tuple[str, ...]) -> dict[str, str]
         for name, description in children:
             readme.append(f"- [`{name}`]({name}/) — {description}")
 
-    files: dict[str, str] = {}
     if option_blocks:
-        lines = ["# Options"]
-        for heading, body in option_blocks:
-            lines.extend(["", f"## {heading}", "", *body])
-        files["options.md"] = text(lines)
+        readme.extend(["", "## Options"])
+        for _, body in option_blocks:
+            readme.extend(body)
+
+    files: dict[str, str] = {}
     if clean(example_lines):
         files["examples.md"] = text(["# Examples", "", *example_lines])
     if detail_blocks:
@@ -169,8 +174,8 @@ def render_help(help_text: str, command_path: tuple[str, ...]) -> dict[str, str]
 
     if files:
         readme.extend(["", "## More"])
-        labels = {"options.md": "Options", "examples.md": "Examples", "details.md": "Details"}
-        for filename in ("options.md", "examples.md", "details.md"):
+        labels = {"examples.md": "Examples", "details.md": "Details"}
+        for filename in ("examples.md", "details.md"):
             if filename in files:
                 readme.append(f"- [{labels[filename]}]({filename})")
     files["README.md"] = text(readme)

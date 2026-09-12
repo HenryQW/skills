@@ -5,5 +5,4 @@ Clear the cli cache
 **Usage:** `gh config clear-cache [flags]`
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)

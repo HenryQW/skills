@@ -7,6 +7,3 @@ List and view available repository gitignore templates
 ## Commands
 - [`list`](list/) — List available repository gitignore templates
 - [`view`](view/) — View an available repository gitignore template
-
-## More
-- [Options](options.md)

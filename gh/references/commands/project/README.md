@@ -25,6 +25,5 @@ Work with GitHub Projects.
 - [`view`](view/) — View a project
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

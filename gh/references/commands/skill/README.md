@@ -15,6 +15,5 @@ Install and manage agent skills from GitHub repositories.
 - [`update`](update/) — Update installed skills to their latest versions (preview)
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

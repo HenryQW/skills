@@ -4,6 +4,8 @@ Create a new extension
 
 **Usage:** `gh extension create [<name>] [flags]`
 
+## Options
+  --precompiled string   Create a precompiled extension. Possible values: go, other
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)

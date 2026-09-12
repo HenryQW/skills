@@ -4,7 +4,10 @@ The status command prints information about your work on GitHub across all the r
 
 **Usage:** `gh status [flags]`
 
+## Options
+  -e, --exclude strings   Comma separated list of repos to exclude in owner/name format
+  -o, --org string        Report status within an organization
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

@@ -26,7 +26,10 @@ Stacked PRs let you break a large change into a chain of pull requests that buil
 - [`alias`](alias/) — Create a shell alias for gh stack
 - [`feedback`](feedback/) — Submit feedback for gh-stack
 
+## Options
+  -v, --version   version for stack
+
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

@@ -4,6 +4,9 @@ This command outputs the authentication token for an account on a given GitHub h
 
 **Usage:** `gh auth token [flags]`
 
+## Options
+  -h, --hostname string   The hostname of the GitHub instance authenticated with
+  -u, --user string       The account to output the token for
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

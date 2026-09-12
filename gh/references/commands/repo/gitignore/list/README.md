@@ -5,6 +5,3 @@ List available repository gitignore templates
 **Usage:** `gh repo gitignore list [flags]`
 
 **Aliases:** `gh repo gitignore ls`
-
-## More
-- [Options](options.md)

@@ -10,12 +10,14 @@ import shutil
 import subprocess
 
 from compact import render_help, write_facets
+from topics import EXPOSED_TOPICS, render_topic
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 REFERENCES = SKILL_DIR / "references"
 COMMANDS = REFERENCES / "commands"
 TOPICS = REFERENCES / "topics"
+TOPIC_SOURCES = REFERENCES / "topic-sources"
 COMMAND_ROW = re.compile(r"^  ([a-z][a-z0-9-]*):\s+\S")
 EXTENSION_ROW = re.compile(r"^  ([a-z][a-z0-9-]*)\s{2,}\S")
 UPPER_HEADING = re.compile(r"^[A-Z][A-Z ]+$")
@@ -41,7 +43,12 @@ def run(*args: str) -> str:
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
         raise RuntimeError(f"gh {' '.join(args)} failed: {detail}")
-    return "\n".join(line.rstrip() for line in result.stdout.rstrip().splitlines()) + "\n"
+    lines = (
+        line.rstrip()
+        for line in result.stdout.rstrip().splitlines()
+        if not line.lstrip().startswith("Read the manual at ")
+    )
+    return "\n".join(lines) + "\n"
 
 
 def command_children(help_text: str) -> list[str]:
@@ -112,32 +119,44 @@ def main() -> int:
     version = run("--version").splitlines()[0]
     records = generate_commands()
     topics = help_topics(records[0][1])
+    command_records = [
+        (path, help_text, render_help(help_text, path))
+        for path, help_text in records
+    ]
+    topic_records = []
+    for topic in topics:
+        source = run("help", topic)
+        topic_records.append((topic, source, render_topic(topic, source)))
 
     shutil.rmtree(COMMANDS, ignore_errors=True)
     shutil.rmtree(TOPICS, ignore_errors=True)
+    shutil.rmtree(TOPIC_SOURCES, ignore_errors=True)
     COMMANDS.mkdir(parents=True)
     TOPICS.mkdir(parents=True)
+    TOPIC_SOURCES.mkdir(parents=True)
 
     manifest = []
-    for path, help_text in records:
+    for path, help_text, compact in command_records:
         target = command_file(path, "help.txt")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(help_text)
-        write_facets(target.parent, render_help(help_text, path))
+        write_facets(target.parent, compact)
         manifest.append("/".join(path) or ".")
 
-    for topic in topics:
-        (TOPICS / f"{topic}.md").write_text(run("help", topic))
+    for topic, source, compact in topic_records:
+        (TOPIC_SOURCES / f"{topic}.txt").write_text(source)
+        if compact is not None:
+            (TOPICS / f"{topic}.md").write_text(compact)
 
     (REFERENCES / "manifest.txt").write_text("\n".join(manifest) + "\n")
     (REFERENCES / "snapshot.txt").write_text(
         f"{version}\n"
         f"commands: {len(records)}\n"
         f"help topics: {len(topics)}\n"
-        "Source: recursively generated from installed `gh help`; official command "
-        "index checked against https://cli.github.com/manual/gh.\n"
-        "The duplicate `gh help reference` topic is omitted because command sources "
-        "contain the full help. Local aliases and extensions visible to `gh` are included.\n"
+        f"compact topics: {len(EXPOSED_TOPICS)}\n"
+        "Source: recursively generated from installed `gh help`.\n"
+        "The duplicate `gh help reference` topic and generic CLI-manual links "
+        "are omitted. Local aliases and extensions visible to `gh` are included.\n"
     )
     print(f"generated {len(records)} commands and {len(topics)} topics from {version}")
     return 0

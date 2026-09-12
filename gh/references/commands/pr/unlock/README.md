@@ -4,5 +4,5 @@ Unlock pull request conversation
 
 **Usage:** `gh pr unlock {<number> | <url>} [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

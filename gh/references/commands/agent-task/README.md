@@ -12,6 +12,5 @@ Working with agent tasks in the GitHub CLI is in preview and subject to change w
 - [`view`](view/) — View an agent task session (preview)
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

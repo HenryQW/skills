@@ -10,6 +10,8 @@ Autolinks link issues, pull requests, commit messages, and release descriptions 
 - [`list`](list/) — List autolink references for a GitHub repository
 - [`view`](view/) — View an autolink reference
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

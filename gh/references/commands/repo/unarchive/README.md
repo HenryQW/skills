@@ -4,6 +4,8 @@ Unarchive a GitHub repository.
 
 **Usage:** `gh repo unarchive [<repository>] [flags]`
 
+## Options
+  -y, --yes   Skip the confirmation prompt
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

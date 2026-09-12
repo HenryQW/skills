@@ -9,6 +9,8 @@ Secrets can be set at the repository, or organization level for use in GitHub Ac
 - [`list`](list/) — List secrets
 - [`set`](set/) — Create or update secrets
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

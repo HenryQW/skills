@@ -4,5 +4,5 @@ Delete an SSH key from your GitHub account
 
 **Usage:** `gh ssh-key delete <id> [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -y, --yes   Skip the confirmation prompt

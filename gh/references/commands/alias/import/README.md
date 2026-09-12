@@ -4,7 +4,9 @@ Import aliases from the contents of a YAML file.
 
 **Usage:** `gh alias import [<filename> | -] [flags]`
 
+## Options
+  --clobber   Overwrite existing aliases of the same name
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

@@ -1,13 +1,10 @@
-gh follows normal conventions regarding exit codes.
+# Exit codes
 
-- If a command completes successfully, the exit code will be 0
+| Code | Meaning |
+|---:|---|
+| 0 | A command completes successfully |
+| 1 | A command fails for any reason |
+| 2 | A command is running but gets cancelled |
+| 4 | A command requires authentication |
 
-- If a command fails for any reason, the exit code will be 1
-
-- If a command is running but gets cancelled, the exit code will be 2
-
-- If a command requires authentication, the exit code will be 4
-
-NOTE: It is possible that a particular command may have more exit codes, so it is a good
-practice to check documentation for the command if you are relying on exit codes to
-control some behavior.
+Commands may define additional exit codes; check that command's details before branching on status.

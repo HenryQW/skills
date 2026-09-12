@@ -25,6 +25,5 @@ Work with GitHub repositories.
 - [`view`](view/) — View a repository
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

@@ -12,6 +12,3 @@ Authenticate gh and git with GitHub
 - [`status`](status/) — Display active account and authentication state on each known GitHub host
 - [`switch`](switch/) — Switch active GitHub account
 - [`token`](token/) — Print the authentication token gh uses for a hostname and account
-
-## More
-- [Options](options.md)

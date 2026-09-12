@@ -14,5 +14,4 @@ Work with GitHub gists.
 - [`view`](view/) — View a gist
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

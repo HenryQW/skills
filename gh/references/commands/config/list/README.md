@@ -6,5 +6,5 @@ Print a list of configuration keys and values
 
 **Aliases:** `gh config ls`
 
-## More
-- [Options](options.md)
+## Options
+  -h, --host string   Get per-host configuration

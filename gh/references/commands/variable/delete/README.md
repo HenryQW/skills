@@ -6,5 +6,7 @@ Delete a variable on one of the following levels: - repository (default): availa
 
 **Aliases:** `gh variable remove`
 
-## More
-- [Options](options.md)
+## Options
+  -e, --env string   Delete a variable for an environment
+  -o, --org string   Delete a variable for an organization
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

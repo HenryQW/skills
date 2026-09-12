@@ -8,6 +8,3 @@ Manage SSH keys registered with your GitHub account.
 - [`add`](add/) — Add an SSH key to your GitHub account
 - [`delete`](delete/) — Delete an SSH key from your GitHub account
 - [`list`](list/) — Lists SSH keys in your GitHub account
-
-## More
-- [Options](options.md)

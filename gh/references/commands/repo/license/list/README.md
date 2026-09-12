@@ -7,5 +7,4 @@ List common repository licenses.
 **Aliases:** `gh repo license ls`
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

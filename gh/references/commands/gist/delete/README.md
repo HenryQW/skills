@@ -4,7 +4,9 @@ Delete a GitHub gist.
 
 **Usage:** `gh gist delete {<id> | <url>} [flags]`
 
+## Options
+  --yes   Confirm deletion without prompting
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

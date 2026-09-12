@@ -4,7 +4,9 @@ Create a short command alias so you can run "gs [command]" instead of "gh stack 
 
 **Usage:** `gh stack alias [name] [flags]`
 
+## Options
+      --remove   Remove a previously created alias
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

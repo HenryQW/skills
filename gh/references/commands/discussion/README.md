@@ -11,7 +11,9 @@ Working with discussions in the GitHub CLI is in preview and subject to change w
 - [`edit`](edit/) — Edit a discussion (preview)
 - [`view`](view/) — View a discussion (preview)
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

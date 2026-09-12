@@ -11,5 +11,5 @@ Work with GitHub labels.
 - [`edit`](edit/) — Edit a label
 - [`list`](list/) — List labels in a repository
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

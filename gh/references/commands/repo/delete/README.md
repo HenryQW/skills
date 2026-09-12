@@ -4,6 +4,8 @@ Delete a GitHub repository.
 
 **Usage:** `gh repo delete [<repository>] [flags]`
 
+## Options
+  --yes   Confirm deletion without prompting
+
 ## More
-- [Options](options.md)
 - [Details](details.md)

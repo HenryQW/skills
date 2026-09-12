@@ -4,5 +4,6 @@ Add an SSH key to your GitHub account
 
 **Usage:** `gh ssh-key add [<key-file>] [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -t, --title string   Title for the new key
+      --type string    Type of the ssh key: {authentication|signing} (default "authentication")

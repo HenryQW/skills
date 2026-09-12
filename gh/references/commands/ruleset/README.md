@@ -11,7 +11,9 @@ Repository rulesets are a way to define a set of rules that apply to a repositor
 - [`list`](list/) — List rulesets for a repository or organization
 - [`view`](view/) — View information about a ruleset
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

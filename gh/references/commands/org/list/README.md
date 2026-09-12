@@ -6,6 +6,8 @@ List organizations for the authenticated user.
 
 **Aliases:** `gh org ls`
 
+## Options
+  -L, --limit int   Maximum number of organizations to list (default 30)
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)

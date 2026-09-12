@@ -25,11 +25,12 @@ def assert_clean(files: dict[str, str]) -> None:
 
 def main() -> int:
     leaf = render("pr", "create")
-    assert set(leaf) == {"README.md", "options.md", "examples.md", "details.md"}
+    assert set(leaf) == {"README.md", "examples.md", "details.md"}
     assert "# gh pr create" in leaf["README.md"]
     assert "`gh pr create [flags]`" in leaf["README.md"]
-    assert "--dry-run" in leaf["options.md"]
-    assert "May still push git changes" in leaf["options.md"]
+    assert "--dry-run" in leaf["README.md"]
+    assert "--help" not in leaf["README.md"]
+    assert "May still push git changes" in leaf["README.md"]
     assert "When the current branch isn't fully pushed" in leaf["details.md"]
     assert "gh pr create --title" in leaf["examples.md"]
     assert "LEARN MORE" not in "".join(leaf.values())
@@ -43,12 +44,17 @@ def main() -> int:
 
     cobra = render("stack")
     assert "[`submit`](submit/) — Create a stack of PRs" in cobra["README.md"]
-    assert "--version" in cobra["options.md"]
+    assert "--version" in cobra["README.md"]
     assert "https://gh.io/stacks-feedback" in cobra["details.md"]
-    assert 'Use "gh stack [command] --help"' not in cobra["options.md"]
+    assert 'Use "gh stack [command] --help"' not in cobra["README.md"]
+    assert "--help" not in cobra["README.md"]
     assert_clean(cobra)
 
-    print("gh compact tests ok: built-in leaf, parent, Cobra parent")
+    help_only = render("gpg-key", "list")
+    assert set(help_only) == {"README.md"}
+    assert_clean(help_only)
+
+    print("gh compact tests ok: built-in leaf, parent, Cobra parent, universal help")
     return 0
 
 

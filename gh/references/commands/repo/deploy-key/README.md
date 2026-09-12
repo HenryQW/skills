@@ -9,5 +9,5 @@ Manage deploy keys in a repository
 - [`delete`](delete/) — Delete a deploy key from a GitHub repository
 - [`list`](list/) — List deploy keys in a GitHub repository
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

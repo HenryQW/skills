@@ -23,7 +23,9 @@ Work with GitHub pull requests.
 - [`unlock`](unlock/) — Unlock pull request conversation
 - [`view`](view/) — View a pull request
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

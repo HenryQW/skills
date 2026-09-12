@@ -4,5 +4,6 @@ Cancel a workflow run
 
 **Usage:** `gh run cancel [<run-id>] [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  --force   Force cancel a workflow run
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

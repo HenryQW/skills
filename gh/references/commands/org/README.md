@@ -8,5 +8,4 @@ Work with GitHub organizations.
 - [`list`](list/) — List organizations for the authenticated user.
 
 ## More
-- [Options](options.md)
 - [Examples](examples.md)

@@ -8,6 +8,3 @@ Manage GPG keys registered with your GitHub account.
 - [`add`](add/) — Add a GPG key to your GitHub account
 - [`delete`](delete/) — Delete a GPG key from your GitHub account
 - [`list`](list/) — Lists GPG keys in your GitHub account
-
-## More
-- [Options](options.md)

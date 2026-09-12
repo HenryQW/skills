@@ -21,7 +21,9 @@ Work with GitHub issues.
 - [`unpin`](unpin/) — Unpin an issue
 - [`view`](view/) — View an issue
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

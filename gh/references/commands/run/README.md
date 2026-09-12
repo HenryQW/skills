@@ -13,5 +13,5 @@ List, view, and watch recent workflow runs from GitHub Actions.
 - [`view`](view/) — View a summary of a workflow run
 - [`watch`](watch/) — Watch a run until it completes, showing its progress
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

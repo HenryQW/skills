@@ -4,5 +4,5 @@ Delete a GPG key from your GitHub account
 
 **Usage:** `gh gpg-key delete <key-id> [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -y, --yes   Skip the confirmation prompt

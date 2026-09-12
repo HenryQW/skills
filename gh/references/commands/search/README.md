@@ -12,5 +12,4 @@ Search across all of GitHub.
 - [`repos`](repos/) — Search for repositories
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

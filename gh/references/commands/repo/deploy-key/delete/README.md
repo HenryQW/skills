@@ -4,5 +4,5 @@ Delete a deploy key from a GitHub repository
 
 **Usage:** `gh repo deploy-key delete <key-id> [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

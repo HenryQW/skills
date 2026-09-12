@@ -20,6 +20,3 @@ Connect to and manage codespaces
 - [`ssh`](ssh/) — SSH into a codespace
 - [`stop`](stop/) — Stop a running codespace
 - [`view`](view/) — View details about a codespace
-
-## More
-- [Options](options.md)

@@ -6,7 +6,9 @@ Render a skill's `SKILL.md` content in the terminal.
 
 **Aliases:** `gh skill show, gh skills show`
 
+## Options
+  --allow-hidden-dirs   Include skills in hidden directories (e.g. .claude/skills/, .agents/skills/)
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

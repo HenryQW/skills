@@ -4,5 +4,6 @@ Delete an asset from a release
 
 **Usage:** `gh release delete-asset <tag> <asset-name> [flags]`
 
-## More
-- [Options](options.md)
+## Options
+  -y, --yes   Skip the confirmation prompt
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

@@ -7,6 +7,3 @@ Explore repository licenses
 ## Commands
 - [`list`](list/) — List common repository licenses
 - [`view`](view/) — View a specific repository license
-
-## More
-- [Options](options.md)

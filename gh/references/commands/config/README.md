@@ -11,5 +11,4 @@ Display or change configuration settings for gh.
 - [`set`](set/) — Update configuration with a value for the given key
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

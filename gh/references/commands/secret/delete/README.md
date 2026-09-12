@@ -6,5 +6,9 @@ Delete a secret on one of the following levels: - repository (default): availabl
 
 **Aliases:** `gh secret remove`
 
-## More
-- [Options](options.md)
+## Options
+  -a, --app string   Delete a secret for a specific application: {actions|agents|codespaces|dependabot}
+  -e, --env string   Delete a secret for an environment
+  -o, --org string   Delete a secret for an organization
+  -u, --user         Delete a secret for your user
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

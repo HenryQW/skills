@@ -16,5 +16,5 @@ Manage releases
 - [`verify-asset`](verify-asset/) — Verify that a given asset originated from a release
 - [`view`](view/) — View information about a release
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

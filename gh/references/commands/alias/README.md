@@ -11,5 +11,4 @@ Aliases can be used to make shortcuts for gh commands or to compose multiple com
 - [`set`](set/) — Create a shortcut for a gh command
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

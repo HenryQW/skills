@@ -17,5 +17,4 @@ GitHub CLI extensions are repositories that provide additional gh commands.
 - [`upgrade`](upgrade/) — Upgrade installed extensions
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

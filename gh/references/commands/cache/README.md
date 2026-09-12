@@ -8,6 +8,8 @@ Work with GitHub Actions caches.
 - [`delete`](delete/) — Delete GitHub Actions caches
 - [`list`](list/) — List GitHub Actions caches
 
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)

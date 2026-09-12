@@ -41,7 +41,9 @@ Work seamlessly with GitHub from the command line.
 - [`status`](status/) — Print information about relevant issues, pull requests, and notifications across repositories
 - [`variable`](variable/) — Manage GitHub Actions variables
 
+## Options
+  --version   Show gh version
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)

@@ -11,5 +11,5 @@ List, view, and run workflows in GitHub Actions.
 - [`run`](run/) — Run a workflow by creating a workflow_dispatch event
 - [`view`](view/) — View the summary of a workflow
 
-## More
-- [Options](options.md)
+## Options
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format

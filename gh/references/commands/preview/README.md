@@ -8,5 +8,4 @@ Preview commands are for testing, demonstrative, and development purposes only.
 - [`prompter`](prompter/) — Execute a test program to preview the prompter
 
 ## More
-- [Options](options.md)
 - [Details](details.md)

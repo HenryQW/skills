@@ -4,7 +4,9 @@ Initialize a new stack of branches in the current repository.
 
 **Usage:** `gh stack init [branches...] [flags]`
 
+## Options
+  -b, --base string   Trunk branch for stack (defaults to default branch)
+
 ## More
-- [Options](options.md)
 - [Examples](examples.md)
 - [Details](details.md)
