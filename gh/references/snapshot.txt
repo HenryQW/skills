@@ -1,0 +1,5 @@
+gh version 2.100.0 (2026-09-03)
+commands: 251
+help topics: 7
+Source: recursively generated from installed `gh help`; official command index checked against https://cli.github.com/manual/gh.
+The duplicate `gh help reference` topic is omitted because command sources contain the full help. Local aliases and extensions visible to `gh` are included.

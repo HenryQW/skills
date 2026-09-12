@@ -1,0 +1,29 @@
+Create a new label on GitHub, or update an existing one with `--force`.
+
+Must specify name for the label. The description and color are optional.
+If a color isn't provided, a random one will be chosen.
+
+The label color needs to be 6 character hex value.
+
+
+USAGE
+  gh label create <name> [flags]
+
+FLAGS
+  -c, --color string         Color of the label
+  -d, --description string   Description of the label
+  -f, --force                Update the label color and description if label already exists
+
+INHERITED FLAGS
+      --help                     Show help for command
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
+EXAMPLES
+  # Create new bug label
+  $ gh label create bug --description "Something isn't working" --color E99695
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Read the manual at https://cli.github.com/manual
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

@@ -1,0 +1,36 @@
+Working with discussions in the GitHub CLI is in preview and subject to change without notice.
+
+
+USAGE
+  gh discussion <command> [flags]
+
+GENERAL COMMANDS
+  create:        Create a new discussion (preview)
+  list:          List discussions in a repository (preview)
+
+TARGETED COMMANDS
+  comment:       Add, edit, or delete a comment or a reply on a discussion (preview)
+  edit:          Edit a discussion (preview)
+  view:          View a discussion (preview)
+
+FLAGS
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
+INHERITED FLAGS
+  --help   Show help for command
+
+ARGUMENTS
+  A discussion can be supplied as argument in any of the following formats:
+  - by number, e.g. "123"; or
+  - by URL, e.g. "https://github.com/OWNER/REPO/discussions/123".
+
+EXAMPLES
+  $ gh discussion list
+  $ gh discussion create --category "General" --title "Hello" --body "Hello World!"
+  $ gh discussion view 123
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Read the manual at https://cli.github.com/manual
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

@@ -1,0 +1,49 @@
+Search across all public GitHub repositories for skills matching a keyword.
+
+Uses the GitHub Code Search API to find `SKILL.md` files whose name or
+description matches the query term.
+
+Results are ranked by relevance: skills whose name contains the query
+term appear first.
+
+Use `--owner` to scope results to a specific GitHub user or organization.
+
+In interactive mode, you can select skills from the results to install directly.
+
+For more information about output formatting flags, see `gh help formatting`.
+
+USAGE
+  gh skill search <query> [flags]
+
+FLAGS
+  -q, --jq expression     Filter JSON output using a jq expression
+      --json fields       Output JSON with the specified fields
+  -L, --limit int         Maximum number of results per page (default 15)
+      --owner string      Filter results to a specific GitHub user or organization
+      --page int          Page number of results to fetch (default 1)
+  -t, --template string   Format JSON output using a Go template; see "gh help formatting"
+
+INHERITED FLAGS
+  --help   Show help for command
+
+JSON FIELDS
+  description, namespace, path, repo, skillName, stars
+
+EXAMPLES
+  # Search for skills related to terraform
+  $ gh skill search terraform
+
+  # Search for skills from a specific owner
+  $ gh skill search terraform --owner hashicorp
+
+  # View the second page of results
+  $ gh skill search terraform --page 2
+
+  # Limit results to 5
+  $ gh skill search terraform --limit 5
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Read the manual at https://cli.github.com/manual
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

@@ -122,6 +122,10 @@ Loads confirmed project context, preserves candidates across resumable work, and
 
 Runs quick read-only BQL queries against existing Beancount ledgers.
 
+#### [📖 `gh`](gh/)
+
+Provides a concise, versioned GitHub CLI manual with progressively loaded command references.
+
 #### [💾 `git-commit`](git-commit/)
 
 Creates coherent scoped Conventional Commits from changes against the target branch.
