@@ -1,16 +1,8 @@
+# gh gpg-key delete
+
 Delete a GPG key from your GitHub account
 
-USAGE
-  gh gpg-key delete <key-id> [flags]
+**Usage:** `gh gpg-key delete <key-id> [flags]`
 
-FLAGS
-  -y, --yes   Skip the confirmation prompt
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

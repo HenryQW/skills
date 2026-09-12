@@ -1,42 +1,10 @@
+# gh codespace view
+
 View details about a codespace
 
-For more information about output formatting flags, see `gh help formatting`.
+**Usage:** `gh codespace view [flags]`
 
-USAGE
-  gh codespace view [flags]
-
-FLAGS
-  -c, --codespace string    Name of the codespace
-  -q, --jq expression       Filter JSON output using a jq expression
-      --json fields         Output JSON with the specified fields
-  -R, --repo string         Filter codespace selection by repository name (user/repo)
-      --repo-owner string   Filter codespace selection by repository owner (username or org)
-  -t, --template string     Format JSON output using a Go template; see "gh help formatting"
-
-INHERITED FLAGS
-  --help   Show help for command
-
-JSON FIELDS
-  billableOwner, createdAt, devcontainerPath, displayName, environmentId,
-  gitStatus, idleTimeoutMinutes, lastUsedAt, location, machineDisplayName,
-  machineName, name, owner, prebuild, recentFolders, repository,
-  retentionExpiresAt, retentionPeriodDays, state, vscsTarget
-
-EXAMPLES
-  # Select a codespace from a list of all codespaces you own
-  $ gh cs view
-
-  # View the details of a specific codespace
-  $ gh cs view -c codespace-name-12345
-
-  # View the list of all available fields for a codespace
-  $ gh cs view --json
-
-  # View specific fields for a codespace
-  $ gh cs view --json displayName,machineDisplayName,state
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

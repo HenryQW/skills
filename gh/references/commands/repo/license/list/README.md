@@ -1,19 +1,11 @@
+# gh repo license list
+
 List common repository licenses.
 
-For even more licenses, visit <https://choosealicense.com/appendix>
+**Usage:** `gh repo license list [flags]`
 
+**Aliases:** `gh repo license ls`
 
-USAGE
-  gh repo license list [flags]
-
-ALIASES
-  gh repo license ls
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Details](details.md)

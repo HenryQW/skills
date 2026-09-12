@@ -1,24 +1,13 @@
+# gh cache
+
 Work with GitHub Actions caches.
 
-USAGE
-  gh cache <command> [flags]
+**Usage:** `gh cache <command> [flags]`
 
-AVAILABLE COMMANDS
-  delete:        Delete GitHub Actions caches
-  list:          List GitHub Actions caches
+## Commands
+- [`delete`](delete/) — Delete GitHub Actions caches
+- [`list`](list/) — List GitHub Actions caches
 
-FLAGS
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-INHERITED FLAGS
-  --help   Show help for command
-
-EXAMPLES
-  $ gh cache list
-  $ gh cache delete --all
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)

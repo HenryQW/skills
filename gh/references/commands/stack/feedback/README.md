@@ -1,14 +1,10 @@
-Opens a GitHub Discussion in the gh-stack repository to submit feedback. Optionally provide a title for the discussion post.
+# gh stack feedback
 
-Usage:
-  gh stack feedback [title] [flags]
+Opens a GitHub Discussion in the gh-stack repository to submit feedback.
 
-Examples:
-  # Open the feedback form in your browser
-  $ gh stack feedback
+**Usage:** `gh stack feedback [title] [flags]`
 
-  # Open with a pre-filled title
-  $ gh stack feedback "My feature request"
-
-Flags:
-  -h, --help   help for feedback
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

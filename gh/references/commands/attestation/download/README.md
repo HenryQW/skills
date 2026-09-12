@@ -1,59 +1,10 @@
+# gh attestation download
+
 ### NOTE: This feature is currently in public preview, and subject to change.
 
-Download attestations associated with an artifact for offline use.
+**Usage:** `gh attestation download [<file-path> | oci://<image-uri>] [--owner | --repo] [flags]`
 
-The command requires either:
-* a file path to an artifact, or
-* a container image URI (e.g. `oci://<image-uri>`)
-  * (note that if you provide an OCI URL, you must already be authenticated with
-its container registry)
-
-In addition, the command requires either:
-* the `--repo` flag (e.g. --repo github/example).
-* the `--owner` flag (e.g. --owner github), or
-
-The `--repo` flag value must match the name of the GitHub repository
-that the artifact is linked with.
-
-The `--owner` flag value must match the name of the GitHub organization
-that the artifact's linked repository belongs to.
-
-Any associated bundle(s) will be written to a file in the
-current directory named after the artifact's digest. For example, if the
-digest is "sha256:1234", the file will be named "sha256:1234.jsonl".
-
-Colons are special characters on Windows and cannot be used in
-file names. To accommodate, a dash will be used to separate the algorithm
-from the digest in the attestations file name. For example, if the digest
-is "sha256:1234", the file will be named "sha256-1234.jsonl".
-
-
-USAGE
-  gh attestation download [<file-path> | oci://<image-uri>] [--owner | --repo] [flags]
-
-FLAGS
-  -d, --digest-alg string       The algorithm used to compute a digest of the artifact: {sha256|sha512} (default "sha256")
-      --hostname string         Configure host to use
-  -L, --limit int               Maximum number of attestations to fetch (default 30)
-  -o, --owner string            GitHub organization to scope attestation lookup by
-      --predicate-type string   Filter attestations by provided predicate type
-  -R, --repo string             Repository name in the format <owner>/<repo>
-
-INHERITED FLAGS
-  --help   Show help for command
-
-EXAMPLES
-  # Download attestations for a local artifact linked with an organization
-  $ gh attestation download example.bin -o github
-
-  # Download attestations for a local artifact linked with a repository
-  $ gh attestation download example.bin -R github/example
-
-  # Download attestations for an OCI image linked with an organization
-  $ gh attestation download oci://example.com/foo/bar:latest -o github
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

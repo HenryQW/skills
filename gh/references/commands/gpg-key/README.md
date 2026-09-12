@@ -1,18 +1,13 @@
+# gh gpg-key
+
 Manage GPG keys registered with your GitHub account.
 
-USAGE
-  gh gpg-key <command> [flags]
+**Usage:** `gh gpg-key <command> [flags]`
 
-AVAILABLE COMMANDS
-  add:           Add a GPG key to your GitHub account
-  delete:        Delete a GPG key from your GitHub account
-  list:          Lists GPG keys in your GitHub account
+## Commands
+- [`add`](add/) — Add a GPG key to your GitHub account
+- [`delete`](delete/) — Delete a GPG key from your GitHub account
+- [`list`](list/) — Lists GPG keys in your GitHub account
 
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

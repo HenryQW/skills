@@ -1,36 +1,10 @@
+# gh run watch
+
 Watch a run until it completes, showing its progress.
 
-By default, all steps are displayed. The `--compact` option can be used to only
-show the relevant/failed steps.
+**Usage:** `gh run watch <run-id> [flags]`
 
-This command does not support authenticating via fine grained PATs
-as it is not currently possible to create a PAT with the `checks:read` permission.
-
-
-USAGE
-  gh run watch <run-id> [flags]
-
-FLAGS
-      --compact        Show only relevant/failed steps
-      --exit-status    Exit with non-zero status if run fails
-  -i, --interval int   Refresh interval in seconds (default 3)
-
-INHERITED FLAGS
-      --help                     Show help for command
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-EXAMPLES
-  # Watch a run until it's done
-  $ gh run watch
-
-  # Watch a run in compact mode
-  $ gh run watch --compact
-
-  # Run some other command when the run is finished
-  $ gh run watch && notify-send 'run is done!'
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

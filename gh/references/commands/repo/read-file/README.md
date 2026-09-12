@@ -1,59 +1,10 @@
+# gh repo read-file
+
 Read the contents of a file in a GitHub repository without cloning it.
 
-This command is in preview and subject to change without notice.
+**Usage:** `gh repo read-file <path> [flags]`
 
-By default, the file is read from the default branch. Use the `--ref` flag to
-read from a specific branch, tag, or commit.
-
-When run in TTY mode, the content is shown through your pager. When stdout is piped or
-redirected, the raw content is written directly. To save the file to disk instead, use
-the `--output` flag.
-
-By default, the command refuses to output a file that contains terminal escape sequences,
-since they could manipulate your terminal. Pass `--allow-escape-sequences` to read the file anyway.
-This check applies only to terminal and piped output; writing to disk with `--output` always
-includes the raw bytes, as if `--allow-escape-sequences` were given.
-
-For more information about output formatting flags, see `gh help formatting`.
-
-USAGE
-  gh repo read-file <path> [flags]
-
-FLAGS
-      --allow-escape-sequences   Allow printing terminal escape sequences
-      --clobber                  Overwrite the output path if it already exists
-  -q, --jq expression            Filter JSON output using a jq expression
-      --json fields              Output JSON with the specified fields
-  -o, --output path              Write the file to a path instead of stdout
-      --ref string               The branch, tag, or commit to read from
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-  -t, --template string          Format JSON output using a Go template; see "gh help formatting"
-
-INHERITED FLAGS
-  --help   Show help for command
-
-JSON FIELDS
-  content, downloadUrl, encoding, gitSHA, gitUrl, htmlUrl, name, path, size, type,
-  url
-
-EXAMPLES
-  # Read a file from the default branch
-  $ gh repo read-file README.md --repo cli/cli
-
-  # Read a file at a specific ref
-  $ gh repo read-file README.md --repo cli/cli --ref v2.50.0
-
-  # Save a file to disk
-  $ gh repo read-file README.md --repo cli/cli --output download/README.md
-
-  # Print selected fields as JSON
-  $ gh repo read-file README.md --repo cli/cli --json name,path,size,type
-
-  # Read a file that contains terminal escape sequences
-  $ gh repo read-file path/to/file --repo OWNER/REPO --allow-escape-sequences
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

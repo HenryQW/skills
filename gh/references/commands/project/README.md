@@ -1,45 +1,30 @@
+# gh project
+
 Work with GitHub Projects.
 
-The minimum required scope for the token is: `project`.
-You can verify your token scope by running `gh auth status` and
-add the `project` scope by running `gh auth refresh -s project`.
+**Usage:** `gh project <command> [flags]`
 
+## Commands
+- [`close`](close/) — Close a project
+- [`copy`](copy/) — Copy a project
+- [`create`](create/) — Create a project
+- [`delete`](delete/) — Delete a project
+- [`edit`](edit/) — Edit a project
+- [`field-create`](field-create/) — Create a field in a project
+- [`field-delete`](field-delete/) — Delete a field in a project
+- [`field-list`](field-list/) — List the fields in a project
+- [`item-add`](item-add/) — Add a pull request or an issue to a project
+- [`item-archive`](item-archive/) — Archive an item in a project
+- [`item-create`](item-create/) — Create a draft issue item in a project
+- [`item-delete`](item-delete/) — Delete an item from a project by ID
+- [`item-edit`](item-edit/) — Edit an item in a project
+- [`item-list`](item-list/) — List the items in a project
+- [`link`](link/) — Link a project to a repository or a team
+- [`list`](list/) — List the projects for an owner
+- [`unlink`](unlink/) — Unlink a project from a repository or a team
+- [`view`](view/) — View a project
 
-USAGE
-  gh project <command> [flags]
-
-AVAILABLE COMMANDS
-  close:         Close a project
-  copy:          Copy a project
-  create:        Create a project
-  delete:        Delete a project
-  edit:          Edit a project
-  field-create:  Create a field in a project
-  field-delete:  Delete a field in a project
-  field-list:    List the fields in a project
-  item-add:      Add a pull request or an issue to a project
-  item-archive:  Archive an item in a project
-  item-create:   Create a draft issue item in a project
-  item-delete:   Delete an item from a project by ID
-  item-edit:     Edit an item in a project
-  item-list:     List the items in a project
-  link:          Link a project to a repository or a team
-  list:          List the projects for an owner
-  mark-template: Mark a project as a template
-  unlink:        Unlink a project from a repository or a team
-  view:          View a project
-
-INHERITED FLAGS
-  --help   Show help for command
-
-EXAMPLES
-  $ gh project create --owner monalisa --title "Roadmap"
-  $ gh project view 1 --owner cli --web
-  $ gh project field-list 1 --owner cli
-  $ gh project item-list 1 --owner cli
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

@@ -1,18 +1,8 @@
+# gh pr close
+
 Close a pull request
 
-USAGE
-  gh pr close {<number> | <url> | <branch>} [flags]
+**Usage:** `gh pr close {<number> | <url> | <branch>} [flags]`
 
-FLAGS
-  -c, --comment string   Leave a closing comment
-  -d, --delete-branch    Delete the local and remote branch after close
-
-INHERITED FLAGS
-      --help                     Show help for command
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

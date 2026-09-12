@@ -1,51 +1,12 @@
+# gh cache list
+
 List GitHub Actions caches
 
-For more information about output formatting flags, see `gh help formatting`.
+**Usage:** `gh cache list [flags]`
 
-USAGE
-  gh cache list [flags]
+**Aliases:** `gh cache ls`
 
-ALIASES
-  gh cache ls
-
-FLAGS
-  -q, --jq expression     Filter JSON output using a jq expression
-      --json fields       Output JSON with the specified fields
-  -k, --key string        Filter by cache key prefix
-  -L, --limit int         Maximum number of caches to fetch (default 30)
-  -O, --order string      Order of caches returned: {asc|desc} (default "desc")
-  -r, --ref string        Filter by ref, formatted as refs/heads/<branch name> or refs/pull/<number>/merge
-  -S, --sort string       Sort fetched caches: {created_at|last_accessed_at|size_in_bytes} (default "last_accessed_at")
-  -t, --template string   Format JSON output using a Go template; see "gh help formatting"
-
-INHERITED FLAGS
-      --help                     Show help for command
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-JSON FIELDS
-  createdAt, id, key, lastAccessedAt, ref, sizeInBytes, version
-
-EXAMPLES
-  # List caches for current repository
-  $ gh cache list
-
-  # List caches for specific repository
-  $ gh cache list --repo cli/cli
-
-  # List caches sorted by least recently accessed
-  $ gh cache list --sort last_accessed_at --order asc
-
-  # List caches that have keys matching a prefix (or that match exactly)
-  $ gh cache list --key key-prefix
-
-  # List caches for a specific branch, replace <branch-name> with the actual branch name
-  $ gh cache list --ref refs/heads/<branch-name>
-
-  # List caches for a specific pull request, replace <pr-number> with the actual pull request number
-  $ gh cache list --ref refs/pull/<pr-number>/merge
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

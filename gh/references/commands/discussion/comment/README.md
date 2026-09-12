@@ -1,54 +1,10 @@
+# gh discussion comment
+
 Manage comments or replies on a GitHub discussion.
 
-The positional argument can be a discussion number or URL (to add a new
-top-level comment), or a comment node ID or comment URL (to reply, edit,
-or delete that comment).
+**Usage:** `gh discussion comment {<number> | <discussion-url> | <comment-id> | <comment-url>} [flags]`
 
-When the argument is a discussion number or URL, the default action is to
-add a new top-level comment. Likewise, if the argument is a comment URL or ID
-the default action is to add a reply.
-
-Use `--edit` to update the comment/reply body, or `--delete` to remove it.
-
-The body can be supplied via `--body`, `--body-file`, or interactively
-through an editor.
-
-
-USAGE
-  gh discussion comment {<number> | <discussion-url> | <comment-id> | <comment-url>} [flags]
-
-FLAGS
-  -b, --body string              Comment body text
-  -F, --body-file string         Read body text from file (use "-" to read from standard input)
-      --delete                   Delete the specified comment
-      --edit                     Edit the specified comment
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-      --yes                      Skip the delete confirmation prompt
-
-INHERITED FLAGS
-  --help   Show help for command
-
-EXAMPLES
-  # Add a top-level comment to discussion #123
-  $ gh discussion comment 123 --body 'Thanks'
-
-  # Reply to a comment using its URL
-  $ gh discussion comment 'https://github.com/OWNER/REPO/discussions/123#discussioncomment-456' --body 'Thanks'
-
-  # Reply to a comment using its node ID
-  $ gh discussion comment DC_abc123 --body 'Thanks'
-
-  # Edit a comment/reply
-  $ gh discussion comment 'https://github.com/OWNER/REPO/discussions/123#discussioncomment-456' --edit --body 'Thanks'
-
-  # Delete a comment/reply
-  $ gh discussion comment 'https://github.com/OWNER/REPO/discussions/123#discussioncomment-456' --delete
-
-  # Delete a comment/reply without confirmation prompt
-  $ gh discussion comment 'https://github.com/OWNER/REPO/discussions/123#discussioncomment-456' --delete --yes
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

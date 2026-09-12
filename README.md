@@ -124,7 +124,7 @@ Runs quick read-only BQL queries against existing Beancount ledgers.
 
 #### [📖 `gh`](gh/)
 
-Provides a concise, versioned GitHub CLI manual with progressively loaded command references.
+Provides compact GitHub CLI command summaries with options, details, and examples loaded only when needed.
 
 #### [💾 `git-commit`](git-commit/)
 

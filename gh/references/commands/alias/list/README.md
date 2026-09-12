@@ -1,17 +1,10 @@
+# gh alias list
+
 This command prints out all of the aliases gh is configured to use.
 
+**Usage:** `gh alias list [flags]`
 
-USAGE
-  gh alias list [flags]
+**Aliases:** `gh alias ls`
 
-ALIASES
-  gh alias ls
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

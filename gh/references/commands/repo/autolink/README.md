@@ -1,27 +1,15 @@
+# gh repo autolink
+
 Autolinks link issues, pull requests, commit messages, and release descriptions to external third-party services.
 
-Autolinks require `admin` role to view or manage.
+**Usage:** `gh repo autolink <command> [flags]`
 
-For more information, see <https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/configuring-autolinks-to-reference-external-resources>
+## Commands
+- [`create`](create/) — Create a new autolink reference
+- [`delete`](delete/) — Delete an autolink reference
+- [`list`](list/) — List autolink references for a GitHub repository
+- [`view`](view/) — View an autolink reference
 
-
-USAGE
-  gh repo autolink <command> [flags]
-
-AVAILABLE COMMANDS
-  create:        Create a new autolink reference
-  delete:        Delete an autolink reference
-  list:          List autolink references for a GitHub repository
-  view:          View an autolink reference
-
-FLAGS
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Details](details.md)

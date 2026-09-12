@@ -1,30 +1,20 @@
+# gh release
+
 Manage releases
 
-USAGE
-  gh release <command> [flags]
+**Usage:** `gh release <command> [flags]`
 
-GENERAL COMMANDS
-  create:        Create a new release
-  list:          List releases in a repository
+## Commands
+- [`create`](create/) — Create a new release
+- [`list`](list/) — List releases in a repository
+- [`delete`](delete/) — Delete a release
+- [`delete-asset`](delete-asset/) — Delete an asset from a release
+- [`download`](download/) — Download release assets
+- [`edit`](edit/) — Edit a release
+- [`upload`](upload/) — Upload assets to a release
+- [`verify`](verify/) — Verify the attestation for a release
+- [`verify-asset`](verify-asset/) — Verify that a given asset originated from a release
+- [`view`](view/) — View information about a release
 
-TARGETED COMMANDS
-  delete:        Delete a release
-  delete-asset:  Delete an asset from a release
-  download:      Download release assets
-  edit:          Edit a release
-  upload:        Upload assets to a release
-  verify:        Verify the attestation for a release
-  verify-asset:  Verify that a given asset originated from a release
-  view:          View information about a release
-
-FLAGS
-  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

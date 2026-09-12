@@ -1,17 +1,12 @@
+# gh repo license
+
 Explore repository licenses
 
-USAGE
-  gh repo license <command> [flags]
+**Usage:** `gh repo license <command> [flags]`
 
-AVAILABLE COMMANDS
-  list:          List common repository licenses
-  view:          View a specific repository license
+## Commands
+- [`list`](list/) — List common repository licenses
+- [`view`](view/) — View a specific repository license
 
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

@@ -1,12 +1,10 @@
+# gh stack bottom
+
 Check out the bottom branch of the stack (closest to the trunk).
-Merged branches are automatically skipped.
 
-Usage:
-  gh stack bottom [flags]
+**Usage:** `gh stack bottom [flags]`
 
-Examples:
-  # Jump to the bottom of the stack
-  $ gh stack bottom
-
-Flags:
-  -h, --help   help for bottom
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

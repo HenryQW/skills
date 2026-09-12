@@ -9,6 +9,8 @@ import re
 import shutil
 import subprocess
 
+from compact import render_help, write_facets
+
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 REFERENCES = SKILL_DIR / "references"
@@ -111,22 +113,21 @@ def main() -> int:
     records = generate_commands()
     topics = help_topics(records[0][1])
 
-    COMMANDS.mkdir(parents=True, exist_ok=True)
-    TOPICS.mkdir(parents=True, exist_ok=True)
-    for source in COMMANDS.rglob("help.txt"):
-        source.unlink()
-    for source in TOPICS.glob("*.txt"):
-        source.unlink()
+    shutil.rmtree(COMMANDS, ignore_errors=True)
+    shutil.rmtree(TOPICS, ignore_errors=True)
+    COMMANDS.mkdir(parents=True)
+    TOPICS.mkdir(parents=True)
 
     manifest = []
     for path, help_text in records:
         target = command_file(path, "help.txt")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(help_text)
+        write_facets(target.parent, render_help(help_text, path))
         manifest.append("/".join(path) or ".")
 
     for topic in topics:
-        (TOPICS / f"{topic}.txt").write_text(run("help", topic))
+        (TOPICS / f"{topic}.md").write_text(run("help", topic))
 
     (REFERENCES / "manifest.txt").write_text("\n".join(manifest) + "\n")
     (REFERENCES / "snapshot.txt").write_text(

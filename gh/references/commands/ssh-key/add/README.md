@@ -1,17 +1,8 @@
+# gh ssh-key add
+
 Add an SSH key to your GitHub account
 
-USAGE
-  gh ssh-key add [<key-file>] [flags]
+**Usage:** `gh ssh-key add [<key-file>] [flags]`
 
-FLAGS
-  -t, --title string   Title for the new key
-      --type string    Type of the ssh key: {authentication|signing} (default "authentication")
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)

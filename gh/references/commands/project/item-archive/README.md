@@ -1,27 +1,10 @@
+# gh project item-archive
+
 Archive an item in a project
 
-For more information about output formatting flags, see `gh help formatting`.
+**Usage:** `gh project item-archive [<number>] [flags]`
 
-USAGE
-  gh project item-archive [<number>] [flags]
-
-FLAGS
-      --format string     Output format: {json}
-      --id string         ID of the item to archive
-  -q, --jq expression     Filter JSON output using a jq expression
-      --owner string      Login of the owner. Use "@me" for the current user.
-  -t, --template string   Format JSON output using a Go template; see "gh help formatting"
-      --undo              Unarchive an item
-
-INHERITED FLAGS
-  --help   Show help for command
-
-EXAMPLES
-  # Archive an item in the current user's project "1"
-  $ gh project item-archive 1 --owner "@me" --id <item-ID>
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Examples](examples.md)
+- [Details](details.md)

@@ -1,18 +1,12 @@
+# gh preview
+
 Preview commands are for testing, demonstrative, and development purposes only.
-They should be considered unstable and can change at any time.
 
+**Usage:** `gh preview <command> [flags]`
 
-USAGE
-  gh preview <command> [flags]
+## Commands
+- [`prompter`](prompter/) — Execute a test program to preview the prompter
 
-AVAILABLE COMMANDS
-  prompter:      Execute a test program to preview the prompter
-
-INHERITED FLAGS
-  --help   Show help for command
-
-LEARN MORE
-  Use `gh <command> <subcommand> --help` for more information about a command.
-  Read the manual at https://cli.github.com/manual
-  Learn about exit codes using `gh help exit-codes`
-  Learn about accessibility experiences using `gh help accessibility`
+## More
+- [Options](options.md)
+- [Details](details.md)
