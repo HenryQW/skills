@@ -1,0 +1,40 @@
+Edit one of your gists
+
+USAGE
+  gh gist edit {<id> | <url>} [<filename>] [flags]
+
+FLAGS
+  -a, --add string        Add a new file to the gist
+  -d, --desc string       New description for the gist
+  -f, --filename string   Select a file to edit
+  -r, --remove string     Remove a file from the gist
+
+INHERITED FLAGS
+  --help   Show help for command
+
+EXAMPLES
+  # Select a gist to edit interactively
+  $ gh gist edit
+
+  # Edit a gist file in the default editor
+  $ gh gist edit 1234567890abcdef1234567890abcdef
+
+  # Edit a specific file in the gist
+  $ gh gist edit 1234567890abcdef1234567890abcdef --filename hello.py
+
+  # Replace a gist file with content from a local file
+  $ gh gist edit 1234567890abcdef1234567890abcdef --filename hello.py hello.py
+
+  # Add a new file to the gist
+  $ gh gist edit 1234567890abcdef1234567890abcdef --add newfile.py
+
+  # Change the description of the gist
+  $ gh gist edit 1234567890abcdef1234567890abcdef --desc "new description"
+
+  # Remove a file from the gist
+  $ gh gist edit 1234567890abcdef1234567890abcdef --remove hello.py
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

@@ -1,0 +1,29 @@
+# Environment
+
+- `GH_TOKEN, GITHUB_TOKEN` — github.com token; first name wins and overrides stored credentials.
+- `GH_ENTERPRISE_TOKEN, GITHUB_ENTERPRISE_TOKEN` — GitHub Enterprise Server token; first name wins.
+- `GH_HOST` — default GitHub hostname when repository context does not supply one.
+- `GH_REPO` — default repository as `[HOST/]OWNER/REPO`.
+- `GH_EDITOR, GIT_EDITOR, VISUAL, EDITOR` — editor precedence, left to right.
+- `GH_BROWSER, BROWSER` — browser precedence, left to right.
+- `GH_DEBUG` — truthy enables debug output; `api` also logs HTTP traffic.
+- `DEBUG` — deprecated debug switch.
+- `GH_PAGER, PAGER` — pager precedence, left to right.
+- `GLAMOUR_STYLE` — Markdown rendering style.
+- `NO_COLOR` — any value disables ANSI color.
+- `CLICOLOR` — `0` disables ANSI color.
+- `CLICOLOR_FORCE` — nonzero forces color when output is piped.
+- `GH_COLOR_LABELS` — show label RGB colors in true-color terminals.
+- `GH_ACCESSIBLE_COLORS` — truthy enables customizable 4-bit colors.
+- `GH_FORCE_TTY` — force terminal output; number sets columns, percentage scales width.
+- `GH_NO_UPDATE_NOTIFIER` — disable daily gh update notices.
+- `GH_NO_EXTENSION_UPDATE_NOTIFIER` — disable daily extension update notices.
+- `GH_EXTENSION` — set to `1` by gh while invoking an extension.
+- `GH_CONFIG_DIR` — configuration directory; otherwise XDG, Windows AppData, or `~/.config/gh`.
+- `GH_PROMPT_DISABLED` — disable interactive prompts.
+- `GH_PATH` — path to gh when it cannot determine its executable path.
+- `GH_MDWIDTH` — maximum Markdown wrap width, capped by terminal width and 120.
+- `GH_ACCESSIBLE_PROMPTER` — truthy enables screen-reader-friendly prompts.
+- `GH_TELEMETRY` — `log` prints telemetry; `false` or `0` disables it and overrides `DO_NOT_TRACK`.
+- `DO_NOT_TRACK` — `true` or `1` disables telemetry unless `GH_TELEMETRY` is set.
+- `GH_SPINNER_DISABLED` — truthy replaces animated spinners with text progress.

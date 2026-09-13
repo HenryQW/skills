@@ -1,0 +1,42 @@
+View information about a GitHub ruleset.
+
+If no ID is provided, an interactive prompt will be used to choose
+the ruleset to view.
+
+Use the `--parents` flag to control whether rulesets configured at higher
+levels that also apply to the provided repository or organization should
+be returned. The default is `true`.
+
+
+USAGE
+  gh ruleset view [<ruleset-id>] [flags]
+
+FLAGS
+  -o, --org string   Organization name if the provided ID is an organization-level ruleset
+  -p, --parents      Whether to include rulesets configured at higher levels that also apply (default true)
+  -w, --web          Open the ruleset in the browser
+
+INHERITED FLAGS
+      --help                     Show help for command
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
+EXAMPLES
+  # Interactively choose a ruleset to view from all rulesets that apply to the current repository
+  $ gh ruleset view
+
+  # Interactively choose a ruleset to view from only rulesets configured in the current repository
+  $ gh ruleset view --no-parents
+
+  # View a ruleset configured in the current repository or any of its parents
+  $ gh ruleset view 43
+
+  # View a ruleset configured in a different repository or any of its parents
+  $ gh ruleset view 23 --repo owner/repo
+
+  # View an organization-level ruleset
+  $ gh ruleset view 23 --org my-org
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

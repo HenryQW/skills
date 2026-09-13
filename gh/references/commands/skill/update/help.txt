@@ -1,0 +1,64 @@
+Checks installed skills for available updates by comparing the local
+tree SHA (from `SKILL.md` frontmatter) against the remote repository.
+
+Scans all known agent host directories (including Copilot, Claude, Cursor,
+Gemini, Antigravity, Grok, and others) in both project and user scope automatically.
+
+Without arguments, checks all installed skills. With skill names,
+checks only those specific skills.
+
+Pinned skills (installed with `--pin`) are skipped with a notice.
+Use `--unpin` to clear the pinned version and include those skills
+in the update.
+
+Skills without GitHub metadata (e.g. installed manually or by another
+tool) are prompted for their source repository in interactive mode.
+With `--all` or in non-interactive mode, they are skipped with a notice.
+The update re-downloads the skill with metadata injected, so future
+updates work automatically.
+
+With `--force`, re-downloads skills even when the remote version matches
+the local tree SHA. This overwrites locally modified skill files with
+their original content, but does not remove extra files added locally.
+
+In interactive mode, shows which skills have updates and asks for
+confirmation before proceeding. With `--all`, updates without prompting.
+With `--dry-run`, reports available updates without modifying any files.
+
+
+USAGE
+  gh skill update [<skill>...] [flags]
+
+FLAGS
+  --all          Update all skills without prompting
+  --dir string   Scan a custom directory for installed skills
+  --dry-run      Report available updates without modifying files
+  --force        Re-download even if already up to date
+  --unpin        Clear pinned version and include pinned skills in update
+
+INHERITED FLAGS
+  --help   Show help for command
+
+EXAMPLES
+  # Check and update all skills interactively
+  $ gh skill update
+
+  # Update specific skills
+  $ gh skill update mcp-cli git-commit
+
+  # Update all without prompting
+  $ gh skill update --all
+
+  # Re-download all skills (restore locally modified files)
+  $ gh skill update --force --all
+
+  # Check for updates without applying (read-only)
+  $ gh skill update --dry-run
+
+  # Unpin skills and update them to latest
+  $ gh skill update --unpin
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

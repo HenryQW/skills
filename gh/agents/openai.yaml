@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub CLI Manual"
+  short_description: "Look up exact gh command syntax and options"
+  default_prompt: "Use $gh to find the exact GitHub CLI command, arguments, flags, examples, or behavior I need."

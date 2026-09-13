@@ -1,0 +1,28 @@
+Create a new extension
+
+USAGE
+  gh extension create [<name>] [flags]
+
+FLAGS
+  --precompiled string   Create a precompiled extension. Possible values: go, other
+
+INHERITED FLAGS
+  --help   Show help for command
+
+EXAMPLES
+  # Use interactively
+  $ gh extension create
+
+  # Create a script-based extension
+  $ gh extension create foobar
+
+  # Create a Go extension
+  $ gh extension create --precompiled=go foobar
+
+  # Create a non-Go precompiled extension
+  $ gh extension create --precompiled=other foobar
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

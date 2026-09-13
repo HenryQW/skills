@@ -1,0 +1,33 @@
+List the projects for an owner
+
+For more information about output formatting flags, see `gh help formatting`.
+
+USAGE
+  gh project list [flags]
+
+ALIASES
+  gh project ls
+
+FLAGS
+      --closed            Include closed projects
+      --format string     Output format: {json}
+  -q, --jq expression     Filter JSON output using a jq expression
+  -L, --limit int         Maximum number of projects to fetch (default 30)
+      --owner string      Login of the owner
+  -t, --template string   Format JSON output using a Go template; see "gh help formatting"
+  -w, --web               Open projects list in the browser
+
+INHERITED FLAGS
+  --help   Show help for command
+
+EXAMPLES
+  # List the current user's projects
+  $ gh project list
+
+  # List the projects for org github including closed projects
+  $ gh project list --owner github --closed
+
+LEARN MORE
+  Use `gh <command> <subcommand> --help` for more information about a command.
+  Learn about exit codes using `gh help exit-codes`
+  Learn about accessibility experiences using `gh help accessibility`

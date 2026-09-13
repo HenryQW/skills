@@ -1,0 +1,19 @@
+# gh pr checks
+
+Show CI status for a single pull request.
+
+**Usage:** `gh pr checks [<number> | <url> | <branch>] [flags]`
+
+## Options
+      --fail-fast         Exit watch mode on first check failure
+  -i, --interval int      Refresh interval in seconds in watch mode (default 10)
+  -q, --jq expression     Filter JSON output using a jq expression
+      --json fields       Output JSON with the specified fields
+      --required          Only show checks that are required
+  -t, --template string   Format JSON output using a Go template; see "gh help formatting"
+      --watch             Watch checks until they finish
+  -w, --web               Open the web browser to show details about checks
+  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+
+## More
+- [Details](details.md)
