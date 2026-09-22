@@ -144,7 +144,7 @@ Migrates Pencil design sources and repository workflows to verified Figma files 
 
 #### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
 
-Builds and repairs Pi extensions against version-matched docs and examples from installed Pi; includes a reusable authority resolver.
+Builds and repairs Pi extensions against the active installed Pi API, with guidance for current lifecycle, tools, packages, and UI; includes an authority resolver.
 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 

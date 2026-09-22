@@ -3,10 +3,14 @@ name: pi-extension-workbench
 description: Use when developing, modifying, or debugging a Pi extension or Pi extension package, including requests identified only by package name.
 ---
 
+<!-- Last reviewed against Pi 0.87.1; revisit on a new Pi release. -->
+
 # Pi Extension Workbench
 
-Use APIs and patterns shipped with active published Pi version, not memory or a
-source checkout.
+For extension work, use APIs shipped with the active installed Pi version, not
+memory or an unrelated source checkout. If the task explicitly targets a Pi
+source checkout, inspect that checkout for changes, but verify runtime behavior
+against the installed package before applying them to an extension.
 
 ## Resolve authority
 
@@ -48,8 +52,8 @@ rg -nF '<API-or-behavior>' "$PI_CODING_AGENT_ROOT/docs/extensions.md" \
   "$PI_CODING_AGENT_ROOT/examples/extensions"
 ```
 
-Read published type declarations only when docs and example do not settle
-signature. Do not read full extension guide by default.
+Read installed type declarations when docs and examples do not settle a
+signature or event contract. Do not read the full extension guide by default.
 
 ## Work
 
@@ -60,8 +64,9 @@ signature. Do not read full extension guide by default.
 2. Inspect target Pi dependency/peer range and active installed version before
    selecting API. Active package defines current runtime; target's declared
    support floor remains compatibility constraint.
-3. Match request to smallest official example. Reuse `ExtensionAPI`, context,
-   events, UI, session, settings, and Node APIs. Copy pattern, not scaffolding.
+3. Match request to the smallest example shipped with the active package.
+   Reuse `ExtensionAPI`, context, events, UI, session, settings, and Node APIs.
+   Copy pattern, not scaffolding.
 4. For bugs, trace all callers and fix shared root cause. Preserve trust-boundary
    validation, visible errors, resource cleanup, and branch/session semantics.
 5. Make smallest focused change. Add no speculative compatibility path,

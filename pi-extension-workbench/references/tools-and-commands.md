@@ -1,8 +1,8 @@
 # Tools and Commands
 
 Navigation aid distilled from published examples. Verify exact signatures in
-installed `docs/extensions.md` sections headed `ExtensionAPI Methods` and
-`Custom Tools` before editing code.
+installed `docs/extensions.md` sections `Choose an integration point` and
+`Tools` before editing code.
 
 ## Tool contract
 
@@ -12,7 +12,8 @@ installed `docs/extensions.md` sections headed `ExtensionAPI Methods` and
 - Put LLM-facing result in `content` and renderer/state data in `details`.
   Throw from `execute()` to produce failed tool result; returned error-looking
   content is still success.
-- Honor `signal`; use `onUpdate` only for useful progress. Prefer
+- Honor `signal` when present; commands and idle events may have no signal.
+  Use `onUpdate` only for useful progress. Prefer
   `pi.exec(command, args, { signal })` over shell string assembly.
 - Bound output with Pi truncation helpers and preserve full output when users or
   model may need it. See `truncated-tool.ts`.
@@ -25,7 +26,9 @@ installed `docs/extensions.md` sections headed `ExtensionAPI Methods` and
   and fail closed at trust boundaries. See `tool-override.ts` and
   `built-in-tool-renderer.ts`.
 - Shared mutable tool state may need `executionMode: "sequential"`; use only
-  when parallel calls would race. See `tic-tac-toe.ts`.
+  when parallel calls would race. File read-modify-write tools should wrap the
+  full mutation with `withFileMutationQueue()`. See `tic-tac-toe.ts` and
+  `tool-override.ts`.
 - `terminate: true` skips follow-up only when every finalized result in batch
   terminates. See `structured-output.ts`.
 
@@ -42,7 +45,7 @@ registered tools:
 4. Let Pi record newly active definitions for next model request.
 
 Use `pi.getAllTools()` metadata and `sourceInfo`; do not infer provenance from
-names or paths. See `dynamic-tools.ts`, `kimi-deferred-tools.ts`, and `tools.ts`.
+names or paths. See `dynamic-tools.ts` and `tools.ts`.
 
 ## Commands and messages
 
@@ -53,7 +56,7 @@ names or paths. See `dynamic-tools.ts`, `kimi-deferred-tools.ts`, and `tools.ts`
 | Keyboard action | `registerShortcut` | Avoid collision with built-ins | `plan-mode/index.ts` |
 | Actual user turn | `sendUserMessage` | While streaming, set `deliverAs: "steer"` or `"followUp"` | `send-user-message.ts` |
 | LLM-context custom message | `sendMessage` | Choose delivery and `triggerTurn` deliberately | `message-renderer.ts` |
-| Durable non-LLM data | `appendEntry` | Pair with entry renderer only for TUI display | `entry-renderer.ts` |
+| Durable non-LLM data | `appendEntry` | Pair with `registerEntryRenderer` only for TUI display | `entry-renderer.ts` |
 | Cross-extension signal | `pi.events` | Namespace event names; treat payload as untrusted | `event-bus.ts` |
 
 Paths are relative to `$PI_CODING_AGENT_ROOT/examples/extensions/`.
