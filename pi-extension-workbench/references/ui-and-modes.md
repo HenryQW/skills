@@ -1,8 +1,8 @@
 # UI and Modes
 
 Navigation aid distilled from published examples. Verify exact methods in
-installed `docs/extensions.md` section `Custom UI`; use `docs/tui.md` only for
-custom components.
+installed `docs/extensions.md` section `UI and modes`; use `docs/tui.md` only
+for custom components.
 
 ## Mode gate
 

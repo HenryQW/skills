@@ -32,31 +32,30 @@ silent fallback.
 
 ## Package manifest
 
-Prefer explicit manifest when publishing mixed resources:
+Use an explicit manifest when resources live outside conventional directories
+or need filtering:
 
 ```json
 {
-  "type": "module",
-  "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./extensions"],
-    "skills": ["./skills"],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "extensions": ["./src/extension.ts"],
+    "skills": ["./resources/skills"]
   }
 }
 ```
 
-Without `pi` manifest, Pi discovers conventional `extensions/`, `skills/`,
-`prompts/`, and `themes/` directories.
+Without a `pi` manifest, Pi discovers conventional `extensions/`, `skills/`,
+`prompts/`, and `themes/` directories. The `pi-package` keyword opts npm
+packages into gallery discovery; it is not required to load resources.
 
 - Runtime third-party libraries belong in `dependencies`.
 - Pi core imports belong in `peerDependencies` with `"*"` and must not be
   bundled: `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`,
   `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `typebox`.
 - A Pi package dependency whose resources must load from this package belongs
-  in both `dependencies` and `bundledDependencies`; list its resource paths
-  under `node_modules/` in `pi` manifest.
+  in `dependencies` and must be included in the published tarball; list its
+  resource paths under `node_modules/` in the `pi` manifest. Check the target's
+  packaging mechanism rather than assuming dependency files are bundled.
 - Use `npm pack --dry-run --ignore-scripts` to inspect publish contents without
   running package lifecycle hooks. Never version or publish unless requested.
 
@@ -70,8 +69,11 @@ See `$PI_CODING_AGENT_ROOT/docs/packages.md` and
   process cwd. See `dynamic-resources/index.ts`.
 - Use namespaced `pi.events` for in-process extension communication. No replay
   or persistence; restore needed state separately. See `event-bus.ts`.
-- Provider payload hooks inspect or replace request/response transport data.
-  Never log credentials or authorization headers. See `provider-payload.ts`.
+- `before_provider_request` can replace a payload;
+  `before_provider_headers` mutates assembled headers in place (a `null` value
+  deletes one); `after_provider_response` observes status and headers. Never
+  log credentials or authorization headers. See `provider-payload.ts` and
+  installed event types.
 - `registerProvider` is for proxies, custom auth, model catalogs, or streaming
   implementations—not ordinary model selection. Pass cancellation signals to
   network I/O. Start with `custom-provider-gitlab-duo/`; use
