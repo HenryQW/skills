@@ -1,0 +1,4 @@
+interface:
+  display_name: "Miniflux"
+  short_description: "Use Miniflux through configured, deterministic API scripts"
+  default_prompt: "Use $miniflux for the native API. Require valid environment or JSON configuration, run the bundled authentication check, and use its deterministic request helper only for authorized operations. Stop if configuration or authentication fails."
