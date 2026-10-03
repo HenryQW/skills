@@ -13,6 +13,7 @@ npx skills add HenryQW/skills
 ## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
+- `miniflux` requires Python 3 and an instance URL with configured API-key or Basic authentication.
 
 ## 🧭 How the harness works
 
@@ -133,6 +134,10 @@ Creates coherent scoped Conventional Commits from changes against the target bra
 #### [🔀 `git-pr`](git-pr/)
 
 Creates focused GitHub pull requests from inspected branch changes.
+
+#### [📰 `miniflux`](miniflux/)
+
+Covers the complete native Miniflux API with resource-specific references and a deterministic request helper that requires configured remote authentication.
 
 #### [🖼️ `og-image`](og-image/)
 
