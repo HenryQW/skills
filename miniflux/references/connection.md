@@ -44,9 +44,9 @@ Config schema (illustrative values only):
 }
 ```
 
-For Basic authentication, replace `api_key` with `username` and `password`. Unknown fields, empty values, incomplete Basic credentials, or simultaneous key/Basic auth fail before network access. Set file permissions to `0600` and keep config/response files outside version control. Populate environment secrets through existing secure tooling; do not place real secrets in shell arguments, transcripts, or examples.
+For Basic authentication, replace `api_key` with `username` and `password`. Unknown fields, empty values, incomplete Basic credentials, or simultaneous key/Basic auth fail before network access. Set file permissions to `0600` and keep config/response files outside version control; do not place real secrets in shell arguments, transcripts, or examples.
 
-The URL is the instance base, including any deployment path but excluding `/v1`. HTTPS is mandatory unless `--allow-http` explicitly permits trusted plaintext HTTP. URLs with embedded credentials, query strings, fragments, or traversal are rejected. Redirects are never followed. The default request timeout is 30 seconds; `--timeout SECONDS` must be positive.
+The URL is the instance base, including any deployment path but excluding `/v1`. HTTPS is mandatory unless `--allow-http` explicitly permits trusted plaintext HTTP. URLs with embedded credentials, query strings, fragments, or a `/v1` suffix are rejected. Redirects are never followed. The default request timeout is 30 seconds; `--timeout SECONDS` must be positive.
 
 ### Deterministic commands
 
@@ -60,8 +60,6 @@ python3 "$MF" check
 python3 "$MF" --config "$MINIFLUX_CONFIG" check
 ```
 
-If configuration is missing or check fails, **stop**. Do not ask for a password in chat or try unauthenticated calls. Local help is available with `--help` and `request --help` without credentials.
-
 Read requests and repeated URL-encoded query fields:
 
 ```bash
@@ -74,7 +72,7 @@ python3 "$MF" request GET /v1/entries/888/fetch-content \
   --query update_content=false
 ```
 
-Mutations require the caller's authorization and `--allow-write`. JSON input is validated/serialized; `--json -` reads stdin. For example, **only if those exact IDs were authorized**:
+Mutations require the caller's authorization and `--allow-write`. JSON input is validated, then sent unchanged; `--json -` reads stdin. For example, **only if those exact IDs were authorized**:
 
 ```bash
 printf '%s' '{"entry_ids":[1234,4567],"status":"read"}' | \
@@ -93,97 +91,12 @@ python3 "$MF" request GET /v1/api-keys --output "$PRIVATE_OUTPUT/api-keys.json"
 
 The destination must be **new**; it is reserved with mode `0600` before sending, so an existing/unwritable output path cannot trigger a mutation. Raw response files can contain credentials: never display, commit, or publish them. Failure may leave an empty/incomplete file; trust it only after exit 0. Terminal output after saving reports status and byte count, not raw data.
 
-All documented `/v1/...` routes use the configured base path. `/healthcheck` and legacy `/version` also use it; liveness/readiness aliases target the instance origin root. Only native API/probe/version paths are accepted, not arbitrary article URLs. The helper performs one attempt and returns exit 1 on config, auth, HTTP, network, or I/O failure; reconcile uncertain mutation outcomes instead of retrying them.
+All documented `/v1/...` routes use the configured base path. `/healthcheck` and legacy `/version` also use it; liveness/readiness aliases target the instance origin root. Only native API/probe/version paths are accepted, not arbitrary article URLs. The helper performs one attempt and returns exit 1 on config, auth, HTTP, network, or I/O failure.
 
 <a id="clients"></a>
 ## Clients
 
-For application implementation, there are official API clients in Go and Python. For agent-run operations use the bundled helper instead. Client examples below illustrate API capabilities, not permission to install packages, embed real credentials, print credential-bearing feed objects, or bypass mandatory configuration.
-
-<a id="go-client"></a>
-## Golang Client
-
-- Repository: <https://github.com/miniflux/v2/tree/main/client>
-- Reference: <https://pkg.go.dev/miniflux.app/v2/client>
-
-Installation:
-
-```bash
-go get -u miniflux.app/v2/client
-```
-
-Usage Example:
-
-```go
-package main
-
-import (
-    "fmt"
-
-    miniflux "miniflux.app/v2/client"
-)
-
-func main() {
-    // Authentication using username/password.
-    client := miniflux.NewClient("https://miniflux.example.org", "admin", "secret")
-
-    // Authentication using API token.
-    client := miniflux.NewClient("https://miniflux.example.org", "My secret token")
-
-    // Fetch all feeds.
-    feeds, err := client.Feeds()
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    fmt.Println(feeds)
-}
-```
-
-<a id="python-client"></a>
-## Python Client
-
-- Repository: <https://github.com/miniflux/python-client>
-- PyPi: <https://pypi.org/project/miniflux/>
-
-Installation:
-
-```bash
-pip install miniflux
-```
-
-Usage example:
-
-```python
-import miniflux
-
-# Authentication using username/password
-client = miniflux.Client("https://miniflux.example.org", "my_username", "my_secret_password")
-
-# Authentication using an API token
-client = miniflux.Client("https://miniflux.example.org", api_key="My Secret Token")
-
-# Get all feeds
-feeds = client.get_feeds()
-
-# Refresh a feed
-client.refresh_feed(123)
-
-# Discover subscriptions from a website
-subscriptions = client.discover("https://example.org")
-
-# Create a new feed, with a personalized user agent and with the crawler enabled
-feed_id = client.create_feed("http://example.org/feed.xml", 42, crawler=True, user_agent="GoogleBot")
-
-# Fetch 10 starred entries
-entries = client.get_entries(starred=True, limit=10)
-
-# Fetch last 5 feed entries
-feed_entries = client.get_feed_entries(123, direction='desc', order='published_at', limit=5)
-
-# Update a feed category
-client.update_feed(123, category_id=456)
-```
+Official [Go](https://pkg.go.dev/miniflux.app/v2/client) and [Python](https://github.com/miniflux/python-client) clients exist for application code. Agent-run operations use the bundled helper.
 
 <a id="status-codes"></a>
 ## Status Codes
@@ -197,7 +110,7 @@ client.update_feed(123, category_id=456)
 - `404`: Resource absent (explicitly documented for missing feed icons; inspect the actual response for other resources).
 - `500`: Internal server error
 
-Endpoint-specific successes also include `202` (accepted/queued) and `204` (no response body). A proxy may return non-JSON errors or rate-limit responses; inspect status and content type before decoding. Report sanitized errors, never raw credential-bearing bodies. Do not automatically retry uncertain mutations.
+Endpoint-specific successes also include `202` (accepted/queued) and `204` (no response body). A proxy may return non-JSON errors or rate-limit responses.
 
 <a id="error-response"></a>
 ## Error Response

@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-class AccessError(ValueError):
+class AccessError(Exception):
     pass
 
 
@@ -79,9 +79,8 @@ def configuration(args):
     except ValueError as error:
         raise AccessError("Invalid Miniflux instance URL") from error
     if (not parsed.hostname or parsed.username is not None or parsed.password is not None
-            or parsed.query or parsed.fragment or any(c.isspace() for c in url)
-            or "\\" in url or ".." in unquote(parsed.path).split("/") or parsed.path.endswith("/v1")):
-        raise AccessError("URL must be an instance base URL without credentials, query, fragment, traversal, or /v1 suffix")
+            or parsed.query or parsed.fragment or any(c.isspace() for c in url) or parsed.path.endswith("/v1")):
+        raise AccessError("URL must be an instance base URL without credentials, query, fragment, or /v1 suffix")
     if parsed.scheme not in {"https", "http"} or parsed.scheme == "http" and not args.allow_http:
         raise AccessError("HTTPS is required; --allow-http explicitly permits trusted plaintext HTTP")
     if token:
@@ -91,12 +90,7 @@ def configuration(args):
             raise AccessError("Basic-auth username cannot contain a colon")
         credential = base64.b64encode(f'{config["username"]}:{config["password"]}'.encode()).decode()
         headers = {"Authorization": "Basic " + credential}
-    try:
-        for value in headers.values():
-            value.encode("latin-1")
-    except UnicodeEncodeError as error:
-        raise AccessError("API key must be representable as an HTTP header") from error
-    return url, headers, secrets_in(config) + list(headers.values())
+    return url, f"{parsed.scheme}://{parsed.netloc}", headers, secrets_in(config) + list(headers.values())
 
 
 def read_body(args):
@@ -107,24 +101,23 @@ def read_body(args):
     if args.json is not None:
         try:
             value = json.loads(raw)
-            encoded = json.dumps(value, allow_nan=False).encode()
-        except (ValueError, UnicodeError) as error:
+        except ValueError as error:
             raise AccessError("Request file/stdin is not valid JSON") from error
-        return encoded, "application/json", secrets_in(value)
+        return raw, "application/json", secrets_in(value)
     return raw, "application/xml", []
 
 
 def execute(args):
-    base, headers, secrets = configuration(args)
+    base, origin, headers, secrets = configuration(args)
     if args.timeout <= 0:
         raise AccessError("Timeout must be a positive number of seconds")
-    method, path, query = ("GET", "/v1/me", []) if args.command == "check" else (args.method, args.path, args.query)
+    method, path = args.method, args.path
     if (not (path.startswith("/v1/") or path in ROOT_PROBES | {"/healthcheck", "/version"})
             or any(c.isspace() for c in path) or any(c in path for c in "?#\\")
             or any(segment in {".", ".."} for segment in unquote(path).split("/"))):
         raise AccessError("Path must be a native /v1/... route or documented probe/version path, without query, fragment, or traversal")
     pairs = []
-    for item in query:
+    for item in args.query:
         key, separator, value = item.partition("=")
         if not separator or not key:
             raise AccessError("Each --query must be KEY=VALUE")
@@ -132,19 +125,17 @@ def execute(args):
     writing = method != "GET" or unquote(path).endswith("/fetch-content") and any(k == "update_content" and v != "false" for k, v in pairs)
     if writing and not args.allow_write:
         raise AccessError("Mutation refused: require authorized --allow-write (including fetch-content updates)")
-    body, content_type, body_secrets = (None, None, []) if args.command == "check" else read_body(args)
+    body, content_type, body_secrets = read_body(args)
     if method == "GET" and body is not None:
         raise AccessError("GET requests cannot have a body")
     secrets += body_secrets
     if content_type:
         headers["Content-Type"] = content_type
-    origin = urlsplit(base)
-    url = (f"{origin.scheme}://{origin.netloc}" if path in ROOT_PROBES else base) + path
+    url = (origin if path in ROOT_PROBES else base) + path
     if pairs:
         url += "?" + urlencode(pairs)
-    output = args.output if args.command == "request" else None
     # Reserve before sending: a bad/existing output path must not cause a mutation.
-    destination = os.fdopen(os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") if output else nullcontext(None)
+    destination = os.fdopen(os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") if args.output else nullcontext(None)
     with destination as file:
         try:
             with build_opener(NoRedirects()).open(Request(url, data=body, headers=headers, method=method), timeout=args.timeout) as response:
@@ -154,8 +145,8 @@ def execute(args):
             try:
                 data = json.loads(error.read())
                 if isinstance(data, dict) and isinstance(data.get("error_message"), str):
-                    detail = ": " + json.dumps(scrub(data["error_message"], secrets + secrets_in(data))[:500])
-            except (ValueError, UnicodeError):
+                    detail = ": " + json.dumps(scrub(data["error_message"], secrets)[:500])
+            except ValueError:
                 pass
             raise AccessError(f"{method} {scrub(path, secrets)}: HTTP {error.code}{detail}") from error
         except (URLError, TimeoutError, HTTPException) as error:
@@ -163,9 +154,9 @@ def execute(args):
         if args.command == "check":
             try:
                 data = json.loads(raw)
-            except (ValueError, UnicodeError) as error:
+            except ValueError as error:
                 raise AccessError("Authentication check did not return a JSON Miniflux identity") from error
-            if not isinstance(data, dict) or type(data.get("id")) is not int or data["id"] <= 0 or not isinstance(data.get("username"), str) or not data["username"]:
+            if not isinstance(data, dict) or not {"id", "username"} <= data.keys():
                 raise AccessError("Authentication check did not return a valid Miniflux identity")
             return {"status": status, "user": scrub({k: data[k] for k in ("id", "username", "is_admin") if k in data}, secrets)}
         if file is not None:
@@ -175,7 +166,7 @@ def execute(args):
             return {"status": status}
         try:
             data = json.loads(raw)
-        except (ValueError, UnicodeError):
+        except ValueError:
             return {"status": status, "content_type": media_type, "bytes": len(raw), "note": "Use --output FILE to save non-JSON response bytes"}
         return {"status": status, "data": scrub(data, secrets + secrets_in(data))}
 
@@ -186,7 +177,8 @@ def parser():
     cli.add_argument("--allow-http", action="store_true", help="explicitly permit trusted plaintext HTTP")
     cli.add_argument("--timeout", type=int, default=30, help="request timeout in seconds (default: 30)")
     commands = cli.add_subparsers(dest="command", required=True)
-    commands.add_parser("check", help="authenticate via GET /v1/me; emit minimal identity")
+    commands.add_parser("check", help="authenticate via GET /v1/me; emit minimal identity").set_defaults(
+        method="GET", path="/v1/me", query=[], json=None, body=None, allow_write=False, output=None)
     request = commands.add_parser("request", help="send one configured native API request; never retry automatically")
     request.add_argument("method", choices=("GET", "POST", "PUT", "DELETE"))
     request.add_argument("path", help="native API path; base path is preserved")
@@ -201,9 +193,6 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    # check has no write flag, body, or output; its valid state is always read-only.
-    if args.command == "check":
-        args.allow_write = False
     try:
         result = execute(args)
     except AccessError as error:

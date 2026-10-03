@@ -11,14 +11,11 @@ Use the native REST API, not UI automation or the separate Fever/Google Reader c
 
 Resolve `scripts/miniflux.py` to its absolute path within this skill directory (`MF` in examples). Use `python3 "$MF"` for authentication checks and API requests; Python 3 and its standard library are sufficient. Do not recreate curl commands, header construction, query encoding, response redaction, or transport handling.
 
-Require one complete credential source before any remote action:
-
-- Environment: `MINIFLUX_URL` and either `MINIFLUX_API_KEY` (preferred) or both `MINIFLUX_USERNAME` and `MINIFLUX_PASSWORD`.
-- JSON file: `--config FILE`, otherwise `MINIFLUX_CONFIG`; fields are `url` and either `api_key` or both `username` and `password`. File configuration replaces environment credentials completely.
+Require one complete credential source before any remote action: `MINIFLUX_URL` with `MINIFLUX_API_KEY` (preferred) or both `MINIFLUX_USERNAME` and `MINIFLUX_PASSWORD`, or a JSON file from `--config FILE` / `MINIFLUX_CONFIG`. Schema, HTTPS, redirect, and timeout rules are in [Connection](references/connection.md#authentication).
 
 **Stop and report missing/invalid configuration; do not proceed, guess credentials, prompt for passwords, or fall back to an unauthenticated request.** Direct the user to populate the environment through their secret manager or provide a private config file, not to paste secrets into chat. `--help` and offline tests remain available without credentials.
 
-Run `python3 "$MF" check` before other remote requests. Stop on failure. Use HTTPS; `--allow-http` before the command is an explicit exception for a trusted plaintext deployment. The helper rejects embedded URL credentials and redirects, and never retries automatically.
+Run `python3 "$MF" check` before other remote requests. Stop on failure.
 
 ## Load only what is needed
 
@@ -34,11 +31,11 @@ Every endpoint in the supplied API manual is covered. References retain its vers
 
 ## Request procedure
 
-1. Require the configuration above and a successful helper `check`. Preserve the configured deployment base path; the instance URL excludes `/v1`. Do not print credentials or inspect config files through tools that expose their contents.
+1. Do not print credentials or inspect config files through tools that expose their contents.
 2. Read the relevant resource reference, then call `request METHOD /v1/...`. Repeat `--query KEY=VALUE` for query fields, including repeated statuses. Use `--json FILE` (or `-` for stdin) for JSON and `--body FILE` for OPML XML. See Connection for runnable examples.
 3. Default to GET. Add `--allow-write` only for explicitly authorized mutations, including GET fetch-content updates. The flag is a transport gate, not permission to invent a mutation.
 4. Get `/v1/version` through the helper when a version-gated feature is needed. Reuse confirmed identity/version facts during this run. For older servers without `/v1/version`, consult System; never interpret authentication or proxy errors as proof of an old version.
-5. Terminal results wrap the API response as `{status, data}` with sensitive fields redacted; empty responses return only status. Use `--output NEW_FILE` for exact response bytes, OPML, or secrets that must be stored privately. The helper creates mode-0600 files without overwriting; consider a response file complete only after exit 0, and never commit or display its secrets. `202` can mean queued, not completed.
+5. Terminal output is redacted. Use `--output NEW_FILE` for exact response bytes, OPML, or secrets (semantics in Connection); never display or commit such files. `202` can mean queued, not completed.
 6. Stop on helper failure. Fix configuration/input or report sanitized HTTP/network errors; never switch to an ad hoc unauthenticated client. Do not replay uncertain mutations. If transient GET retries are appropriate, bound them at the calling layer; the helper performs one attempt. Use official clients only for implementing application code, with the same configured auth and safety rules.
 
 ## Mutation boundaries
