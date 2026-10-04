@@ -1,84 +1,81 @@
 # Packages and Integrations
 
-Navigation aid distilled from published `docs/packages.md` and extension
-examples. Verify manifest and provider contracts in installed docs before edits.
+Read installed `docs/packages.md` for manifest/discovery/dependency contracts.
+Inspect the manifest owning the extension entry point, not just workspace root;
+check its lockfile, scripts, and documented support policy.
 
-## Recognize package-shaped work
+## Compatibility and packaging
 
-A request naming repository or package such as `pi-auto-dag` still counts as Pi
-extension work when `package.json` has `pi.extensions`, a conventional
-`extensions/` directory contains its entry point, or code exports a default
-extension factory using `ExtensionAPI`. A core-package import alone may indicate
-an embedded SDK app, not an extension. Inspect manifest, entry points, lockfile,
-and package scripts before choosing API.
+- Record installed Pi's `package.json` version. Verify any explicitly supported
+  minimum against target types/tests or version-matched published material before
+  using newer APIs. A host peer range `"*"` declares no minimum; do not interpret
+  it as a promise to support all historical versions or invent a floor.
+- Use manifest `pi.extensions`, `skills`, `prompts`, and `themes` for static
+  resources. Conventional directories work without a manifest; `pi-package` is
+  gallery discovery, not a loading requirement. See installed `docs/packages.md`.
+- Runtime third-party libraries belong in `dependencies`. Host-provided
+  `@earendil-works/pi-ai`, `pi-agent-core`, `pi-coding-agent`, `pi-tui` (all under
+  `@earendil-works/`), and `typebox` belong in wildcard `peerDependencies`, not
+  bundled copies. Duplicate host packages can bypass module mapping.
+- Other Pi package dependencies need published files and explicit resource paths
+  under `node_modules/`. Check packaging rather than assuming bundling; use
+  `npm pack --dry-run --ignore-scripts` to inspect contents without lifecycle
+  hooks. Do not create release tarballs or publish unless requested.
+- Use `resources_discover` only for computed paths. Resolve siblings with
+  `import.meta.url`, not cwd. See `examples/extensions/dynamic-resources/index.ts`.
 
-Set `TARGET_PACKAGE_JSON` to manifest owning inspected extension entry point,
-not workspace root, then check its Pi range against active package version:
+## Prefer native integrations
+
+| Need | Native API | Installed reference |
+|---|---|---|
+| Call existing tools | `ctx.executeTool()` | `docs/extensions.md`: Tools |
+| Register session MCP servers | `registerMcpServer` / `unregisterMcpServer` | `docs/extensions.md`: MCP servers; `docs/mcp.md` |
+| Route requests across models | `registerVirtualModel` | `docs/virtual-models.md` |
+| Proxy/auth/catalog or custom streaming | `registerProvider` | `docs/custom-provider.md` |
+| Observe/adjust provider HTTP traffic | Provider request/headers/response events | `examples/extensions/provider-payload.ts` |
+
+Do not build a custom MCP client or provider for ordinary server registration,
+model selection, or model routing. MCP registrations are session/runtime-local;
+register again on load and honor configured server overrides. Pass cancellation
+to network I/O. Never log credentials, auth headers, or provider secrets.
+Extensions execute with user permissions: preserve project trust checks and
+validate external configuration, paths, and payloads at their boundary.
+
+## Isolated smoke load
+
+Inspect extension startup code first. Isolation below removes ambient resources
+and Pi startup networking; it is not a sandbox and cannot stop extension code
+from accessing files, credentials, or the network. Skip unsafe side effects and
+report the untested path. Verify flags with installed `pi --help` when they differ.
+
+Set `EXTENSION` to the absolute inspected entry point. Run this in one shell call:
 
 ```bash
-PI_CODING_AGENT_ROOT='<printed-path>'
-TARGET_PACKAGE_JSON=/path/to/extension/package.json
-node -e 'console.log(require(process.argv[1]).version)' \
-  "$PI_CODING_AGENT_ROOT/package.json"
-node -e 'const p=require(process.argv[1]); console.log({dependencies:p.dependencies,peerDependencies:p.peerDependencies,devDependencies:p.devDependencies,engines:p.engines})' \
-  "$TARGET_PACKAGE_JSON"
+EXTENSION=/absolute/path/to/extension.ts
+probe="$(mktemp -d)"
+trap 'rm -rf "$probe"' EXIT
+(
+  cd "$probe" || exit
+  printf '%s\n' '{"id":"smoke","type":"get_state"}' |
+    PI_CODING_AGENT_DIR="$probe/agent" pi --offline --mode rpc --no-session \
+      --no-extensions --no-skills --no-prompt-templates --no-themes \
+      --no-context-files --no-approve --extension "$EXTENSION" \
+      >stdout.jsonl 2>stderr.log
+) || { head -c 8192 "$probe/stderr.log"; exit 1; }
+python3 - "$probe/stdout.jsonl" <<'PY' || exit 1
+import json, sys
+with open(sys.argv[1]) as output:
+    records = [json.loads(line) for line in output]
+assert not any(r.get("type") == "extension_error" for r in records), "Extension handler failed"
+assert any(r.get("id") == "smoke" and r.get("success") for r in records), "No successful get_state response"
+print("RPC startup/state/shutdown passed; no model request")
+PY
+head -c 8192 "$probe/stderr.log"
 ```
 
-Installed package defines active runtime. Broad target support range adds a
-compatibility constraint: do not use API shown only in current installed docs
-until target types, tests, changelog, or version-matched published material prove
-supported floor has it. Fail with clear incompatibility instead of adding a
-silent fallback.
-
-## Package manifest
-
-Use an explicit manifest when resources live outside conventional directories
-or need filtering:
-
-```json
-{
-  "pi": {
-    "extensions": ["./src/extension.ts"],
-    "skills": ["./resources/skills"]
-  }
-}
-```
-
-Without a `pi` manifest, Pi discovers conventional `extensions/`, `skills/`,
-`prompts/`, and `themes/` directories. The `pi-package` keyword opts npm
-packages into gallery discovery; it is not required to load resources.
-
-- Runtime third-party libraries belong in `dependencies`.
-- Pi core imports belong in `peerDependencies` with `"*"` and must not be
-  bundled: `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`,
-  `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `typebox`.
-- A Pi package dependency whose resources must load from this package belongs
-  in `dependencies` and must be included in the published tarball; list its
-  resource paths under `node_modules/` in the `pi` manifest. Check the target's
-  packaging mechanism rather than assuming dependency files are bundled.
-- Use `npm pack --dry-run --ignore-scripts` to inspect publish contents without
-  running package lifecycle hooks. Never version or publish unless requested.
-
-See `$PI_CODING_AGENT_ROOT/docs/packages.md` and
-`examples/extensions/with-deps/package.json`.
-
-## Resources and extension boundaries
-
-- Static package resources belong in manifest. Use `resources_discover` only
-  for runtime-computed paths. Resolve sibling paths with `import.meta.url`, not
-  process cwd. See `dynamic-resources/index.ts`.
-- Use namespaced `pi.events` for in-process extension communication. No replay
-  or persistence; restore needed state separately. See `event-bus.ts`.
-- `before_provider_request` can replace a payload;
-  `before_provider_headers` mutates assembled headers in place (a `null` value
-  deletes one); `after_provider_response` observes status and headers. Never
-  log credentials or authorization headers. See `provider-payload.ts` and
-  installed event types.
-- `registerProvider` is for proxies, custom auth, model catalogs, or streaming
-  implementations—not ordinary model selection. Pass cancellation signals to
-  network I/O. Start with `custom-provider-gitlab-duo/`; use
-  `custom-provider-anthropic/` only when custom streaming/OAuth is required.
-- Packages execute arbitrary code. Preserve trust checks for project-local code
-  and validate all external config, paths, events, and provider data.
-
-Paths are relative to `$PI_CODING_AGENT_ROOT/examples/extensions/` unless noted.
+Apply a tool timeout; inspect stderr for load errors even after a successful
+state response (Pi can continue after rejecting an extension). Stdin EOF requests
+orderly runtime disposal; do not send a prompt. For lifecycle changes, verify the
+expected startup/cleanup effects, not just process exit. This does not test
+reload, tree/fork restoration, cancellation, or TUI/JSON/print behavior: run the
+smallest affected checks separately. See installed `docs/rpc.md`.

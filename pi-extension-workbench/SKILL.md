@@ -3,80 +3,71 @@ name: pi-extension-workbench
 description: Use when developing, modifying, or debugging a Pi extension or Pi extension package, including requests identified only by package name.
 ---
 
-<!-- Last reviewed against Pi 0.87.1; revisit on a new Pi release. -->
+<!-- Last reviewed against Pi 1.0.0; verify contracts against each installed version. -->
 
 # Pi Extension Workbench
 
-For extension work, use APIs shipped with the active installed Pi version, not
-memory or an unrelated source checkout. If the task explicitly targets a Pi
-source checkout, inspect that checkout for changes, but verify runtime behavior
-against the installed package before applying them to an extension.
+Use APIs shipped with the active installed Pi, not remembered APIs or an
+unrelated source checkout. For an explicitly targeted Pi source checkout,
+inspect that checkout, but verify extension runtime behavior against installed Pi.
 
 ## Resolve authority
 
-Run reusable resolver. It prints root of package loaded by active `pi` command,
-including package-manager launcher shims, and fails on invalid assumptions:
+Run the resolver; it identifies the package loaded by the active `pi` command,
+including launcher shims, or fails with a diagnostic:
 
 ```bash
-PI_CODING_AGENT_ROOT="$(<skill_dir>/scripts/resolve-authority.sh)"
+PI_CODING_AGENT_ROOT="$(<skill_dir>/scripts/resolve-authority.sh)" || exit
 export PI_CODING_AGENT_ROOT
 ```
 
-Record printed path. Shell tool calls do not share exports; start every later
-one-shot shell call with `PI_CODING_AGENT_ROOT='<printed-path>'` and export it
-when child processes need it.
-
-Installed package docs, examples, and types define active runtime. Do not
-replace them with GitHub, local Pi source clones, or remembered APIs.
+Record the path and its `package.json` version. Shell calls do not share exports;
+set `PI_CODING_AGENT_ROOT='<printed-path>'` in later shell calls that need it.
+Installed docs, examples, and declarations define the runtime contract.
 
 ## Load progressively
 
-Read target manifest and entry points, then load only matching reference:
+Inspect target manifest and entry points first. A package-named request counts
+as extension work when `pi.extensions`, a conventional extension entry point,
+or a default factory using `ExtensionAPI` identifies it. A core import alone
+may identify an SDK app instead; do not apply extension assumptions to it.
+
+Read only matching navigation aids:
 
 - Events, cleanup, compaction, branch-aware state:
   [lifecycle-and-state.md](references/lifecycle-and-state.md)
-- Tools, commands, flags, messages, dynamic activation:
+- Tool results, exposure, nested calls, commands, messages:
   [tools-and-commands.md](references/tools-and-commands.md)
-- Dialogs, TUI components, rendering, RPC/JSON/print behavior:
+- Dialogs, components, rendering, TUI/RPC/non-UI behavior:
   [ui-and-modes.md](references/ui-and-modes.md)
-- Package manifests, dependencies, resources, providers, package-named work:
+- Packaging, compatibility, MCP/providers/models, isolated smoke loading:
   [packages-and-integrations.md](references/packages-and-integrations.md)
 
-Then search installed references for exact API and read only matching docs
-section plus closest example:
-
-```bash
-PI_CODING_AGENT_ROOT='<printed-path>'
-rg -nF '<API-or-behavior>' "$PI_CODING_AGENT_ROOT/docs/extensions.md" \
-  "$PI_CODING_AGENT_ROOT/docs/packages.md" \
-  "$PI_CODING_AGENT_ROOT/examples/extensions"
-```
-
-Read installed type declarations when docs and examples do not settle a
-signature or event contract. Do not read the full extension guide by default.
+Search installed `docs/extensions.md` for the exact API, then read that section
+and the smallest matching example in `examples/extensions/`. Follow a specialized
+doc only when needed. Use installed declarations under `dist/core/extensions/`
+when prose does not settle a signature or event result. Do not read the whole
+guide or every skill reference by default. Missing APIs require a clear
+incompatibility report, not an invented fallback.
 
 ## Work
 
-1. Read repository instructions, manifest, entry point, callers, tests, and
-   neighboring patterns. Treat package-named request as extension work only
-   when manifest, conventional extension directory, or default extension factory
-   using `ExtensionAPI` identifies an extension entry point.
-2. Inspect target Pi dependency/peer range and active installed version before
-   selecting API. Active package defines current runtime; target's declared
-   support floor remains compatibility constraint.
-3. Match request to the smallest example shipped with the active package.
-   Reuse `ExtensionAPI`, context, events, UI, session, settings, and Node APIs.
-   Copy pattern, not scaffolding.
-4. For bugs, trace all callers and fix shared root cause. Preserve trust-boundary
-   validation, visible errors, resource cleanup, and branch/session semantics.
-5. Make smallest focused change. Add no speculative compatibility path,
-   abstraction, config, or dependency.
-6. Add or update one high-value test for non-trivial logic using target's test
-   style. Run focused test and package typecheck/build. Smoke-load with active
-   published `pi` when load or lifecycle changed and doing so is safe.
-7. Update target README for changed commands, config, tools, or behavior. Do not
-   bump version, pack for release, install, or publish unless requested.
+1. Read repository instructions, owning manifest, entry point, callers, tests,
+   and neighboring patterns. Check installed version and target support policy;
+   wildcard host peers declare no minimum, not support for every historical Pi.
+   Verify any explicitly supported minimum before selecting a newer API.
+2. Choose the smallest native integration and installed example. Reuse Pi,
+   context, events, session/settings APIs, and Node APIs before adding machinery.
+3. Trace affected callers; preserve trust-boundary validation, visible failures,
+   cancellation, resource cleanup, branch semantics, and supported modes.
+4. Make the smallest focused change; avoid speculative compatibility paths,
+   abstractions, configuration, and dependencies.
+5. Test changed non-trivial behavior using existing tooling. Run focused tests
+   and available package typecheck/build. For load/lifecycle changes, use the
+   isolated smoke procedure only after inspecting startup side effects; test
+   reload, branch restoration, cancellation, or mode behavior when affected.
+6. Update target README for changed commands, configuration, tools, or behavior.
+   Do not bump versions, create release tarballs, install, or publish unless asked.
 
-When installed reference lacks capability, or target support floor cannot be
-verified for chosen API, stop and report incompatibility instead of inventing a
-fallback. Report exact validation and untested interactive behavior.
+Report exact validation and untested modes or interactive behavior. If an
+explicit support minimum cannot be verified, report the compatibility blocker.

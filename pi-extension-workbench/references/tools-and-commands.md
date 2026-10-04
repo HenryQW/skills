@@ -1,62 +1,68 @@
 # Tools and Commands
 
-Navigation aid distilled from published examples. Verify exact signatures in
-installed `docs/extensions.md` sections `Choose an integration point` and
-`Tools` before editing code.
+Navigation for installed `docs/extensions.md`: read `Tools`, `Tool exposure`,
+`Activate tools dynamically`, or `Context and session changes` as needed.
+Verify signatures in installed declarations, not this navigation aid.
+Example paths below are relative to `examples/extensions/`.
 
-## Tool contract
+## Select the tool boundary
 
-- Register narrow TypeBox schema. Use `StringEnum` from
-  `@earendil-works/pi-ai` for string enums; `Type.Union` of literals is not
-  Google-compatible.
-- Put LLM-facing result in `content` and renderer/state data in `details`.
-  Throw from `execute()` to produce failed tool result; returned error-looking
-  content is still success.
-- Honor `signal` when present; commands and idle events may have no signal.
-  Use `onUpdate` only for useful progress. Prefer
-  `pi.exec(command, args, { signal })` over shell string assembly.
-- Bound output with Pi truncation helpers and preserve full output when users or
-  model may need it. See `truncated-tool.ts`.
-- Name tool in every `promptGuidelines` bullet. Guidelines are appended flat,
-  without automatic tool-name prefix.
-- Add `renderCall` or `renderResult` only when default rendering loses needed
-  information. Renderers must handle partial, absent, error, collapsed, and
-  expanded results.
-- A tool sharing built-in name overrides behavior. Preserve built-in contract
-  and fail closed at trust boundaries. See `tool-override.ts` and
-  `built-in-tool-renderer.ts`.
-- Shared mutable tool state may need `executionMode: "sequential"`; use only
-  when parallel calls would race. File read-modify-write tools should wrap the
-  full mutation with `withFileMutationQueue()`. See `tic-tac-toe.ts` and
-  `tool-override.ts`.
-- `terminate: true` skips follow-up only when every finalized result in batch
-  terminates. See `structured-output.ts`.
+| Need | Native choice | Reference |
+|---|---|---|
+| Small model-callable operation | `registerTool`, narrow TypeBox schema | `hello.ts` |
+| Data consumed by scripts | `outputSchema` + `structuredContent` | Installed `Tools` section |
+| Orchestrate existing tools | `ctx.executeTool()`; list with `ctx.tools` | Installed `Tools` section |
+| Reduce declarations or discover tools | `exposure`, `namespace` | Installed `Tool exposure` section |
+| Deliberate active-set changes | `getActiveTools` / `setActiveTools` | `dynamic-tools.ts`, `tools.ts` |
+| Bound large results | Pi truncation helpers | `truncated-tool.ts` |
+| Override built-in behavior/rendering | Preserve original contract | `tool-override.ts`, `built-in-tool-renderer.ts` |
 
-## Dynamic tools
+- `content` reaches the model; `details` supports rendering/state (use
+  `undefined` when absent). For data tools, `structuredContent` must match
+  `outputSchema`; scripts receive it rather than text. Redact both channels;
+  replacing only `content` in a `tool_result` handler drops structured data.
+- Throw for ordinary execution failures. Return `isError: true` when a failure
+  must retain structured data. Error-looking text alone is still success.
+- Nested calls use normal validation/interception but do not add transcript
+  entries. Surface needed results in the parent result. Pi aggregates nested
+  tool usage; do not count it twice. Report usage for the tool's own model calls.
+- Honor cancellation. Use `pi.exec(command, args, { signal })` rather than shell
+  assembly. Shared in-memory mutation may need sequential execution; file
+  read-modify-write needs `withFileMutationQueue()` around the entire operation.
+- Use `StringEnum` from `@earendil-works/pi-ai`, not literal unions for Google
+  compatibility. Name the tool in each `promptGuidelines` bullet.
+- Custom renderers must handle partial, absent, error, collapsed, and expanded
+  results. `terminate: true` skips follow-up only when the whole batch agrees.
 
-Register tools at factory load unless runtime discovery is needed. Runtime
-registration works from `session_start` and commands. To progressively expose
-registered tools:
+## Exposure before loaders
 
-1. Register all candidates.
-2. Keep loader active and candidates inactive.
-3. During loader execution, add matches with `pi.setActiveTools()` without
-   removing current tools.
-4. Let Pi record newly active definitions for next model request.
+- `direct`: active tools are declared and callable.
+- `model-only`: active tools are declared but cannot be called by other tools;
+  use for orchestration or user interaction when appropriate.
+- `codemode`: registered tools are callable and listed by codemode, without
+  direct declarations unless explicitly activated.
+- `deferred`: callable but not listed by codemode; tool search can activate it.
+- `hidden`: unreachable; re-register with this exposure to withdraw a tool.
 
-Use `pi.getAllTools()` metadata and `sourceInfo`; do not infer provenance from
-names or paths. See `dynamic-tools.ts` and `tools.ts`.
+Direct/model-only registration activates the tool; other exposures do not.
+Prefer these native policies over a custom discovery loader. When a loader is
+required, register candidates first and merge selected names into the current
+active set; unknown names are ignored. Changes reach the next model request.
+Use `getAllTools()` metadata and `sourceInfo`, not name/path guesses. Tool
+annotations are unverified hints, not authorization.
 
 ## Commands and messages
 
-| Need | API | Rule | Published example |
-|---|---|---|---|
-| User-only action | `registerCommand` | Validate args; command context owns session replacement/reload APIs | `reload-runtime.ts` |
-| CLI configuration | `registerFlag` / `getFlag` | Register in factory; parse once at session boundary | `preset.ts` |
-| Keyboard action | `registerShortcut` | Avoid collision with built-ins | `plan-mode/index.ts` |
-| Actual user turn | `sendUserMessage` | While streaming, set `deliverAs: "steer"` or `"followUp"` | `send-user-message.ts` |
-| LLM-context custom message | `sendMessage` | Choose delivery and `triggerTurn` deliberately | `message-renderer.ts` |
-| Durable non-LLM data | `appendEntry` | Pair with `registerEntryRenderer` only for TUI display | `entry-renderer.ts` |
-| Cross-extension signal | `pi.events` | Namespace event names; treat payload as untrusted | `event-bus.ts` |
+| Need | API | Example |
+|---|---|---|
+| User-only action; session replacement/reload | `registerCommand` | `reload-runtime.ts` |
+| CLI configuration or shortcut | `registerFlag` / `getFlag`, `registerShortcut` | `preset.ts`, `plan-mode/index.ts` |
+| Actual user turn | `sendUserMessage` | `send-user-message.ts` |
+| Stored model-context message | `sendMessage` | `message-renderer.ts` |
+| Durable non-model data | `appendEntry` | `entry-renderer.ts` |
+| In-process signal, without persistence/replay | Namespaced `pi.events` | `event-bus.ts` |
 
-Paths are relative to `$PI_CODING_AGENT_ROOT/examples/extensions/`.
+Validate command arguments; choose message delivery and `triggerTurn`
+deliberately. Session-changing operations are command-context-only: lifecycle
+handlers can deadlock. After replacement, use the fresh `withSession` context;
+after `await ctx.reload()`, do not reuse the old extension runtime.
