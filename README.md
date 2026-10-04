@@ -147,10 +147,6 @@ Generates restrained branded Open Graph PNGs from existing identity and product 
 
 Migrates Pencil design sources and repository workflows to verified Figma files through Figwright.
 
-#### [🧩 `pi-extension-workbench`](pi-extension-workbench/)
-
-Builds and repairs Pi extensions using installed APIs, native tool and model integrations, and isolated smoke checks; includes an authority resolver with failure diagnostics.
-
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
@@ -158,6 +154,11 @@ Finds evidenced waste in an existing skill, applies the smallest root-cause fix,
 #### [🔄 `update-from-main`](update-from-main/)
 
 Safely syncs current worktree branch with remote `main`, retries transient fetch races, and emits bounded conflict recovery state.
+
+## 🔗 Repository links
+
+- [pi-harness](https://github.com/HenryQW/pi-harness) — Pi extensions and the first-party [pi-extension-workbench skill](https://github.com/HenryQW/pi-harness/tree/main/.agents/skills/pi-extension-workbench).
+- [skills](https://github.com/HenryQW/skills) — This repository's reusable agent workflows and supporting skills.
 
 ## 📄 License
 
