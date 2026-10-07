@@ -1,0 +1,4 @@
+interface:
+  display_name: "1Password CLI"
+  short_description: "Read and safely edit 1Password items with op"
+  default_prompt: "Use $op to find, read, or change 1Password items without exposing secrets, and verify each change."
