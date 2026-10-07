@@ -21,6 +21,7 @@ Reload Pi and confirm `pi_git_commit` and `pi_git_pr` are available. Then remove
 ## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
+- `op` requires the 1Password CLI 2.x signed in through the desktop app or a service account.
 - `miniflux` requires Python 3 and an instance URL with configured API-key or Basic authentication.
 
 ## 🧭 How the harness works
@@ -142,6 +143,10 @@ Covers the complete native Miniflux API with resource-specific references and a 
 #### [🖼️ `og-image`](og-image/)
 
 Generates restrained branded Open Graph PNGs from existing identity and product assets.
+
+#### [🔐 `op`](op/)
+
+Covers safe 1Password CLI reads, edits, tags, vault moves, and verified bulk updates without writing secrets to disk.
 
 #### [✏️ `pencil-to-figma-migration`](pencil-to-figma-migration/)
 
