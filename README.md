@@ -10,6 +10,14 @@ Use one skill for a focused job, or connect them as a guarded harness: each skil
 npx skills add HenryQW/skills
 ```
 
+`git-commit`, `git-pr`, and `update-from-main` now ship with [`@henryqw/pi-pr`](https://github.com/HenryQW/pi-harness/tree/main/extensions/pi-pr), not this repository. After version `9.1.0` is published, install the package:
+
+```bash
+pi install npm:@henryqw/pi-pr
+```
+
+Reload Pi and confirm `pi_git_commit` and `pi_git_pr` are available. Then remove only old standalone copies of these three skills. Reload Pi again and confirm the skills come from the installed package. Source removal does not remove installed copies. Preserve all other skills and configuration.
+
 ## ⚙️ Requirements
 
 - GitHub workflows require authenticated `gh`.
@@ -30,7 +38,7 @@ Choose the smallest entry point that matches the work. Skills can run alone; the
 
 - One actionable issue: `issue-workbench #<issue>`
 - A repository audit: `repo-surveyor`; add issue planning only when you want a handoff to `issue-blueprint`
-- A basic GitHub pull request: `git-pr`; workflow-managed branch: `pr-launchpad`
+- A basic GitHub pull request in Pi: the packaged `git-pr` skill in `@henryqw/pi-pr`; workflow-managed branch: `pr-launchpad`
 - A pull request blocked by checks: `ci-repairbay`; selected review repair: `review-repairbay`; full review sweep: `pr-comment-sweep`
 
 ```mermaid
@@ -127,14 +135,6 @@ Runs quick read-only BQL queries against existing Beancount ledgers.
 
 Provides compact GitHub CLI 2.100.0 (2026-09-03) command references with inline options and details or examples loaded only when needed.
 
-#### [💾 `git-commit`](git-commit/)
-
-Creates coherent scoped Conventional Commits from changes against the target branch.
-
-#### [🔀 `git-pr`](git-pr/)
-
-Creates focused GitHub pull requests from inspected branch changes.
-
 #### [📰 `miniflux`](miniflux/)
 
 Covers the complete native Miniflux API with resource-specific references and a deterministic request helper that requires configured remote authentication.
@@ -150,10 +150,6 @@ Migrates Pencil design sources and repository workflows to verified Figma files 
 #### [✂️ `skill-optimizer`](skill-optimizer/)
 
 Finds evidenced waste in an existing skill, applies the smallest root-cause fix, and verifies representative behavior.
-
-#### [🔄 `update-from-main`](update-from-main/)
-
-Safely syncs current worktree branch with remote `main`, retries transient fetch races, and emits bounded conflict recovery state.
 
 ## 🔗 Repository links
 

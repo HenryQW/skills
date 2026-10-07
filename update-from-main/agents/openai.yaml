@@ -1,4 +1,0 @@
-interface:
-  display_name: "Update From Main"
-  short_description: "Update current worktree from origin/main"
-  default_prompt: "Use $update-from-main to sync current worktree branch with origin/main."
