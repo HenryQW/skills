@@ -46,8 +46,10 @@ description: Use when reading, searching, editing, tagging, moving, or bulk-upda
 
 1. Inventory once, filter with `jq`, and show the list of item IDs and the planned change.
 2. Get approval before you edit, move, or delete items in bulk. Moves and deletes change IDs and access.
-3. Apply each change to one item ID at a time, read it again, and report each exit status.
-4. Re-run the inventory filter. It must return no remaining matches.
+3. Apply each change to one item ID at a time, in sequence. Parallel writes to one vault fail with `(409) Conflict`. Each edit takes 2-11 s, so run long batches in the background with a log.
+4. Re-run the inventory filter against live `op item list` output. It must return no remaining matches. Retry only the items that differ.
+
+The CLI cannot edit SSH Key items ("SSH Key item editing in the CLI is not yet supported") or items with a "Sign in with" field ("unsupported field type: ssoLogin"). List these for the user to change in the app.
 
 ## Tags
 
