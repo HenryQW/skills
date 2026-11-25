@@ -1,0 +1,22 @@
+name: Tap token
+
+# Each Monday, and on demand: fails (and GitHub emails the owner) when TAP_TOKEN does not work or expires within
+# 30 days, so a release never finds it expired. See Scripts/check-tap-token.sh.
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check TAP_TOKEN
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: bash Scripts/check-tap-token.sh 30

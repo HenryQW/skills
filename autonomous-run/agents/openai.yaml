@@ -1,0 +1,4 @@
+interface:
+  display_name: "Autonomous Run"
+  short_description: "Run a bounded task while the user is away"
+  default_prompt: "Use $autonomous-run to help with this task."

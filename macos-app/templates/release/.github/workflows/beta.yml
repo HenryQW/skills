@@ -1,0 +1,79 @@
+name: Beta
+
+# Each push to main (and each release tag) builds __APP_NAME__ like a release and publishes it on the rolling
+# prerelease "beta": __EXEC__.dmg and appcast.xml, the feed of the Beta update channel. Version: <last tag>.<commits
+# since it>, so it is above that release and below the next one; on a tagged commit it is the release version. A
+# prerelease is never the latest release, so the Stable channel, the download link and the cask do not change.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta
+  cancel-in-progress: true
+
+jobs:
+  beta:
+    runs-on: __MACOS_RUNNER__
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the version and the notes need the last tag and the commits since it
+
+      - name: Set the version
+        run: |
+          # --match 'v*': without it, describe can find the rolling "beta" tag (this once gave empty release notes).
+          TAG="$(git describe --tags --abbrev=0 --match 'v*')"
+          COUNT="$(git rev-list --count "$TAG..HEAD")"
+          SHA="$(git rev-parse --short HEAD)"
+          if [ "$COUNT" = 0 ]; then VERSION="${TAG#v}"; else VERSION="${TAG#v}.$COUNT"; fi
+          { echo "TAG=$TAG"; echo "APP_VERSION=$VERSION"; echo "APP_SHORT_VERSION=$VERSION beta ($SHA)"; } >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test
+
+      - name: Import the signing identity
+        env:
+          SIGNING_CERTIFICATE_P12: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+        run: bash Scripts/import-identity.sh
+
+      - name: Build the app and the disk image
+        run: |
+          bash Scripts/bundle.sh
+          # The release identity, so permissions and Keychain access stay when a user changes channel.
+          codesign -dvv "build/__APP_NAME__.app" 2>&1 | grep -x "Authority=__APP_NAME__ Self-Signed" > /dev/null  # no -q: an early exit is SIGPIPE
+          bash Scripts/dmg.sh
+
+      - name: Sign the update
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -o pipefail
+          test -n "$SPARKLE_ED_PRIVATE_KEY"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file - build/__EXEC__.dmg > build/signature.txt
+
+      - name: Write and verify the appcast
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ vars.SPARKLE_ED_PUBLIC_KEY }}
+        run: |
+          bash Scripts/release-notes.sh "$TAG" HEAD "$GITHUB_REPOSITORY" > build/notes.md
+          bash Scripts/appcast.sh "$APP_VERSION" "$APP_SHORT_VERSION" "https://github.com/$GITHUB_REPOSITORY/releases/download/beta/__EXEC__.dmg" "$(cat build/signature.txt)" build/notes.md > build/appcast.xml
+          xmllint --noout build/appcast.xml
+          swift Scripts/verify-update.swift "build/__APP_NAME__.app" build/__EXEC__.dmg build/appcast.xml "$SPARKLE_ED_PUBLIC_KEY"
+
+      - name: Publish the beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The tag "beta" follows the build; the release keeps its name and gets the new files.
+          gh auth setup-git --hostname github.com
+          git tag -f beta && git push -f origin refs/tags/beta
+          gh release view beta > /dev/null 2>&1 || gh release create beta --prerelease --latest=false --title "__APP_NAME__ beta" --notes "Beta"
+          gh release upload beta build/__EXEC__.dmg build/appcast.xml --clobber
+          gh release edit beta --prerelease --latest=false --title "__APP_NAME__ $APP_SHORT_VERSION" --notes-file build/notes.md
