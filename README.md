@@ -146,7 +146,7 @@ Keeps specifications, implementation briefs, and decisions current as a project 
 
 #### [🍎 `macos-app`](macos-app/)
 
-Guides native macOS app development, signing, releases, and updates.
+Guides native macOS app development, helper installation, signing, releases, and updates.
 
 #### [📰 `miniflux`](miniflux/)
 

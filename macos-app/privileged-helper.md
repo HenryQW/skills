@@ -13,7 +13,7 @@ The root process runs only a file that root owns: `/Library/PrivilegedHelperTool
 | Step | Result |
 |---|---|
 | App calls `register()` | Throws "Operation not permitted", status `requiresApproval` |
-| User approves the app entry in Login Items | Only the app item; the helper is a separate item named after the executable ("amxd"), still disallowed. Log: "Bundle identifiers from launchd plist ignored because the executable doesn't have a Team ID" |
+| User approves the app entry in Login Items | The helper stays disabled. Login Items lists it separately under its executable name. Log: "Bundle identifiers from launchd plist ignored because the executable doesn't have a Team ID" |
 | User turns on the executable item | launchd still fails ("No such process") until the app registers again |
 | Swap the helper file with `cp` and `mv`, no password | launchd refuses it: BTM stored a SHA-256 of the executable |
 | The genuine app registers again | BTM stores the new checksum, no new approval: the swapped file runs as root |
