@@ -1,0 +1,11 @@
+.build/
+.context/
+.superpowers/
+.swiftpm/
+.DS_Store
+*.p12
+*.log
+.env
+# Window captures and recordings belong in a scratch folder, never in the repo
+/*.png
+/*.mov

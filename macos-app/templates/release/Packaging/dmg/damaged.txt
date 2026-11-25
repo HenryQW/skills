@@ -1,0 +1,16 @@
+macOS says "__APP_NAME__ is damaged and can't be opened"?
+
+__APP_NAME__ is not damaged. __APP_NAME__ has no Apple Developer ID, so macOS blocks a
+downloaded copy the first time you open it. Do these steps one time:
+
+1. Drag __APP_NAME__ to the Applications folder in this window.
+
+2. Open Terminal: press Command and Space, type Terminal, then press Return.
+
+3. Copy this line, paste it into Terminal, then press Return:
+
+   xattr -dr com.apple.quarantine "/Applications/__APP_NAME__.app" && open "/Applications/__APP_NAME__.app"
+
+Updates from __APP_NAME__ itself need no step.
+
+Help: __HOMEPAGE__

@@ -1,0 +1,87 @@
+name: Release
+
+# A tag v<VERSION> (the VERSION file) builds __APP_NAME__, signed with the self-signed identity (no Developer ID), and
+# publishes __EXEC__.dmg (the download, the cask and the Sparkle update, signed with SPARKLE_ED_PRIVATE_KEY) and
+# appcast.xml on a GitHub release. With TAP_TOKEN set, the cask in __TAP_REPO__ moves to this version.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: __MACOS_RUNNER__
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check that the tag is the version, and that the version has notes
+        run: |
+          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+          test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
+          # The section of CHANGELOG.md; the release page and Sparkle's update window show the same Markdown.
+          mkdir -p build
+          bash Scripts/changelog.sh "$(cat VERSION)" > build/notes.md
+
+      - name: Check the tap token
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        # Before anything is published: an expired token would leave the cask on the old version.
+        run: if [ -n "$TAP_TOKEN" ]; then bash Scripts/check-tap-token.sh 0; fi
+
+      - name: Test
+        run: swift test
+
+      - name: Import the signing identity
+        env:
+          SIGNING_CERTIFICATE_P12: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+        run: bash Scripts/import-identity.sh
+
+      - name: Build the app and the disk image
+        run: |
+          bash Scripts/bundle.sh
+          # The same identity as every release, or permissions and Sparkle's code signature check break on update.
+          codesign -dvv "build/__APP_NAME__.app" 2>&1 | grep -x "Authority=__APP_NAME__ Self-Signed" > /dev/null  # no -q: an early exit is SIGPIPE
+          bash Scripts/dmg.sh
+
+      - name: Sign the update
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -o pipefail
+          test -n "$SPARKLE_ED_PRIVATE_KEY"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/sign_update --ed-key-file - build/__EXEC__.dmg > build/signature.txt
+
+      - name: Write and verify the appcast
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ vars.SPARKLE_ED_PUBLIC_KEY }}
+        run: |
+          bash Scripts/appcast.sh "$VERSION" "$VERSION" "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/__EXEC__.dmg" "$(cat build/signature.txt)" build/notes.md > build/appcast.xml
+          xmllint --noout build/appcast.xml
+          swift Scripts/verify-update.swift "build/__APP_NAME__.app" build/__EXEC__.dmg build/appcast.xml "$SPARKLE_ED_PUBLIC_KEY"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/__EXEC__.dmg build/appcast.xml \
+            --title "__APP_NAME__ $VERSION" --notes-file build/notes.md
+
+      - name: Update the Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then exit 0; fi
+          gh auth setup-git --hostname github.com
+          SHA256="$(shasum -a 256 build/__EXEC__.dmg | cut -d ' ' -f 1)"
+          git clone "https://github.com/__TAP_REPO__.git" "$RUNNER_TEMP/tap"
+          mkdir -p "$RUNNER_TEMP/tap/Casks"
+          sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SHA256/" Packaging/homebrew/cask.rb > "$RUNNER_TEMP/tap/Casks/__CASK__.rb"
+          cd "$RUNNER_TEMP/tap"
+          git add Casks/__CASK__.rb
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "__CASK__ $VERSION"
+          git push

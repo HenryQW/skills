@@ -1,0 +1,4 @@
+interface:
+  display_name: "macOS App"
+  short_description: "Build and ship native macOS applications"
+  default_prompt: "Use $macos-app to help with this task."

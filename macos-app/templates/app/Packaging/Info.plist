@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>__BUNDLE_ID__</string>
+	<key>CFBundleName</key>
+	<string>__APP_NAME__</string>
+	<key>CFBundleDisplayName</key>
+	<string>__APP_NAME__</string>
+	<key>CFBundleExecutable</key>
+	<string>__EXEC__</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>__MIN_MACOS__</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- Menu bar app only: add <key>LSUIElement</key><true/> -->
+</dict>
+</plist>

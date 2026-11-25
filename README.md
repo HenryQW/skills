@@ -78,6 +78,10 @@ When skills are nested, the outer workflow stays in charge. `shipyard` launches 
 
 ### 🚀 Workflow skills
 
+#### [🕒 `autonomous-run`](autonomous-run/)
+
+Runs an unattended task with checkpoints, verification, and a handoff.
+
 #### [🧯 `ci-repairbay`](ci-repairbay/)
 
 Diagnoses failing GitHub Actions checks and applies the smallest scoped fix only when explicitly requested.
@@ -135,6 +139,14 @@ Runs quick read-only BQL queries against existing Beancount ledgers.
 #### [📖 `gh`](gh/)
 
 Provides compact GitHub CLI 2.100.0 (2026-09-03) command references with inline options and details or examples loaded only when needed.
+
+#### [📝 `living-docs`](living-docs/)
+
+Keeps specifications, implementation briefs, and decisions current as a project changes.
+
+#### [🍎 `macos-app`](macos-app/)
+
+Guides native macOS app development, signing, releases, and updates.
 
 #### [📰 `miniflux`](miniflux/)
 

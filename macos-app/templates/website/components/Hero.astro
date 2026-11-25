@@ -1,0 +1,211 @@
+---
+// The home page hero: the name, the description and the install command with a copy button at the left; the app icon on
+// a calm wallpaper at the right.
+interface Props {
+  description: string;
+}
+
+const { description } = Astro.props;
+const command = "curl -fsSL https://__HOMEPAGE__/install.sh | sh";
+---
+
+<section class="hero homepage-container">
+  <div class="intro">
+    <h1>__APP_NAME__</h1>
+    <p class="lede">{description}</p>
+    <div class="links">
+      <a href="/overview">Read the docs</a>
+    </div>
+    <article class="installer" aria-label="Install with one line in Terminal">
+      <div class="command-row">
+        <code class="command"><span class="prompt" aria-hidden="true">$ </span>{command}</code>
+        <button class="copy" type="button" data-copy={command} aria-label="Copy the install command" aria-describedby="copy-status">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M4.5 4.5H10.5C11.05 4.5 11.5 4.95 11.5 5.5V11.5C11.5 12.05 11.05 12.5 10.5 12.5H4.5C3.95 12.5 3.5 12.05 3.5 11.5V5.5C3.5 4.95 3.95 4.5 4.5 4.5Z" stroke="currentColor" stroke-width="1.25" />
+            <path d="M2.5 9.5H2C1.45 9.5 1 9.05 1 8.5V2C1 1.45 1.45 1 2 1H8.5C9.05 1 9.5 1.45 9.5 2V2.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+      <p class="copy-status" id="copy-status" aria-live="polite">Paste in Terminal: it installs and opens __APP_NAME__.</p>
+    </article>
+    <p class="needs">Needs macOS __MIN_MACOS__ and Apple silicon. Free and <a href="https://github.com/__GH_REPO__">open source</a> under the <a href="https://github.com/__GH_REPO__/blob/main/LICENSE">MIT license</a>.</p>
+  </div>
+
+  <div class="stage" aria-hidden="true">
+    <img class="icon" src="/icon.png" alt="" width="192" height="192" />
+  </div>
+</section>
+
+<style>
+  .hero {
+    align-items: center;
+    display: grid;
+    gap: 40px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+
+  @media (max-width: 900px) {
+    .hero {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  h1 {
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 16px;
+  }
+
+  .lede {
+    color: var(--blume-muted-foreground);
+    font-size: 1.125rem;
+    line-height: 1.55;
+    margin: 0 0 28px;
+  }
+
+  .links {
+    display: flex;
+    gap: 10px;
+  }
+
+  .links a {
+    background: transparent;
+    border: 1px solid var(--blume-border);
+    border-radius: 999px;
+    color: inherit;
+    font-size: 0.875rem;
+    padding: 6px 14px;
+    text-decoration: none;
+  }
+
+  .links a:hover {
+    background: var(--blume-muted);
+  }
+
+  /* The install command as a terminal card: a prompt, the command, a copy button, a status line. */
+  .installer {
+    background: #09090b;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 8px;
+    color: #f0eee9;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 16px;
+  }
+
+  .command-row {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .command,
+  .copy-status {
+    font: 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .command {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .prompt {
+    user-select: none;
+  }
+
+  .copy {
+    align-items: center;
+    background: #8fb3ff;
+    border: 0;
+    border-radius: 6px;
+    color: #111827;
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 46px;
+    height: 40px;
+    justify-content: center;
+    padding: 0;
+    transition: filter 160ms ease, transform 160ms ease;
+  }
+
+  .copy:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  .copy-status {
+    color: rgb(240 238 233 / 0.72);
+    margin: 0;
+  }
+
+  .copy-status[data-error] {
+    color: #f0b5a8;
+  }
+
+  .needs {
+    color: var(--blume-muted-foreground);
+    font-size: 0.8rem;
+    margin: 8px 0 0;
+  }
+
+  .needs a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* The desktop: the same calm wallpaper from the theme's blue steps, with the app icon in its centre. */
+  .stage {
+    background: linear-gradient(140deg, var(--blume-muted), var(--blume-background));
+    border: 1px solid var(--blume-border);
+    border-radius: 14px;
+    display: grid;
+    height: 420px;
+    place-items: center;
+  }
+
+  .icon {
+    filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.35));
+    height: 192px;
+    width: 192px;
+  }
+
+  @media (max-width: 900px) {
+    .stage {
+      height: 280px;
+    }
+
+    .icon {
+      height: 144px;
+      width: 144px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .copy {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  // The install card: the status line says what the command does, then whether the copy worked.
+  const copy = document.querySelector<HTMLButtonElement>(".installer .copy")!;
+  const status = document.getElementById("copy-status")!;
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(copy.dataset.copy!);
+      status.textContent = "Copied the install command.";
+      status.removeAttribute("data-error");
+    } catch {
+      status.textContent = "Copy failed. Select the command and copy it.";
+      status.setAttribute("data-error", "");
+    }
+  });
+</script>
