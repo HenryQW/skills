@@ -140,6 +140,10 @@ Runs quick read-only BQL queries against existing Beancount ledgers.
 
 Provides compact GitHub CLI 2.100.0 (2026-09-03) command references with inline options and details or examples loaded only when needed.
 
+#### [🔗 `live-preview`](live-preview/)
+
+Shares a verified page from a local worktree through a private Tailscale link.
+
 #### [📝 `living-docs`](living-docs/)
 
 Keeps specifications, implementation briefs, and decisions current as a project changes.

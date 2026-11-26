@@ -1,0 +1,4 @@
+interface:
+  display_name: "Live Preview"
+  short_description: "Share a verified worktree preview over Tailscale"
+  default_prompt: "Use $live-preview to share a private preview of the requested page from this worktree."
